@@ -1,29 +1,56 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { AppProvider, useApp } from "@/lib/cashflow/AppContext";
+import { AppLayout, type Tab } from "@/components/cashflow/AppLayout";
+import { Dashboard } from "@/components/cashflow/Dashboard";
+import { IncomeTimesheet } from "@/components/cashflow/IncomeTimesheet";
+import { CardsScreen } from "@/components/cashflow/CardsScreen";
+import { Forecast } from "@/components/cashflow/Forecast";
+import { Profile } from "@/components/cashflow/Profile";
+import { QuickAddModal } from "@/components/cashflow/QuickAddModal";
+import { OnboardingWizard } from "@/components/cashflow/OnboardingWizard";
+import { ToastViewport } from "@/components/cashflow/Toast";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Your App" },
-      { name: "description", content: "Replace this with a one-sentence description of your app." },
-      { property: "og:title", content: "Your App" },
-      { property: "og:description", content: "Replace this with a one-sentence description of your app." },
+      { title: "CashFlow Control — Personal cash, debt & income tracker" },
+      { name: "description", content: "Track cash, credit cards, debts, paychecks and timesheets. Know exactly what's safe to spend." },
+      { property: "og:title", content: "CashFlow Control" },
+      { property: "og:description", content: "Personal cash, debt and income tracker with timesheets and forecast." },
     ],
   }),
-  component: Index,
+  component: Page,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Page() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <AppProvider>
+      <Shell />
+      <ToastViewport />
+    </AppProvider>
+  );
+}
+
+function Shell() {
+  const { state } = useApp();
+  const [tab, setTab] = useState<Tab>("dashboard");
+  const [quickOpen, setQuickOpen] = useState(false);
+
+  if (!state.onboarded) {
+    return <OnboardingWizard open={true} />;
+  }
+
+  return (
+    <>
+      <AppLayout tab={tab} setTab={setTab} onQuickAdd={() => setQuickOpen(true)}>
+        {tab === "dashboard" && <Dashboard />}
+        {tab === "income" && <IncomeTimesheet />}
+        {tab === "cards" && <CardsScreen onPay={() => setQuickOpen(true)} />}
+        {tab === "forecast" && <Forecast />}
+        {tab === "profile" && <Profile />}
+      </AppLayout>
+      <QuickAddModal open={quickOpen} onClose={() => setQuickOpen(false)} setTab={setTab} />
+    </>
   );
 }
