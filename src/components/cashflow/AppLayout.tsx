@@ -1,0 +1,159 @@
+import { useState, type ReactNode } from "react";
+import {
+  LayoutDashboard,
+  CalendarClock,
+  CreditCard,
+  TrendingUp,
+  UserCircle,
+  Plus,
+  Moon,
+  Sun,
+  Laptop,
+} from "lucide-react";
+import { useApp } from "@/lib/cashflow/AppContext";
+import type { Theme } from "@/lib/cashflow/types";
+
+export type Tab = "dashboard" | "income" | "cards" | "forecast" | "profile";
+
+const NAV: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = [
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "income", label: "Income", icon: CalendarClock },
+  { id: "cards", label: "Cards", icon: CreditCard },
+  { id: "forecast", label: "Forecast", icon: TrendingUp },
+  { id: "profile", label: "Profile", icon: UserCircle },
+];
+
+export function AppLayout({
+  tab,
+  setTab,
+  onQuickAdd,
+  children,
+}: {
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  onQuickAdd: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="min-h-screen md:grid md:grid-cols-[260px_1fr]">
+      <Sidebar tab={tab} setTab={setTab} />
+      <main className="px-4 pt-5 pb-28 md:px-8 md:pt-8 md:pb-10 max-w-[1400px] w-full mx-auto">
+        {children}
+      </main>
+      <BottomNav tab={tab} setTab={setTab} />
+      <button
+        onClick={onQuickAdd}
+        className="fixed right-5 bottom-24 md:bottom-8 md:right-8 z-30 grid place-items-center h-14 w-14 rounded-2xl brand-gradient text-primary-foreground text-3xl shadow-elegant transition hover:-translate-y-1 hover:rotate-6"
+        aria-label="Quick add"
+      >
+        <Plus size={28} strokeWidth={2.5} />
+      </button>
+    </div>
+  );
+}
+
+function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  return (
+    <aside className="hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen p-6 border-r border-border bg-[color:var(--card)] backdrop-blur-xl">
+      <Logo />
+      <nav className="grid gap-1.5 mt-2">
+        {NAV.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition ${
+              tab === id
+                ? "bg-gradient-to-br from-primary/20 to-primary-glow/15 text-foreground font-extrabold"
+                : "text-muted-foreground hover:bg-muted"
+            }`}
+          >
+            <Icon size={20} />
+            <span>{label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="mt-auto">
+        <ThemeToggle />
+        <div className="mt-4 rounded-3xl p-4 border border-border bg-gradient-to-br from-primary/12 to-primary-glow/10 text-xs leading-relaxed text-muted-foreground">
+          All data stays in your browser. Export coming soon.
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+  return (
+    <nav className="md:hidden fixed left-3 right-3 bottom-3 z-30 grid grid-cols-5 gap-1 p-2 rounded-3xl border border-border bg-[color:var(--card)] backdrop-blur-xl shadow-elegant">
+      {NAV.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          onClick={() => setTab(id)}
+          className={`flex flex-col items-center justify-center py-2 px-1 rounded-2xl text-[11px] font-extrabold transition ${
+            tab === id
+              ? "bg-gradient-to-br from-primary/22 to-primary-glow/15 text-foreground"
+              : "text-muted-foreground"
+          }`}
+        >
+          <Icon size={18} />
+          {label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function Logo() {
+  return (
+    <div className="flex items-center gap-3 mb-6">
+      <div className="grid place-items-center h-11 w-11 rounded-2xl brand-gradient text-primary-foreground font-black shadow-soft">
+        CF
+      </div>
+      <div>
+        <div className="font-extrabold tracking-tight">CashFlow Control</div>
+        <div className="text-xs text-muted-foreground">Your money, in focus</div>
+      </div>
+    </div>
+  );
+}
+
+function ThemeToggle() {
+  const { state, dispatch } = useApp();
+  const [open, setOpen] = useState(false);
+  const theme = state.profile.theme;
+  const opts: { id: Theme; label: string; icon: typeof Sun }[] = [
+    { id: "light", label: "Light", icon: Sun },
+    { id: "dark", label: "Dark", icon: Moon },
+    { id: "system", label: "System", icon: Laptop },
+  ];
+  const Current = opts.find((o) => o.id === theme)?.icon ?? Laptop;
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-2 w-full px-4 py-2.5 rounded-2xl border border-border bg-[color:var(--card-solid)] text-sm font-bold hover:bg-muted"
+      >
+        <Current size={16} />
+        Theme: <span className="capitalize">{theme}</span>
+      </button>
+      {open && (
+        <div className="absolute bottom-full mb-2 left-0 right-0 grid gap-1 p-1.5 rounded-2xl border border-border bg-[color:var(--card-solid)] shadow-elegant animate-rise">
+          {opts.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => {
+                dispatch({ type: "UPDATE_PROFILE", payload: { theme: id } });
+                setOpen(false);
+              }}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm hover:bg-muted ${
+                theme === id ? "font-bold text-foreground" : "text-muted-foreground"
+              }`}
+            >
+              <Icon size={16} /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
