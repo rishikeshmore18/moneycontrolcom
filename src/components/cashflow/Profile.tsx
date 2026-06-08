@@ -9,11 +9,11 @@ import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import type {
   Account, AccountType, Card as CardT, CardType, Debt, Job, PayFrequency, RecurringBill,
 } from "@/lib/cashflow/types";
-import { storage } from "@/lib/cashflow/storage";
+
 import { toast } from "./Toast";
 
 export function Profile() {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, userEmail, signOut } = useApp();
   const cur = state.profile.currency;
 
   return (
@@ -125,20 +125,24 @@ export function Profile() {
       />
 
       <Card>
-        <h3 className="text-lg font-extrabold mb-3">Reset</h3>
-        <p className="text-sm text-muted-foreground mb-3">Clears all locally stored data and starts onboarding over.</p>
-        <Button
-          variant="danger"
-          onClick={() => {
-            if (confirm("Erase all CashFlow Control data?")) {
-              storage.clear();
-              dispatch({ type: "RESET" });
-              toast("App reset");
-            }
-          }}
-        >
-          Reset everything
-        </Button>
+        <h3 className="text-lg font-extrabold mb-3">Account</h3>
+        <p className="text-sm text-muted-foreground mb-3">
+          Signed in as <span className="font-bold text-foreground">{userEmail ?? "—"}</span>
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="ghost" onClick={() => signOut()}>Sign out</Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (confirm("Erase all CashFlow Control data?")) {
+                dispatch({ type: "RESET" });
+                toast("App reset");
+              }
+            }}
+          >
+            Reset everything
+          </Button>
+        </div>
       </Card>
     </div>
   );

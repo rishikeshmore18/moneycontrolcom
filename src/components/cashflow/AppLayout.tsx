@@ -75,7 +75,7 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
       <div className="mt-auto">
         <ThemeToggle />
         <div className="mt-4 rounded-3xl p-4 border border-border bg-gradient-to-br from-primary/12 to-primary-glow/10 text-xs leading-relaxed text-muted-foreground">
-          All data stays in your browser. Export coming soon.
+          Your data is securely synced to your account.
         </div>
       </div>
     </aside>
