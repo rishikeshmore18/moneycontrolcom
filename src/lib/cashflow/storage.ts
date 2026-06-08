@@ -1,13 +1,7 @@
-// Versioned localStorage service — swappable backend later.
+// Supabase-backed storage for CashFlow Control.
+// Each user has one row in `user_data` whose `data` column holds the AppState JSON.
+import { supabase } from "@/integrations/supabase/client";
 import { AppState, SCHEMA_VERSION, emptyState } from "./types";
-
-const KEY = "cashflow-control:v1";
-
-export interface StorageDriver {
-  load(): AppState;
-  save(state: AppState): void;
-  clear(): void;
-}
 
 function migrate(raw: unknown): AppState {
   if (!raw || typeof raw !== "object") return emptyState;
@@ -18,29 +12,27 @@ function migrate(raw: unknown): AppState {
   return obj as AppState;
 }
 
-export const localStorageDriver: StorageDriver = {
-  load() {
-    if (typeof window === "undefined") return emptyState;
-    try {
-      const raw = window.localStorage.getItem(KEY);
-      if (!raw) return emptyState;
-      return migrate(JSON.parse(raw));
-    } catch {
-      return emptyState;
-    }
-  },
-  save(state) {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(KEY, JSON.stringify(state));
-    } catch {
-      /* ignore quota */
-    }
-  },
-  clear() {
-    if (typeof window === "undefined") return;
-    window.localStorage.removeItem(KEY);
-  },
-};
+export async function loadUserState(userId: string): Promise<AppState> {
+  const { data, error } = await supabase
+    .from("user_data")
+    .select("data")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) {
+    console.error("[storage] load error", error);
+    return emptyState;
+  }
+  if (!data) {
+    // Initialize empty row so subsequent updates always have a target.
+    await supabase.from("user_data").insert({ user_id: userId, data: emptyState as never });
+    return emptyState;
+  }
+  return migrate(data.data);
+}
 
-export const storage = localStorageDriver;
+export async function saveUserState(userId: string, state: AppState): Promise<void> {
+  const { error } = await supabase
+    .from("user_data")
+    .upsert({ user_id: userId, data: state as never }, { onConflict: "user_id" });
+  if (error) console.error("[storage] save error", error);
+}
