@@ -5,7 +5,7 @@ import { Button } from "./Button";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import { todayISO } from "@/lib/cashflow/dates";
-import { recommendCardForCategory, availableCredit } from "@/lib/cashflow/cardLogic";
+import { recommendCardForCategory, availableCredit, cycleForDate, expensesInCycle } from "@/lib/cashflow/cardLogic";
 import { toast } from "./Toast";
 
 const CATEGORIES = [
