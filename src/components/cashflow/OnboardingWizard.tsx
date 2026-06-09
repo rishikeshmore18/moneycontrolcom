@@ -233,15 +233,17 @@ export function OnboardingWizard({ open }: { open: boolean }) {
             <Heading title="Credit cards" sub="Optional — skip if you don't use any." />
             <div className="grid gap-3">
               {cards.map((c, i) => (
-                <div key={i} className="rounded-2xl border border-border p-3 grid gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
-                  <Input placeholder="Card name" value={c.name} onChange={(e) => updateAt(setCards, i, { name: e.target.value })} />
-                  <Select value={c.type} onChange={(e) => updateAt(setCards, i, { type: e.target.value as CardType })}>
-                    <option value="regular">Regular</option><option value="zero_apr">0% APR</option><option value="zero_apr_car">0% car</option><option value="other">Other</option>
-                  </Select>
-                  <Input type="number" placeholder="Limit" value={c.limit} onChange={(e) => updateAt(setCards, i, { limit: toNumber(e.target.value) })} />
-                  <Input type="number" placeholder="Balance" value={c.currentBalance} onChange={(e) => updateAt(setCards, i, { currentBalance: toNumber(e.target.value) })} />
-                  <Input type="number" placeholder="Min due" value={c.minimumDue} onChange={(e) => updateAt(setCards, i, { minimumDue: toNumber(e.target.value) })} />
-                  <button onClick={() => setCards((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10"><Trash2 size={16} /></button>
+                <div key={i} className="rounded-2xl border border-border p-3 grid gap-3 sm:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] items-end">
+                  <Field label="Card name"><Input placeholder="e.g. Chase Sapphire" value={c.name} onChange={(e) => updateAt(setCards, i, { name: e.target.value })} /></Field>
+                  <Field label="Type">
+                    <Select value={c.type} onChange={(e) => updateAt(setCards, i, { type: e.target.value as CardType })}>
+                      <option value="regular">Regular</option><option value="zero_apr">0% APR</option><option value="zero_apr_car">0% car</option><option value="other">Other</option>
+                    </Select>
+                  </Field>
+                  <Field label="Credit limit" hint="Max you can charge"><Input type="number" placeholder="5000" value={c.limit || ""} onChange={(e) => updateAt(setCards, i, { limit: toNumber(e.target.value) })} /></Field>
+                  <Field label="Current balance" hint="What you owe today"><Input type="number" placeholder="0.00" value={c.currentBalance || ""} onChange={(e) => updateAt(setCards, i, { currentBalance: toNumber(e.target.value) })} /></Field>
+                  <Field label="Min payment due" hint="Per statement"><Input type="number" placeholder="0.00" value={c.minimumDue || ""} onChange={(e) => updateAt(setCards, i, { minimumDue: toNumber(e.target.value) })} /></Field>
+                  <button onClick={() => setCards((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10 mb-2"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
