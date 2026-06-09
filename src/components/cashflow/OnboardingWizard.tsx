@@ -262,15 +262,17 @@ export function OnboardingWizard({ open }: { open: boolean }) {
                 <Button variant="ghost" onClick={() => setDebts((arr) => [...arr, { name: "", balance: 0, minimumPayment: 0, dueDate: 1, status: "active" }])}><Plus size={14} /> Add debt</Button>
               </div>
               {debts.map((d, i) => (
-                <div key={i} className="grid sm:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2">
-                  <Input placeholder="Name" value={d.name} onChange={(e) => updateAt(setDebts, i, { name: e.target.value })} />
-                  <Input type="number" placeholder="Balance" value={d.balance} onChange={(e) => updateAt(setDebts, i, { balance: toNumber(e.target.value) })} />
-                  <Input type="number" placeholder="Min payment" value={d.minimumPayment} onChange={(e) => updateAt(setDebts, i, { minimumPayment: toNumber(e.target.value) })} />
-                  <Select value={d.status} onChange={(e) => updateAt(setDebts, i, { status: e.target.value as Debt["status"] })}>
-                    <option value="active">Active</option><option value="not_started">Not started</option>
-                    <option value="paused">Paused</option><option value="paid_off">Paid off</option>
-                  </Select>
-                  <button onClick={() => setDebts((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10"><Trash2 size={16} /></button>
+                <div key={i} className="grid sm:grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 items-end">
+                  <Field label="Debt name"><Input placeholder="e.g. Student loan" value={d.name} onChange={(e) => updateAt(setDebts, i, { name: e.target.value })} /></Field>
+                  <Field label="Balance owed"><Input type="number" placeholder="0.00" value={d.balance || ""} onChange={(e) => updateAt(setDebts, i, { balance: toNumber(e.target.value) })} /></Field>
+                  <Field label="Min payment" hint="Per month"><Input type="number" placeholder="0.00" value={d.minimumPayment || ""} onChange={(e) => updateAt(setDebts, i, { minimumPayment: toNumber(e.target.value) })} /></Field>
+                  <Field label="Status">
+                    <Select value={d.status} onChange={(e) => updateAt(setDebts, i, { status: e.target.value as Debt["status"] })}>
+                      <option value="active">Active</option><option value="not_started">Not started</option>
+                      <option value="paused">Paused</option><option value="paid_off">Paid off</option>
+                    </Select>
+                  </Field>
+                  <button onClick={() => setDebts((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10 mb-2"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
@@ -281,11 +283,11 @@ export function OnboardingWizard({ open }: { open: boolean }) {
                 <Button variant="ghost" onClick={() => setBills((arr) => [...arr, { name: "", amount: 0, dueDay: 1, accountId: "", active: true }])}><Plus size={14} /> Add bill</Button>
               </div>
               {bills.map((b, i) => (
-                <div key={i} className="grid sm:grid-cols-[2fr_1fr_1fr_auto] gap-2">
-                  <Input placeholder="Name (Rent, Netflix…)" value={b.name} onChange={(e) => updateAt(setBills, i, { name: e.target.value })} />
-                  <Input type="number" placeholder="Amount" value={b.amount} onChange={(e) => updateAt(setBills, i, { amount: toNumber(e.target.value) })} />
-                  <Input type="number" placeholder="Due day" value={b.dueDay} onChange={(e) => updateAt(setBills, i, { dueDay: toNumber(e.target.value) })} />
-                  <button onClick={() => setBills((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10"><Trash2 size={16} /></button>
+                <div key={i} className="grid sm:grid-cols-[2fr_1fr_1fr_auto] gap-2 items-end">
+                  <Field label="Bill name"><Input placeholder="Rent, Netflix…" value={b.name} onChange={(e) => updateAt(setBills, i, { name: e.target.value })} /></Field>
+                  <Field label="Amount"><Input type="number" placeholder="0.00" value={b.amount || ""} onChange={(e) => updateAt(setBills, i, { amount: toNumber(e.target.value) })} /></Field>
+                  <Field label="Due day" hint="Day of month (1–31)"><Input type="number" min={1} max={31} placeholder="1" value={b.dueDay || ""} onChange={(e) => updateAt(setBills, i, { dueDay: toNumber(e.target.value) })} /></Field>
+                  <button onClick={() => setBills((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10 mb-2"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
