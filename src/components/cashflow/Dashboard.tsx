@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, KPI } from "./Card";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
-  cardMinimums,
+  cardDueThisMonth,
   debtMinimums,
   netWorth,
   pendingIncome,
@@ -75,7 +75,7 @@ export function Dashboard() {
         <Card>
           <SectionTitle title="This month" />
           <Row label="Upcoming bills" value={m(upcomingBillsThisMonth(state))} />
-          <Row label="Card minimums" value={m(cardMinimums(state))} />
+          <Row label="Cards due this month" value={m(cardDueThisMonth(state))} />
           <Row label="Debt minimums" value={m(debtMinimums(state))} />
           <Row label="Pending income" value={m(pendingIncome(state))} tone="good" />
           <div className="mt-3 pt-3 border-t border-border">

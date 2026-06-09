@@ -113,6 +113,11 @@ export interface Transaction {
   createdAt: string;
   updatedAt: string;
   notes?: string;
+  // Cycle reconciliation (card payments + the expenses they cover)
+  cycleStart?: string; // ISO date — start of billing cycle (exclusive)
+  cycleEnd?: string;   // ISO date — statement / cycle close date (inclusive)
+  reconciledByPaymentId?: string; // for expenses — the card_payment tx that covered them
+  reconciledExpenseIds?: string[]; // for card_payment — expenses it reconciled
 }
 
 export interface RecurringBill {

@@ -1,4 +1,6 @@
 import { AppState } from "./types";
+import { cycleForDate, expensesInCycle } from "./cardLogic";
+import { endOfMonth } from "./dates";
 
 export function totalCash(state: AppState): number {
   return state.accounts.reduce((s, a) => s + a.balance, 0);
@@ -26,6 +28,35 @@ export function cardMinimums(state: AppState): number {
   return state.cards.reduce((s, c) => s + Math.min(c.minimumDue, c.currentBalance), 0);
 }
 
+/**
+ * Cycle-aware: sum of card balances whose payment due date falls in the
+ * current month. Uses the most recently closed cycle and the unreconciled
+ * charges in that cycle as the amount actually coming due.
+ */
+export function cardDueThisMonth(state: AppState): number {
+  const today = new Date();
+  const monthEnd = endOfMonth(today);
+  let total = 0;
+  for (const c of state.cards) {
+    const cycle = cycleForDate(c, today);
+    if (cycle.dueDate <= toISO(monthEnd) && cycle.dueDate >= toISO(today)) {
+      const charges = expensesInCycle(state.transactions, c.id, cycle).reduce(
+        (s, t) => s + t.amount,
+        0,
+      );
+      total += Math.max(Math.min(c.minimumDue, c.currentBalance), charges);
+    }
+  }
+  return total;
+}
+
+function toISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export function debtMinimums(state: AppState): number {
   return state.debts
     .filter((d) => d.status === "active")
@@ -42,12 +73,19 @@ export function safeToSpend(state: AppState): number {
   return (
     totalCash(state) -
     upcomingBillsThisMonth(state) -
-    cardMinimums(state) -
+    cardDueThisMonth(state) -
     debtMinimums(state) -
     state.profile.safeToSpendFloor
   );
 }
 
 export function projectedMonthEnd(state: AppState): number {
-  return totalCash(state) + pendingIncome(state) - upcomingBillsThisMonth(state) - cardMinimums(state) - debtMinimums(state);
+  return (
+    totalCash(state) +
+    pendingIncome(state) -
+    upcomingBillsThisMonth(state) -
+    cardDueThisMonth(state) -
+    debtMinimums(state)
+  );
 }
+
