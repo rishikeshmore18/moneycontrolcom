@@ -213,6 +213,30 @@ export function reducer(state: AppState, action: Action): AppState {
       const card = state.cards.find((c) => c.id === p.cardId);
       if (!card) return state;
       const pay = Math.min(p.amount, card.currentBalance);
+
+      // Figure out which billing cycle this payment settles.
+      // Lazy require to avoid circular import.
+      const { cycleForDate, expensesInCycle } = require("./cardLogic") as typeof import("./cardLogic");
+      const cycle = cycleForDate(card, p.date);
+      const cycleExpenses = expensesInCycle(state.transactions, card.id, cycle);
+      const cycleTotal = cycleExpenses.reduce((s, t) => s + t.amount, 0);
+
+      // Reconcile expenses up to the amount actually paid (oldest first).
+      let remaining = pay;
+      const reconciledIds: string[] = [];
+      const ordered = [...cycleExpenses].sort((a, b) => a.date.localeCompare(b.date));
+      for (const ex of ordered) {
+        if (remaining <= 0) break;
+        if (ex.amount <= remaining + 0.001) {
+          reconciledIds.push(ex.id);
+          remaining -= ex.amount;
+        }
+      }
+      const paymentId = newId();
+      const transactionsAfterRecon = state.transactions.map((t) =>
+        reconciledIds.includes(t.id) ? { ...t, reconciledByPaymentId: paymentId, updatedAt: now() } : t,
+      );
+
       let next: AppState = {
         ...state,
         cards: state.cards.map((c) =>
@@ -225,8 +249,14 @@ export function reducer(state: AppState, action: Action): AppState {
             : c,
         ),
         accounts: updateAccount(state, p.sourceAccountId, -pay),
+        transactions: transactionsAfterRecon,
       };
-      const tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
+      const noteSummary =
+        reconciledIds.length > 0
+          ? `Reconciled ${reconciledIds.length} expense${reconciledIds.length === 1 ? "" : "s"} from ${cycle.cycleStart} → ${cycle.cycleEnd}`
+          : `No matching cycle expenses for ${cycle.cycleStart} → ${cycle.cycleEnd}`;
+      const fullPayment: Transaction = {
+        id: paymentId,
         type: "card_payment",
         amount: pay,
         category: "Credit card bill",
@@ -234,9 +264,16 @@ export function reducer(state: AppState, action: Action): AppState {
         date: p.date,
         sourceAccountId: p.sourceAccountId,
         cardId: p.cardId,
-        notes: p.notes,
+        notes: p.notes ? `${p.notes} · ${noteSummary}` : noteSummary,
+        cycleStart: cycle.cycleStart,
+        cycleEnd: cycle.cycleEnd,
+        reconciledExpenseIds: reconciledIds,
+        createdAt: now(),
+        updatedAt: now(),
       };
-      return { ...next, transactions: addTx(next, tx) };
+      // Suppress unused warning
+      void cycleTotal;
+      return { ...next, transactions: [fullPayment, ...next.transactions] };
     }
 
     case "ADD_TRANSFER": {
