@@ -270,7 +270,7 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
   const cur = state.profile.currency;
   const [cardId, setCardId] = useState(state.cards[0]?.id ?? "");
   const card = state.cards.find((c) => c.id === cardId);
-  const [mode, setMode] = useState<"minimum" | "statement" | "current" | "target" | "custom">("minimum");
+  const [mode, setMode] = useState<"cycle" | "minimum" | "statement" | "current" | "target" | "custom">("cycle");
   const [custom, setCustom] = useState("");
   const [sourceAccountId, setSourceAccountId] = useState(state.accounts[0]?.id ?? "");
   const [date, setDate] = useState(todayISO());
@@ -280,16 +280,20 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
 
   const target = card ? (card.targetUtilizationPercent / 100) * card.limit : 0;
   const toTarget = card ? Math.max(0, card.currentBalance - target) : 0;
+  const cycle = card ? cycleForDate(card, date) : null;
+  const cycleExpenses = card && cycle ? expensesInCycle(state.transactions, card.id, cycle) : [];
+  const cycleTotal = cycleExpenses.reduce((s, t) => s + t.amount, 0);
 
   const amounts = card
     ? {
+        cycle: Math.min(cycleTotal, card.currentBalance),
         minimum: Math.min(card.minimumDue, card.currentBalance),
         statement: Math.min(card.statementBalance, card.currentBalance),
         current: card.currentBalance,
         target: toTarget,
         custom: toNumber(custom),
       }
-    : { minimum: 0, statement: 0, current: 0, target: 0, custom: toNumber(custom) };
+    : { cycle: 0, minimum: 0, statement: 0, current: 0, target: 0, custom: toNumber(custom) };
 
   const payAmount = amounts[mode];
 
@@ -316,9 +320,25 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
         </Select>
       </Field>
 
-      <div className="grid grid-cols-2 gap-2">
+      {card && cycle && (
+        <div className="rounded-2xl border border-border bg-muted/40 p-3 text-xs">
+          <div className="font-bold text-sm mb-1">Billing cycle for this payment</div>
+          <div className="text-muted-foreground">
+            Cycle <b className="text-foreground">{cycle.cycleStart}</b> → <b className="text-foreground">{cycle.cycleEnd}</b>
+            {" · "}due <b className="text-foreground">{cycle.dueDate}</b>
+          </div>
+          <div className="mt-1.5">
+            <b>{cycleExpenses.length}</b> unreconciled expense{cycleExpenses.length === 1 ? "" : "s"} totaling{" "}
+            <b>{formatMoney(cycleTotal, cur)}</b>.
+            {date > cycle.dueDate && <span className="text-[color:var(--warn)]"> · Past due</span>}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         {(
           [
+            ["cycle", "This cycle"],
             ["minimum", "Minimum"],
             ["statement", "Statement"],
             ["current", "Pay in full"],
@@ -365,7 +385,7 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
         </Select>
       </Field>
 
-      <Field label="Date">
+      <Field label="Payment date" hint="We use this to match the right cycle.">
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </Field>
 
@@ -378,6 +398,7 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
     </div>
   );
 }
+
 
 /* ----- Transfer ----- */
 function TransferForm({ onDone }: { onDone: () => void }) {
