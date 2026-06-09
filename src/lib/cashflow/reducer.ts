@@ -216,8 +216,6 @@ export function reducer(state: AppState, action: Action): AppState {
       const pay = Math.min(p.amount, card.currentBalance);
 
       // Figure out which billing cycle this payment settles.
-      // Lazy require to avoid circular import.
-      const { cycleForDate, expensesInCycle } = require("./cardLogic") as typeof import("./cardLogic");
       const cycle = cycleForDate(card, p.date);
       const cycleExpenses = expensesInCycle(state.transactions, card.id, cycle);
       const cycleTotal = cycleExpenses.reduce((s, t) => s + t.amount, 0);
