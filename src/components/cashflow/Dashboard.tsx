@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Card, KPI } from "./Card";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
-  cardMinimums,
+  cardDueThisMonth,
   debtMinimums,
   netWorth,
   pendingIncome,
