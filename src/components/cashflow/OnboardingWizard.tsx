@@ -163,15 +163,17 @@ export function OnboardingWizard({ open }: { open: boolean }) {
             )}
             <div className="grid gap-3">
               {accounts.map((a, i) => (
-                <div key={i} className="rounded-2xl border border-border p-3 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-                  <Input placeholder="Bank" value={a.bankName} onChange={(e) => updateAt(setAccounts, i, { bankName: e.target.value })} />
-                  <Input placeholder="Nickname" value={a.name} onChange={(e) => updateAt(setAccounts, i, { name: e.target.value })} />
-                  <Select value={a.type} onChange={(e) => updateAt(setAccounts, i, { type: e.target.value as AccountType })}>
-                    <option value="checking">Checking</option><option value="savings">Savings</option>
-                    <option value="cash">Cash</option><option value="other">Other</option>
-                  </Select>
-                  <Input type="number" placeholder="0.00" value={a.balance} onChange={(e) => updateAt(setAccounts, i, { balance: toNumber(e.target.value) })} />
-                  <button onClick={() => setAccounts((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10"><Trash2 size={16} /></button>
+                <div key={i} className="rounded-2xl border border-border p-3 grid gap-3 sm:grid-cols-[1fr_1fr_1fr_1fr_auto] items-end">
+                  <Field label="Bank / wallet"><Input placeholder="e.g. Chase" value={a.bankName} onChange={(e) => updateAt(setAccounts, i, { bankName: e.target.value })} /></Field>
+                  <Field label="Nickname"><Input placeholder="e.g. Checking" value={a.name} onChange={(e) => updateAt(setAccounts, i, { name: e.target.value })} /></Field>
+                  <Field label="Type">
+                    <Select value={a.type} onChange={(e) => updateAt(setAccounts, i, { type: e.target.value as AccountType })}>
+                      <option value="checking">Checking</option><option value="savings">Savings</option>
+                      <option value="cash">Cash</option><option value="other">Other</option>
+                    </Select>
+                  </Field>
+                  <Field label="Current balance"><Input type="number" placeholder="0.00" value={a.balance || ""} onChange={(e) => updateAt(setAccounts, i, { balance: toNumber(e.target.value) })} /></Field>
+                  <button onClick={() => setAccounts((arr) => arr.filter((_, ix) => ix !== i))} className="text-[color:var(--bad)] p-2 rounded-lg hover:bg-[color:var(--bad)]/10 mb-2"><Trash2 size={16} /></button>
                 </div>
               ))}
             </div>
