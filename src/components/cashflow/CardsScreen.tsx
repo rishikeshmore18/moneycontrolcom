@@ -41,12 +41,21 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
                   </div>
                   <div className="text-xl font-black">{c.name}</div>
                 </div>
-                <button
-                  onClick={() => onPay(c.id)}
-                  className="px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-extrabold shadow-soft"
-                >
-                  Pay bill
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditing(c)}
+                    className="p-2 rounded-xl bg-muted text-foreground hover:bg-border"
+                    aria-label="Edit card"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => onPay(c.id)}
+                    className="px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-extrabold shadow-soft"
+                  >
+                    Pay bill
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
