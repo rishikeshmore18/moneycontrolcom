@@ -1,11 +1,16 @@
+import { useState } from "react";
+import { Pencil } from "lucide-react";
 import { Card } from "./Card";
+import { CardSheet } from "./Profile";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import { availableCredit, utilization } from "@/lib/cashflow/cardLogic";
+import type { Card as CardT } from "@/lib/cashflow/types";
 
 export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
   const { state } = useApp();
   const cur = state.profile.currency;
+  const [editing, setEditing] = useState<CardT | null>(null);
 
   if (state.cards.length === 0) {
     return (
@@ -36,12 +41,21 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
                   </div>
                   <div className="text-xl font-black">{c.name}</div>
                 </div>
-                <button
-                  onClick={() => onPay(c.id)}
-                  className="px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-extrabold shadow-soft"
-                >
-                  Pay bill
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditing(c)}
+                    className="p-2 rounded-xl bg-muted text-foreground hover:bg-border"
+                    aria-label="Edit card"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    onClick={() => onPay(c.id)}
+                    className="px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-extrabold shadow-soft"
+                  >
+                    Pay bill
+                  </button>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -68,12 +82,53 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
               </div>
               <div className="mt-3 text-xs text-muted-foreground">
                 Bills on day {c.billingDate} · Due day {c.dueDate} · {c.apr}% APR
-                {c.zeroAprEndDate && ` · 0% until ${c.zeroAprEndDate}`}
               </div>
+              {(c.type === "zero_apr" || c.type === "zero_apr_car") && (
+                <ZeroAprBanner card={c} currency={cur} />
+              )}
             </Card>
           );
         })}
       </div>
+      {editing && <CardSheet key={editing.id} initial={editing} onClose={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+function ZeroAprBanner({ card, currency }: { card: CardT; currency: string }) {
+  if (!card.zeroAprEndDate) {
+    return (
+      <div className="mt-3 rounded-xl border border-[color:var(--warn)]/40 bg-[color:var(--warn)]/10 px-3 py-2 text-xs">
+        <span className="font-extrabold text-[color:var(--warn)]">Set 0% APR end date</span>
+        <span className="text-muted-foreground"> — edit this card so we can warn you before interest kicks in.</span>
+      </div>
+    );
+  }
+  const end = new Date(card.zeroAprEndDate + "T00:00:00");
+  const today = new Date();
+  const days = Math.ceil((end.getTime() - today.getTime()) / 86400000);
+  const tone = days < 0 ? "bad" : days <= 60 ? "warn" : "good";
+  const color = `var(--${tone})`;
+  const label =
+    days < 0
+      ? `0% APR expired ${-days}d ago`
+      : days === 0
+        ? "0% APR ends today"
+        : `${days} days of 0% APR left`;
+  return (
+    <div
+      className="mt-3 rounded-xl px-3 py-2 text-xs"
+      style={{ border: `1px solid ${color}40`, background: `${color}1a` }}
+    >
+      <div className="flex justify-between gap-2">
+        <span className="font-extrabold" style={{ color }}>{label}</span>
+        <span className="text-muted-foreground">ends {card.zeroAprEndDate}</span>
+      </div>
+      {card.currentBalance > 0 && (
+        <div className="mt-1 text-muted-foreground">
+          Pay <span className="font-extrabold text-foreground">{formatMoney(card.currentBalance, currency)}</span> by then to avoid interest charges.
+        </div>
+      )}
     </div>
   );
 }
