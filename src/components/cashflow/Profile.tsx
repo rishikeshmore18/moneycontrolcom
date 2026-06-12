@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Pencil } from "lucide-react";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Button } from "./Button";
@@ -51,8 +51,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(a.balance, cur)}</div>
           </>
         )}
-        onAdd={() => undefined}
-        AddForm={({ onClose }) => <AccountSheet onClose={onClose} />}
+        Form={AccountSheet}
         onDelete={(id) => dispatch({ type: "DELETE_ACCOUNT", id })}
       />
 
@@ -69,7 +68,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(c.currentBalance, cur)}</div>
           </>
         )}
-        AddForm={({ onClose }) => <CardSheet onClose={onClose} />}
+        Form={CardSheet}
         onDelete={(id) => dispatch({ type: "DELETE_CARD", id })}
       />
 
@@ -86,7 +85,7 @@ export function Profile() {
             <div className="text-xs text-muted-foreground">{j.payFrequency}</div>
           </>
         )}
-        AddForm={({ onClose }) => <JobSheet onClose={onClose} />}
+        Form={JobSheet}
         onDelete={(id) => dispatch({ type: "DELETE_JOB", id })}
       />
 
@@ -103,7 +102,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(d.balance, cur)}</div>
           </>
         )}
-        AddForm={({ onClose }) => <DebtSheet onClose={onClose} />}
+        Form={DebtSheet}
         onDelete={(id) => dispatch({ type: "DELETE_DEBT", id })}
       />
 
@@ -120,7 +119,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(b.amount, cur)}</div>
           </>
         )}
-        AddForm={({ onClose }) => <RecurringSheet onClose={onClose} />}
+        Form={RecurringSheet}
         onDelete={(id) => dispatch({ type: "DELETE_RECURRING", id })}
       />
 
@@ -149,22 +148,22 @@ export function Profile() {
 }
 
 function ListCard<T extends { id: string }>({
-  title, items, render, emptyLabel, AddForm, onDelete,
+  title, items, render, emptyLabel, Form, onDelete,
 }: {
   title: string;
   items: T[];
   render: (t: T) => React.ReactNode;
   emptyLabel: string;
-  AddForm: (p: { onClose: () => void }) => React.ReactElement;
+  Form: (p: { onClose: () => void; initial?: T }) => React.ReactElement;
   onDelete: (id: string) => void;
-  onAdd?: () => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<T | null>(null);
   return (
     <Card>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-lg font-extrabold">{title}</h3>
-        <Button variant="ghost" onClick={() => setOpen(true)}><Plus size={14} /> Add</Button>
+        <Button variant="ghost" onClick={() => setAdding(true)}><Plus size={14} /> Add</Button>
       </div>
       {items.length === 0 ? (
         <div className="text-sm text-muted-foreground py-3">{emptyLabel}</div>
@@ -172,7 +171,20 @@ function ListCard<T extends { id: string }>({
         <div className="divide-y divide-border">
           {items.map((it) => (
             <div key={it.id} className="flex items-center justify-between py-2.5 gap-3">
-              <div className="flex-1 flex justify-between gap-3">{render(it)}</div>
+              <button
+                type="button"
+                onClick={() => setEditing(it)}
+                className="flex-1 flex justify-between gap-3 text-left rounded-lg hover:bg-foreground/5 px-1 py-1 -mx-1 transition"
+              >
+                {render(it)}
+              </button>
+              <button
+                onClick={() => setEditing(it)}
+                className="text-muted-foreground p-1.5 rounded-lg hover:bg-foreground/10"
+                aria-label="Edit"
+              >
+                <Pencil size={16} />
+              </button>
               <button
                 onClick={() => { if (confirm("Delete?")) onDelete(it.id); }}
                 className="text-[color:var(--bad)] p-1.5 rounded-lg hover:bg-[color:var(--bad)]/10"
@@ -184,7 +196,8 @@ function ListCard<T extends { id: string }>({
           ))}
         </div>
       )}
-      {open && <AddForm onClose={() => setOpen(false)} />}
+      {adding && <Form onClose={() => setAdding(false)} />}
+      {editing && <Form key={editing.id} onClose={() => setEditing(null)} initial={editing} />}
     </Card>
   );
 }
