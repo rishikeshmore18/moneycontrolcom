@@ -1,6 +1,7 @@
 import { AppState, Debt } from "./types";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
 import { endOfMonth } from "./dates";
+import { entriesForMonth } from "./timesheetLogic";
 
 export function totalCash(state: AppState): number {
   return state.accounts.reduce((s, a) => s + a.balance, 0);
@@ -95,10 +96,20 @@ export function debtPlannedPayments(state: AppState): number {
   return state.debts.reduce((s, d) => s + plannedDebtPayment(d), 0);
 }
 
-export function pendingIncome(state: AppState): number {
-  return state.timesheet
-    .filter((t) => !t.paid && t.entryType !== "time_off")
-    .reduce((s, t) => s + (t.actualAmount ?? t.expectedAmount), 0);
+export function pendingIncome(state: AppState, monthDate: Date = new Date()): number {
+  const entries = entriesForMonth(state.timesheet, state.jobs, monthDate);
+  const salaryCoveredJobIds = new Set(
+    entries
+      .filter((t) => t.entryType === "salary_paycheck" && (t.actualAmount ?? t.expectedAmount) > 0)
+      .map((t) => t.jobId),
+  );
+
+  return entries
+    .filter((t) => !t.paid)
+    .reduce((s, t) => {
+      if (t.entryType === "time_off" && salaryCoveredJobIds.has(t.jobId)) return s;
+      return s + (t.actualAmount ?? t.expectedAmount);
+    }, 0);
 }
 
 export function safeToSpend(state: AppState): number {
