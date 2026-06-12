@@ -1,7 +1,11 @@
+import { useState } from "react";
+import { Pencil } from "lucide-react";
 import { Card } from "./Card";
+import { CardSheet } from "./Profile";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import { availableCredit, utilization } from "@/lib/cashflow/cardLogic";
+import type { Card as CardT } from "@/lib/cashflow/types";
 
 export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
   const { state } = useApp();
