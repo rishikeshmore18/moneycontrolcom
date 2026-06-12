@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Trash2, Plus } from "lucide-react";
+import { Trash2, Plus, Pencil } from "lucide-react";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Button } from "./Button";
