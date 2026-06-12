@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface Props {
@@ -77,8 +78,10 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
   }, [open, onClose]);
 
   if (!open) return null;
+  if (typeof document === "undefined") return null;
+
   const maxW = size === "wide" ? "sm:max-w-[980px]" : "sm:max-w-[640px]";
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/45 backdrop-blur-sm animate-fade p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:p-6"
       style={{ WebkitOverflowScrolling: "touch" }}
@@ -114,6 +117,7 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
