@@ -1,15 +1,21 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { CalendarClock, ChevronDown, Info, ReceiptText, Target, Wallet } from "lucide-react";
 import { Card, KPI } from "./Card";
+import { Sheet } from "./Sheet";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
   cardDueThisMonth,
+  type CashFlowBreakdownSection,
   debtPlannedPayments,
+  expensesComingBreakdown,
+  leftToSpendBreakdown,
   netWorth,
   pendingIncome,
+  pendingIncomeBreakdown,
   projectedMonthEnd,
   safeToSpend,
   spendableCash,
+  spendableCashBreakdown,
   totalCardDebt,
   totalCash,
   upcomingBillsThisMonth,
@@ -21,6 +27,9 @@ export function Dashboard() {
   const { state } = useApp();
   const cur = state.profile.currency;
   const m = (n: number) => formatMoney(n, cur);
+  const [activeBreakdown, setActiveBreakdown] = useState<
+    "have_now" | "income_coming" | "expenses_coming" | "left_to_spend" | null
+  >(null);
 
   const haveNow = spendableCash(state);
   const incomeComing = pendingIncome(state);
@@ -29,6 +38,43 @@ export function Dashboard() {
   const leftToSpend = haveNow + incomeComing - expensesComing;
   const sts = safeToSpend(state);
   const recent = useMemo(() => state.transactions.slice(0, 8), [state.transactions]);
+  const breakdowns = useMemo(
+    () => ({
+      have_now: {
+        title: "Have now",
+        helper: "Current spendable cash across accounts",
+        total: haveNow,
+        tone: "green" as const,
+        sections: spendableCashBreakdown(state),
+      },
+      income_coming: {
+        title: "Income coming",
+        helper: "Expected this month and not received yet",
+        total: incomeComing,
+        tone: "blue" as const,
+        sections: pendingIncomeBreakdown(state),
+      },
+      expenses_coming: {
+        title: "Expenses coming",
+        helper: "Bills, card due amounts, and debt plan for this month",
+        total: expensesComing,
+        tone: "orange" as const,
+        sections: expensesComingBreakdown(state),
+      },
+      left_to_spend: {
+        title: leftToSpend < 0 ? "Shortfall" : "Left to spend",
+        helper:
+          leftToSpend < 0
+            ? "Have now + income coming - expenses coming"
+            : "Available after planned expenses",
+        total: leftToSpend,
+        tone: leftToSpend < 0 ? ("red" as const) : ("teal" as const),
+        sections: leftToSpendBreakdown(state),
+      },
+    }),
+    [expensesComing, haveNow, incomeComing, leftToSpend, state],
+  );
+  const activeBreakdownData = activeBreakdown ? breakdowns[activeBreakdown] : null;
 
   return (
     <div className="grid gap-5">
@@ -47,6 +93,7 @@ export function Dashboard() {
         expensesComing={expensesComing}
         leftToSpend={leftToSpend}
         formatMoney={m}
+        onOpenBreakdown={setActiveBreakdown}
       />
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
@@ -174,6 +221,17 @@ export function Dashboard() {
           ))}
         </div>
       </Card>
+
+      <BreakdownSheet
+        open={!!activeBreakdownData}
+        onClose={() => setActiveBreakdown(null)}
+        title={activeBreakdownData?.title ?? ""}
+        helper={activeBreakdownData?.helper ?? ""}
+        total={activeBreakdownData?.total ?? 0}
+        tone={activeBreakdownData?.tone ?? "teal"}
+        sections={activeBreakdownData?.sections ?? []}
+        formatMoney={m}
+      />
     </div>
   );
 }
@@ -184,12 +242,16 @@ function CashFlowFormulaCard({
   expensesComing,
   leftToSpend,
   formatMoney,
+  onOpenBreakdown,
 }: {
   haveNow: number;
   incomeComing: number;
   expensesComing: number;
   leftToSpend: number;
   formatMoney: (n: number) => string;
+  onOpenBreakdown: (
+    key: "have_now" | "income_coming" | "expenses_coming" | "left_to_spend",
+  ) => void;
 }) {
   const shortfall = leftToSpend < 0;
   return (
@@ -215,6 +277,7 @@ function CashFlowFormulaCard({
             amount={formatMoney(haveNow)}
             helper="In your accounts"
             icon={Wallet}
+            onClick={() => onOpenBreakdown("have_now")}
           />
           <Connector symbol="+" />
           <FlowSegment
@@ -224,6 +287,7 @@ function CashFlowFormulaCard({
             helper={incomeComing > 0 ? "Not received yet" : "No income pending"}
             icon={CalendarClock}
             future
+            onClick={() => onOpenBreakdown("income_coming")}
           />
           <Connector symbol="-" />
           <FlowSegment
@@ -233,6 +297,7 @@ function CashFlowFormulaCard({
             helper={expensesComing > 0 ? "Not paid yet" : "No upcoming expenses"}
             icon={ReceiptText}
             future
+            onClick={() => onOpenBreakdown("expenses_coming")}
           />
           <Connector symbol="=" />
           <FlowSegment
@@ -241,6 +306,7 @@ function CashFlowFormulaCard({
             amount={formatMoney(leftToSpend)}
             helper={shortfall ? "Needs coverage" : "Ready to use"}
             icon={Target}
+            onClick={() => onOpenBreakdown("left_to_spend")}
           />
         </div>
       </div>
@@ -252,6 +318,7 @@ function CashFlowFormulaCard({
           value={formatMoney(haveNow)}
           helper="Current spendable cash"
           badge="In your accounts"
+          onClick={() => onOpenBreakdown("have_now")}
         />
         <FlowDetail
           tone="blue"
@@ -259,6 +326,7 @@ function CashFlowFormulaCard({
           value={formatMoney(incomeComing)}
           helper="Expected this month"
           badge={incomeComing > 0 ? "Not received yet" : "No income pending"}
+          onClick={() => onOpenBreakdown("income_coming")}
         />
         <FlowDetail
           tone="orange"
@@ -266,6 +334,7 @@ function CashFlowFormulaCard({
           value={formatMoney(expensesComing)}
           helper="Bills and spending due"
           badge={expensesComing > 0 ? "Not paid yet" : "No upcoming expenses"}
+          onClick={() => onOpenBreakdown("expenses_coming")}
         />
         <FlowDetail
           tone={shortfall ? "red" : "teal"}
@@ -273,6 +342,7 @@ function CashFlowFormulaCard({
           value={formatMoney(leftToSpend)}
           helper="Available after expenses"
           badge={shortfall ? "Needs coverage" : "Ready to use"}
+          onClick={() => onOpenBreakdown("left_to_spend")}
         />
       </div>
 
@@ -343,6 +413,7 @@ function FlowSegment({
   helper,
   icon: Icon,
   future,
+  onClick,
 }: {
   tone: FlowTone;
   title: string;
@@ -350,10 +421,13 @@ function FlowSegment({
   helper: string;
   icon: typeof Wallet;
   future?: boolean;
+  onClick: () => void;
 }) {
   return (
-    <div
-      className={`relative flex min-h-[86px] min-w-[170px] items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 ${flowTone[tone].segment} ${
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative flex min-h-[86px] min-w-[170px] items-center gap-3 overflow-hidden rounded-2xl border px-4 py-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].segment} ${
         future ? "border-dashed" : ""
       }`}
     >
@@ -372,7 +446,7 @@ function FlowSegment({
         <div className="mt-1 text-xl font-black tracking-tight text-foreground">{amount}</div>
         <div className="mt-1 text-[11px] font-bold text-muted-foreground">{helper}</div>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -390,15 +464,21 @@ function FlowDetail({
   value,
   helper,
   badge,
+  onClick,
 }: {
   tone: FlowTone;
   label: string;
   value: string;
   helper: string;
   badge: string;
+  onClick: () => void;
 }) {
   return (
-    <div className={`rounded-2xl border bg-muted/25 p-3 ${flowTone[tone].detail}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border bg-muted/25 p-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].detail}`}
+    >
       <div className={`text-xs font-extrabold ${flowTone[tone].text}`}>{label}</div>
       <div className="mt-1 text-lg font-black">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
@@ -407,7 +487,86 @@ function FlowDetail({
       >
         {badge}
       </div>
-    </div>
+    </button>
+  );
+}
+
+function BreakdownSheet({
+  open,
+  onClose,
+  title,
+  helper,
+  total,
+  tone,
+  sections,
+  formatMoney,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  helper: string;
+  total: number;
+  tone: FlowTone;
+  sections: CashFlowBreakdownSection[];
+  formatMoney: (n: number) => string;
+}) {
+  return (
+    <Sheet
+      open={open}
+      onClose={onClose}
+      title={title}
+      footer={
+        <div className="flex w-full items-center justify-between gap-3">
+          <div className="text-sm text-muted-foreground">{helper}</div>
+          <div className="text-right">
+            <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+              Total
+            </div>
+            <div className={`text-xl font-black ${flowTone[tone].text}`}>{formatMoney(total)}</div>
+          </div>
+        </div>
+      }
+    >
+      <div className="grid gap-4">
+        {sections.length === 0 && (
+          <div className="rounded-2xl border border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
+            No items are contributing to this number right now.
+          </div>
+        )}
+        {sections.map((section) => {
+          const sectionTotal = section.items.reduce((sum, item) => sum + item.amount, 0);
+          return (
+            <div key={section.title} className="rounded-2xl border border-border bg-muted/20">
+              <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+                <div className="font-extrabold">{section.title}</div>
+                <div className="text-sm font-bold text-muted-foreground">
+                  {formatMoney(sectionTotal)}
+                </div>
+              </div>
+              <div className="divide-y divide-border">
+                {section.items.map((item) => (
+                  <div key={item.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0">
+                      <div className="font-bold">{item.label}</div>
+                      {item.detail && (
+                        <div className="text-xs text-muted-foreground">{item.detail}</div>
+                      )}
+                    </div>
+                    <div
+                      className={`shrink-0 text-right font-black ${
+                        item.amount < 0 ? "text-[color:var(--bad)]" : ""
+                      }`}
+                    >
+                      {formatMoney(item.amount)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Sheet>
   );
 }
 
