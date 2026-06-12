@@ -2,6 +2,11 @@ import { Job, TimesheetEntry } from "./types";
 import { addDays, endOfMonth, startOfMonth, toISODate } from "./dates";
 import { newId } from "./dates";
 
+export function timesheetEntryAmount(entry: TimesheetEntry): number {
+  const amount = entry.actualAmount ?? entry.expectedAmount;
+  return entry.entryType === "time_off" ? -amount : amount;
+}
+
 // Synthesizes scheduled full-time salary paychecks for a given month
 // based on the user's full-time Job. They are NOT persisted unless
 // the user edits/marks them paid (then they become real entries).
@@ -45,7 +50,12 @@ export function syntheticSalaryEntries(
   }
 
   return dates
-    .filter((date) => !realEntries.some((e) => e.date === date && e.jobId === job.id && e.entryType === "salary_paycheck"))
+    .filter(
+      (date) =>
+        !realEntries.some(
+          (e) => e.date === date && e.jobId === job.id && e.entryType === "salary_paycheck",
+        ),
+    )
     .map((date) => ({
       id: `auto-${job.id}-${date}`,
       jobId: job.id,

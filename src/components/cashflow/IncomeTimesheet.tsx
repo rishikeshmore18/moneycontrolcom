@@ -15,7 +15,12 @@ import {
   newId,
   todayISO,
 } from "@/lib/cashflow/dates";
-import { entriesForMonth, makeShiftEntry, makeTimeOffEntry } from "@/lib/cashflow/timesheetLogic";
+import {
+  entriesForMonth,
+  makeShiftEntry,
+  makeTimeOffEntry,
+  timesheetEntryAmount,
+} from "@/lib/cashflow/timesheetLogic";
 import type { TimesheetEntry } from "@/lib/cashflow/types";
 import { toast } from "./Toast";
 
@@ -51,8 +56,7 @@ export function IncomeTimesheet() {
       pending = 0;
     entries.forEach((e) => {
       if (e.entryType !== "time_off") hours += e.hours;
-      const amt = e.actualAmount ?? e.expectedAmount;
-      if (e.entryType === "time_off") return;
+      const amt = timesheetEntryAmount(e);
       if (e.paid) paid += amt;
       else pending += amt;
     });
@@ -237,7 +241,7 @@ function DayDetailSheet({
   const [payOpen, setPayOpen] = useState<TimesheetEntry | null>(null);
 
   if (!date) return null;
-  const total = entries.reduce((s, e) => s + (e.actualAmount ?? e.expectedAmount), 0);
+  const total = entries.reduce((s, e) => s + timesheetEntryAmount(e), 0);
   const hours = entries.filter((e) => e.entryType !== "time_off").reduce((s, e) => s + e.hours, 0);
 
   return (
@@ -269,7 +273,7 @@ function DayDetailSheet({
 
           <div className="grid gap-2.5">
             {entries.map((e) => {
-              const amt = e.actualAmount ?? e.expectedAmount;
+              const amt = timesheetEntryAmount(e);
               const labelType =
                 e.entryType === "salary_paycheck"
                   ? "Salary paycheck"
@@ -638,7 +642,13 @@ function AddEntrySheet({
             Hours: <b>{computedHours.toFixed(2)}</b>
           </div>
           <div>
-            Estimated: <b>{formatMoney(computedHours * rateNum, state.profile.currency)}</b>
+            {kind === "time_off" ? "Income reduction" : "Estimated"}:{" "}
+            <b>
+              {formatMoney(
+                (kind === "time_off" ? -1 : 1) * computedHours * rateNum,
+                state.profile.currency,
+              )}
+            </b>
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { Card } from "./Card";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
+import { timesheetEntryAmount } from "@/lib/cashflow/timesheetLogic";
 import {
   cardMinimums,
   debtPlannedPayments,
@@ -19,7 +20,7 @@ export function Forecast() {
 
   const timeOff = state.timesheet
     .filter((e) => e.entryType === "time_off")
-    .reduce((s, e) => s + e.expectedAmount, 0);
+    .reduce((s, e) => s + timesheetEntryAmount(e), 0);
 
   return (
     <div className="grid gap-5">
@@ -45,7 +46,7 @@ export function Forecast() {
           <h3 className="text-lg font-extrabold mb-2">Safety check</h3>
           <Row label="Safe to spend" value={m(safeToSpend(state))} bold />
           <Row label="Floor reserved" value={m(state.profile.safeToSpendFloor)} />
-          <Row label="Time-off impact" value={m(timeOff)} tone="warn" />
+          <Row label="Time-off deduction" value={m(timeOff)} tone="warn" />
           <p className="text-xs text-muted-foreground mt-3">
             Safe-to-spend = cash − upcoming bills − card minimums − debt minimums − floor.
           </p>

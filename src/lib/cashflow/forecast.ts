@@ -1,7 +1,7 @@
 import { AppState, Debt } from "./types";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
 import { endOfMonth } from "./dates";
-import { entriesForMonth } from "./timesheetLogic";
+import { entriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
 
 export interface CashFlowBreakdownItem {
   id: string;
@@ -141,15 +141,9 @@ function unpaidPendingIncomeItems(
   monthDate: Date = new Date(),
 ): CashFlowBreakdownItem[] {
   const entries = entriesForMonth(state.timesheet, state.jobs, monthDate);
-  const salaryCoveredJobIds = new Set(
-    entries
-      .filter((t) => t.entryType === "salary_paycheck" && (t.actualAmount ?? t.expectedAmount) > 0)
-      .map((t) => t.jobId),
-  );
 
   return entries
     .filter((t) => !t.paid)
-    .filter((t) => !(t.entryType === "time_off" && salaryCoveredJobIds.has(t.jobId)))
     .map((t) => ({
       id: t.id,
       label: t.jobName,
@@ -157,9 +151,9 @@ function unpaidPendingIncomeItems(
         t.entryType === "salary_paycheck"
           ? `Scheduled paycheck - ${t.date}`
           : t.entryType === "time_off"
-            ? `Time off - ${t.date}`
+            ? `Time off deduction - ${t.date}`
             : `Shift - ${t.date}`,
-      amount: t.actualAmount ?? t.expectedAmount,
+      amount: timesheetEntryAmount(t),
     }));
 }
 
