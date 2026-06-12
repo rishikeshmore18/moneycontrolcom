@@ -5,7 +5,7 @@ import { Sheet } from "./Sheet";
 import { Button } from "./Button";
 import { Field, Input, Select } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
-import { plannedDebtPayment } from "@/lib/cashflow/forecast";
+import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import type {
   Account,
@@ -79,6 +79,11 @@ export function Profile() {
           <>
             <div>
               <div className="font-bold">{a.name}</div>
+              {!isSpendableAccount(a) && (
+                <div className="text-xs text-[color:var(--warn)]">
+                  Reserved{a.savingsPurpose ? ` for ${a.savingsPurpose}` : ""}
+                </div>
+              )}
               <div className="text-xs text-muted-foreground">
                 {a.bankName} · {a.type}
               </div>
@@ -264,6 +269,10 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
   const [name, setName] = useState(initial?.name ?? "");
   const [type, setType] = useState<AccountType>(initial?.type ?? "checking");
   const [balance, setBalance] = useState(String(initial?.balance ?? ""));
+  const [availableForSpending, setAvailableForSpending] = useState(
+    initial?.availableForSpending !== false,
+  );
+  const [savingsPurpose, setSavingsPurpose] = useState(initial?.savingsPurpose ?? "");
 
   function save() {
     if (!name.trim()) return toast("Give it a name");
@@ -274,12 +283,27 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
     if (initial) {
       dispatch({
         type: "UPDATE_ACCOUNT",
-        payload: { ...initial, bankName, name: name.trim(), type, balance: toNumber(balance) },
+        payload: {
+          ...initial,
+          bankName,
+          name: name.trim(),
+          type,
+          balance: toNumber(balance),
+          availableForSpending,
+          savingsPurpose: availableForSpending ? undefined : savingsPurpose.trim() || undefined,
+        },
       });
     } else {
       dispatch({
         type: "ADD_ACCOUNT",
-        payload: { bankName, name: name.trim(), type, balance: toNumber(balance) },
+        payload: {
+          bankName,
+          name: name.trim(),
+          type,
+          balance: toNumber(balance),
+          availableForSpending,
+          savingsPurpose: availableForSpending ? undefined : savingsPurpose.trim() || undefined,
+        },
       });
     }
     toast("Saved");
@@ -332,6 +356,38 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
             onChange={(e) => setBalance(e.target.value)}
           />
         </Field>
+        <div className="rounded-2xl border border-border bg-muted/40 p-3">
+          <button
+            type="button"
+            onClick={() => setAvailableForSpending((v) => !v)}
+            className="flex w-full items-start gap-3 text-left"
+          >
+            <span
+              className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-md border text-xs font-black ${
+                availableForSpending
+                  ? "border-primary brand-gradient text-primary-foreground"
+                  : "border-border bg-[color:var(--card-solid)]"
+              }`}
+            >
+              {availableForSpending ? "✓" : ""}
+            </span>
+            <span>
+              <span className="block text-sm font-extrabold">Available for spending</span>
+              <span className="block text-xs text-muted-foreground">
+                Include this account in safe-to-spend, forecasts, and expense payment options.
+              </span>
+            </span>
+          </button>
+        </div>
+        {!availableForSpending && (
+          <Field label="Reserved purpose">
+            <Input
+              value={savingsPurpose}
+              onChange={(e) => setSavingsPurpose(e.target.value)}
+              placeholder="Tax savings, emergency fund, rent reserve"
+            />
+          </Field>
+        )}
       </div>
     </Sheet>
   );

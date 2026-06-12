@@ -130,6 +130,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "ADD_ACCOUNT": {
       const acc: Account = {
+        availableForSpending: true,
         ...action.payload,
         id: newId(),
         createdAt: now(),

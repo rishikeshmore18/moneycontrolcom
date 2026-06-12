@@ -17,6 +17,8 @@ export interface Account {
   name: string;
   type: AccountType;
   balance: number;
+  availableForSpending?: boolean;
+  savingsPurpose?: string;
   createdAt: string;
   updatedAt: string;
 }

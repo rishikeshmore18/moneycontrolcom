@@ -37,8 +37,14 @@ export function OnboardingWizard({ open }: { open: boolean }) {
   const [floor, setFloor] = useState(100);
 
   const [accounts, setAccounts] = useState<DraftAccount[]>([
-    { bankName: "Chase", name: "Checking", type: "checking", balance: 0 },
-    { bankName: "Cash", name: "Cash", type: "cash", balance: 0 },
+    {
+      bankName: "Chase",
+      name: "Checking",
+      type: "checking",
+      balance: 0,
+      availableForSpending: true,
+    },
+    { bankName: "Cash", name: "Cash", type: "cash", balance: 0, availableForSpending: true },
   ]);
 
   const [fullTime, setFullTime] = useState<DraftJob>({
@@ -272,7 +278,16 @@ export function OnboardingWizard({ open }: { open: boolean }) {
             <Button
               variant="ghost"
               onClick={() =>
-                setAccounts((a) => [...a, { bankName: "", name: "", type: "checking", balance: 0 }])
+                setAccounts((a) => [
+                  ...a,
+                  {
+                    bankName: "",
+                    name: "",
+                    type: "checking",
+                    balance: 0,
+                    availableForSpending: true,
+                  },
+                ])
               }
             >
               <Plus size={14} /> Add another account

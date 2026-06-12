@@ -11,7 +11,7 @@ import {
   cycleForDate,
   expensesInCycle,
 } from "@/lib/cashflow/cardLogic";
-import { plannedDebtPayment } from "@/lib/cashflow/forecast";
+import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
 const CATEGORIES = [
@@ -43,8 +43,8 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const amt = toNumber(amount);
   const cur = state.profile.currency;
 
-  const cashAccount = state.accounts.find((a) => a.type === "cash");
-  const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash");
+  const cashAccount = state.accounts.find((a) => a.type === "cash" && isSpendableAccount(a));
+  const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash" && isSpendableAccount(a));
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
   const chosenDebt = state.debts.find((d) => d.id === debtId);
 
@@ -344,13 +344,14 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
     "cycle" | "minimum" | "statement" | "current" | "target" | "custom"
   >("cycle");
   const [custom, setCustom] = useState("");
-  const [sourceAccountId, setSourceAccountId] = useState(state.accounts[0]?.id ?? "");
+  const spendableAccounts = state.accounts.filter(isSpendableAccount);
+  const [sourceAccountId, setSourceAccountId] = useState(spendableAccounts[0]?.id ?? "");
   const [date, setDate] = useState(todayISO());
 
   if (state.cards.length === 0)
     return <div className="text-sm text-muted-foreground">No cards configured.</div>;
-  if (state.accounts.length === 0)
-    return <div className="text-sm text-muted-foreground">No accounts to pay from.</div>;
+  if (spendableAccounts.length === 0)
+    return <div className="text-sm text-muted-foreground">No spendable accounts to pay from.</div>;
 
   const target = card ? (card.targetUtilizationPercent / 100) * card.limit : 0;
   const toTarget = card ? Math.max(0, card.currentBalance - target) : 0;
@@ -452,7 +453,7 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
 
       <Field label="Pay from">
         <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
-          {state.accounts.map((a) => (
+          {spendableAccounts.map((a) => (
             <option key={a.id} value={a.id}>
               {a.bankName} {a.name} · {a.type} · {formatMoney(a.balance, cur)}
             </option>

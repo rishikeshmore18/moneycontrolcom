@@ -8,7 +8,7 @@ import {
   pendingIncome,
   projectedMonthEnd,
   safeToSpend,
-  totalCash,
+  spendableCash,
   upcomingBillsThisMonth,
 } from "@/lib/cashflow/forecast";
 
@@ -32,7 +32,7 @@ export function Forecast() {
         <Card>
           <h3 className="text-lg font-extrabold mb-2">Cash flow</h3>
           <Row label="Debt plan" value={m(debtPlannedPayments(state))} tone="bad" />
-          <Row label="Current cash" value={m(totalCash(state))} />
+          <Row label="Spendable cash" value={m(spendableCash(state))} />
           <Row label="+ Expected income" value={m(pendingIncome(state))} tone="good" />
           <Row label="− Upcoming bills" value={m(upcomingBillsThisMonth(state))} tone="bad" />
           <Row label="− Card minimums" value={m(cardMinimums(state))} tone="bad" />
@@ -86,7 +86,7 @@ function DebtPlanCheck() {
   if (plan <= 0) return null;
 
   const availableAfterPlan =
-    totalCash(state) +
+    spendableCash(state) +
     pendingIncome(state) -
     upcomingBillsThisMonth(state) -
     cardMinimums(state) -

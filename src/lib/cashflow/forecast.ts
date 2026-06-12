@@ -6,6 +6,14 @@ export function totalCash(state: AppState): number {
   return state.accounts.reduce((s, a) => s + a.balance, 0);
 }
 
+export function isSpendableAccount(account: AppState["accounts"][number]): boolean {
+  return account.availableForSpending !== false;
+}
+
+export function spendableCash(state: AppState): number {
+  return state.accounts.filter(isSpendableAccount).reduce((s, a) => s + a.balance, 0);
+}
+
 export function totalCardDebt(state: AppState): number {
   return state.cards.reduce((s, c) => s + c.currentBalance, 0);
 }
@@ -95,7 +103,7 @@ export function pendingIncome(state: AppState): number {
 
 export function safeToSpend(state: AppState): number {
   return (
-    totalCash(state) -
+    spendableCash(state) -
     upcomingBillsThisMonth(state) -
     cardDueThisMonth(state) -
     debtPlannedPayments(state) -
@@ -105,7 +113,7 @@ export function safeToSpend(state: AppState): number {
 
 export function projectedMonthEnd(state: AppState): number {
   return (
-    totalCash(state) +
+    spendableCash(state) +
     pendingIncome(state) -
     upcomingBillsThisMonth(state) -
     cardDueThisMonth(state) -

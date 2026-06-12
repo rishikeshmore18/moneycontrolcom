@@ -8,8 +8,8 @@ import {
   pendingIncome,
   projectedMonthEnd,
   safeToSpend,
+  spendableCash,
   totalCardDebt,
-  totalCash,
   upcomingBillsThisMonth,
 } from "@/lib/cashflow/forecast";
 import { formatMoney } from "@/lib/cashflow/money";
@@ -42,9 +42,9 @@ export function Dashboard() {
           hint={`Floor ${m(state.profile.safeToSpendFloor)}`}
         />
         <KPI
-          label="Total cash"
-          value={m(totalCash(state))}
-          hint={`${state.accounts.length} accounts`}
+          label="Spendable cash"
+          value={m(spendableCash(state))}
+          hint={`${state.accounts.filter((a) => a.availableForSpending !== false).length} accounts`}
         />
         <KPI
           label="Card debt"
@@ -64,6 +64,11 @@ export function Dashboard() {
               <div key={a.id} className="flex items-center justify-between py-3">
                 <div>
                   <div className="font-bold">{a.name}</div>
+                  {a.availableForSpending === false && (
+                    <div className="text-xs text-[color:var(--warn)]">
+                      Reserved{a.savingsPurpose ? ` for ${a.savingsPurpose}` : ""}
+                    </div>
+                  )}
                   <div className="text-xs text-muted-foreground capitalize">
                     {a.bankName ? `${a.bankName} · ` : ""}
                     {a.type}
