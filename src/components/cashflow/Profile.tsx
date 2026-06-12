@@ -51,8 +51,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(a.balance, cur)}</div>
           </>
         )}
-        onAdd={() => undefined}
-        AddForm={({ onClose }) => <AccountSheet onClose={onClose} />}
+        Form={AccountSheet}
         onDelete={(id) => dispatch({ type: "DELETE_ACCOUNT", id })}
       />
 
@@ -69,7 +68,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(c.currentBalance, cur)}</div>
           </>
         )}
-        AddForm={({ onClose }) => <CardSheet onClose={onClose} />}
+        Form={CardSheet}
         onDelete={(id) => dispatch({ type: "DELETE_CARD", id })}
       />
 
@@ -86,7 +85,7 @@ export function Profile() {
             <div className="text-xs text-muted-foreground">{j.payFrequency}</div>
           </>
         )}
-        AddForm={({ onClose }) => <JobSheet onClose={onClose} />}
+        Form={JobSheet}
         onDelete={(id) => dispatch({ type: "DELETE_JOB", id })}
       />
 
@@ -103,7 +102,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(d.balance, cur)}</div>
           </>
         )}
-        AddForm={({ onClose }) => <DebtSheet onClose={onClose} />}
+        Form={DebtSheet}
         onDelete={(id) => dispatch({ type: "DELETE_DEBT", id })}
       />
 
@@ -120,7 +119,7 @@ export function Profile() {
             <div className="font-black">{formatMoney(b.amount, cur)}</div>
           </>
         )}
-        AddForm={({ onClose }) => <RecurringSheet onClose={onClose} />}
+        Form={RecurringSheet}
         onDelete={(id) => dispatch({ type: "DELETE_RECURRING", id })}
       />
 
