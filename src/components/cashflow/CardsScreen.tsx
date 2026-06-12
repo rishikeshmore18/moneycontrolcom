@@ -10,6 +10,7 @@ import type { Card as CardT } from "@/lib/cashflow/types";
 export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
   const { state } = useApp();
   const cur = state.profile.currency;
+  const [editing, setEditing] = useState<CardT | null>(null);
 
   if (state.cards.length === 0) {
     return (
