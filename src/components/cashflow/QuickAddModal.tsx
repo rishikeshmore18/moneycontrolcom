@@ -5,7 +5,13 @@ import { Button } from "./Button";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import { todayISO } from "@/lib/cashflow/dates";
-import { recommendCardForCategory, availableCredit, cycleForDate, expensesInCycle } from "@/lib/cashflow/cardLogic";
+import {
+  recommendCardForCategory,
+  availableCredit,
+  cycleForDate,
+  expensesInCycle,
+} from "@/lib/cashflow/cardLogic";
+import { plannedDebtPayment } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
 const CATEGORIES = [
@@ -27,8 +33,11 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [category, setCategory] = useState("Groceries");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(todayISO());
-  const [method, setMethod] = useState<"credit_card" | "debit" | "cash" | "other">("debit");
+  const [method, setMethod] = useState<"credit_card" | "debit" | "cash" | "debt_payment" | "other">(
+    "debit",
+  );
   const [cardId, setCardId] = useState<string>("");
+  const [debtId, setDebtId] = useState<string>("");
   const [sourceAccountId, setSourceAccountId] = useState<string>("");
 
   const amt = toNumber(amount);
@@ -36,9 +45,12 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   const cashAccount = state.accounts.find((a) => a.type === "cash");
   const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash");
+  const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
+  const chosenDebt = state.debts.find((d) => d.id === debtId);
 
   const recommendation = useMemo(
-    () => (method === "credit_card" && amt > 0 ? recommendCardForCategory(state, category, amt) : null),
+    () =>
+      method === "credit_card" && amt > 0 ? recommendCardForCategory(state, category, amt) : null,
     [state, category, method, amt],
   );
 
@@ -52,8 +64,26 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   function submit() {
     if (amt <= 0) return toast("Enter an amount");
     if (method === "credit_card" && !cardId) return toast("Select a card");
-    if (method === "debit" && !sourceAccountId) return toast("Select an account");
+    if ((method === "debit" || method === "debt_payment") && !sourceAccountId)
+      return toast("Select an account");
+    if (method === "debt_payment" && !debtId) return toast("Select a debt");
     if (method === "cash" && !cashAccount) return toast("Add a cash account first");
+
+    if (method === "debt_payment") {
+      dispatch({
+        type: "PAY_DEBT",
+        payload: {
+          debtId,
+          amount: amt,
+          sourceAccountId,
+          date,
+          notes: description,
+        },
+      });
+      toast(`Debt payment logged Â· ${formatMoney(amt, cur)}`);
+      onDone();
+      return;
+    }
 
     dispatch({
       type: "ADD_EXPENSE",
@@ -98,7 +128,11 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         </Select>
       </Field>
       <Field label="Description (optional)">
-        <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What was it?" />
+        <Input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          placeholder="What was it?"
+        />
       </Field>
       <Field label="Payment method">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -107,6 +141,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
               ["credit_card", "Credit card"],
               ["debit", "Debit / bank"],
               ["cash", "Cash"],
+              ["debt_payment", "Debt payment"],
               ["other", "Other"],
             ] as const
           ).map(([id, label]) => (
@@ -157,7 +192,38 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {method === "debit" && (
+      {method === "debt_payment" && (
+        <>
+          {activeDebts.length === 0 ? (
+            <Notice tone="warn">No active debts to pay. Add one in Profile first.</Notice>
+          ) : (
+            <Field label="Debt">
+              <Select value={debtId} onChange={(e) => setDebtId(e.target.value)}>
+                <option value="">Pick a debtâ€¦</option>
+                {activeDebts.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} Â· bal {formatMoney(d.balance, cur)} Â· plan{" "}
+                    {formatMoney(plannedDebtPayment(d), cur)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+          {chosenDebt && (
+            <Notice tone="info">
+              Monthly plan for <b>{chosenDebt.name}</b>:{" "}
+              <button
+                className="underline font-bold"
+                onClick={() => setAmount(String(plannedDebtPayment(chosenDebt)))}
+              >
+                Use {formatMoney(plannedDebtPayment(chosenDebt), cur)}
+              </button>
+            </Notice>
+          )}
+        </>
+      )}
+
+      {(method === "debit" || method === "debt_payment") && (
         <Field label="Source account">
           <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
             <option value="">Pick an account…</option>
@@ -177,8 +243,12 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
       {overdraft && <Notice tone="warn">This will overdraw the selected account.</Notice>}
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={onDone}>Cancel</Button>
-        <Button variant="primary" onClick={submit}>Save expense</Button>
+        <Button variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={submit}>
+          {method === "debt_payment" ? "Save debt payment" : "Save expense"}
+        </Button>
       </div>
     </div>
   );
@@ -270,13 +340,17 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
   const cur = state.profile.currency;
   const [cardId, setCardId] = useState(state.cards[0]?.id ?? "");
   const card = state.cards.find((c) => c.id === cardId);
-  const [mode, setMode] = useState<"cycle" | "minimum" | "statement" | "current" | "target" | "custom">("cycle");
+  const [mode, setMode] = useState<
+    "cycle" | "minimum" | "statement" | "current" | "target" | "custom"
+  >("cycle");
   const [custom, setCustom] = useState("");
   const [sourceAccountId, setSourceAccountId] = useState(state.accounts[0]?.id ?? "");
   const [date, setDate] = useState(todayISO());
 
-  if (state.cards.length === 0) return <div className="text-sm text-muted-foreground">No cards configured.</div>;
-  if (state.accounts.length === 0) return <div className="text-sm text-muted-foreground">No accounts to pay from.</div>;
+  if (state.cards.length === 0)
+    return <div className="text-sm text-muted-foreground">No cards configured.</div>;
+  if (state.accounts.length === 0)
+    return <div className="text-sm text-muted-foreground">No accounts to pay from.</div>;
 
   const target = card ? (card.targetUtilizationPercent / 100) * card.limit : 0;
   const toTarget = card ? Math.max(0, card.currentBalance - target) : 0;
@@ -324,12 +398,13 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
         <div className="rounded-2xl border border-border bg-muted/40 p-3 text-xs">
           <div className="font-bold text-sm mb-1">Billing cycle for this payment</div>
           <div className="text-muted-foreground">
-            Cycle <b className="text-foreground">{cycle.cycleStart}</b> → <b className="text-foreground">{cycle.cycleEnd}</b>
+            Cycle <b className="text-foreground">{cycle.cycleStart}</b> →{" "}
+            <b className="text-foreground">{cycle.cycleEnd}</b>
             {" · "}due <b className="text-foreground">{cycle.dueDate}</b>
           </div>
           <div className="mt-1.5">
-            <b>{cycleExpenses.length}</b> unreconciled expense{cycleExpenses.length === 1 ? "" : "s"} totaling{" "}
-            <b>{formatMoney(cycleTotal, cur)}</b>.
+            <b>{cycleExpenses.length}</b> unreconciled expense
+            {cycleExpenses.length === 1 ? "" : "s"} totaling <b>{formatMoney(cycleTotal, cur)}</b>.
             {date > cycle.dueDate && <span className="text-[color:var(--warn)]"> · Past due</span>}
           </div>
         </div>
@@ -390,7 +465,9 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
       </Field>
 
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={onDone}>Cancel</Button>
+        <Button variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
         <Button variant="primary" onClick={submit}>
           Pay {formatMoney(payAmount, cur)}
         </Button>
@@ -398,7 +475,6 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
     </div>
   );
 }
-
 
 /* ----- Transfer ----- */
 function TransferForm({ onDone }: { onDone: () => void }) {
@@ -422,7 +498,8 @@ function TransferForm({ onDone }: { onDone: () => void }) {
     onDone();
   }
 
-  if (state.accounts.length < 2) return <div className="text-sm text-muted-foreground">Need at least 2 accounts.</div>;
+  if (state.accounts.length < 2)
+    return <div className="text-sm text-muted-foreground">Need at least 2 accounts.</div>;
 
   return (
     <div className="grid gap-4">
@@ -448,7 +525,12 @@ function TransferForm({ onDone }: { onDone: () => void }) {
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Amount">
-          <Input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
         </Field>
         <Field label="Date">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -458,8 +540,12 @@ function TransferForm({ onDone }: { onDone: () => void }) {
         <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={onDone}>Cancel</Button>
-        <Button variant="primary" onClick={submit}>Transfer</Button>
+        <Button variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={submit}>
+          Transfer
+        </Button>
       </div>
     </div>
   );
@@ -504,7 +590,7 @@ function AdjustmentForm({ onDone }: { onDone: () => void }) {
             type="button"
             onClick={() => {
               setTarget(t);
-              setId(t === "account" ? state.accounts[0]?.id ?? "" : state.cards[0]?.id ?? "");
+              setId(t === "account" ? (state.accounts[0]?.id ?? "") : (state.cards[0]?.id ?? ""));
             }}
             className={`px-3 py-2.5 rounded-2xl text-sm font-bold border transition capitalize ${
               target === t
@@ -529,7 +615,12 @@ function AdjustmentForm({ onDone }: { onDone: () => void }) {
         </Select>
       </Field>
       <Field label="New balance">
-        <Input type="number" inputMode="decimal" value={newBalance} onChange={(e) => setNewBalance(e.target.value)} />
+        <Input
+          type="number"
+          inputMode="decimal"
+          value={newBalance}
+          onChange={(e) => setNewBalance(e.target.value)}
+        />
       </Field>
       <Field label="Reason">
         <Select value={reason} onChange={(e) => setReason(e.target.value)}>
@@ -543,8 +634,12 @@ function AdjustmentForm({ onDone }: { onDone: () => void }) {
         <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
       <div className="flex justify-end gap-2 pt-2">
-        <Button variant="ghost" onClick={onDone}>Cancel</Button>
-        <Button variant="primary" onClick={submit}>Save adjustment</Button>
+        <Button variant="ghost" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button variant="primary" onClick={submit}>
+          Save adjustment
+        </Button>
       </div>
     </div>
   );

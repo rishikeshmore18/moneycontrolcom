@@ -40,6 +40,7 @@ export interface Card {
 }
 
 export type DebtStatus = "active" | "not_started" | "paused" | "paid_off";
+export type DebtPayoffMode = "minimum" | "date" | "payments" | "custom";
 
 export interface Debt {
   id: string;
@@ -48,6 +49,10 @@ export interface Debt {
   minimumPayment: number;
   dueDate: number; // day of month
   status: DebtStatus;
+  payoffMode?: DebtPayoffMode;
+  payoffTargetDate?: string;
+  payoffPaymentCount?: number;
+  plannedMonthlyPayment?: number;
   notes?: string;
 }
 
@@ -115,7 +120,7 @@ export interface Transaction {
   notes?: string;
   // Cycle reconciliation (card payments + the expenses they cover)
   cycleStart?: string; // ISO date — start of billing cycle (exclusive)
-  cycleEnd?: string;   // ISO date — statement / cycle close date (inclusive)
+  cycleEnd?: string; // ISO date — statement / cycle close date (inclusive)
   reconciledByPaymentId?: string; // for expenses — the card_payment tx that covered them
   reconciledExpenseIds?: string[]; // for card_payment — expenses it reconciled
 }

@@ -3,6 +3,7 @@ import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import {
   cardMinimums,
+  debtPlannedPayments,
   debtMinimums,
   pendingIncome,
   projectedMonthEnd,
@@ -30,11 +31,11 @@ export function Forecast() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>
           <h3 className="text-lg font-extrabold mb-2">Cash flow</h3>
+          <Row label="Debt plan" value={m(debtPlannedPayments(state))} tone="bad" />
           <Row label="Current cash" value={m(totalCash(state))} />
           <Row label="+ Expected income" value={m(pendingIncome(state))} tone="good" />
           <Row label="− Upcoming bills" value={m(upcomingBillsThisMonth(state))} tone="bad" />
           <Row label="− Card minimums" value={m(cardMinimums(state))} tone="bad" />
-          <Row label="− Debt minimums" value={m(debtMinimums(state))} tone="bad" />
           <div className="border-t border-border mt-2 pt-2">
             <Row label="Projected month-end" value={m(projectedMonthEnd(state))} bold />
           </div>
@@ -50,6 +51,8 @@ export function Forecast() {
           </p>
         </Card>
       </div>
+
+      <DebtPlanCheck />
 
       <ZeroAprAlerts />
 
@@ -75,6 +78,39 @@ export function Forecast() {
   );
 }
 
+function DebtPlanCheck() {
+  const { state } = useApp();
+  const cur = state.profile.currency;
+  const plan = debtPlannedPayments(state);
+  const minimums = debtMinimums(state);
+  if (plan <= 0) return null;
+
+  const availableAfterPlan =
+    totalCash(state) +
+    pendingIncome(state) -
+    upcomingBillsThisMonth(state) -
+    cardMinimums(state) -
+    plan;
+  const shortBy = Math.max(0, state.profile.safeToSpendFloor - availableAfterPlan);
+
+  return (
+    <Card>
+      <h3 className="text-lg font-extrabold mb-2">Debt payoff check</h3>
+      <Row label="Minimum required" value={formatMoney(minimums, cur)} />
+      <Row label="Your planned payments" value={formatMoney(plan, cur)} bold />
+      {shortBy > 0 ? (
+        <p className="text-sm text-[color:var(--bad)] mt-2 font-bold">
+          Short by {formatMoney(shortBy, cur)} for this month after keeping your floor.
+        </p>
+      ) : (
+        <p className="text-sm text-[color:var(--good)] mt-2 font-bold">
+          You have enough projected cash for this month's debt plan.
+        </p>
+      )}
+    </Card>
+  );
+}
+
 function ZeroAprAlerts() {
   const { state } = useApp();
   const cur = state.profile.currency;
@@ -83,7 +119,9 @@ function ZeroAprAlerts() {
     .filter((c) => (c.type === "zero_apr" || c.type === "zero_apr_car") && c.currentBalance > 0)
     .map((c) => {
       const days = c.zeroAprEndDate
-        ? Math.ceil((new Date(c.zeroAprEndDate + "T00:00:00").getTime() - today.getTime()) / 86400000)
+        ? Math.ceil(
+            (new Date(c.zeroAprEndDate + "T00:00:00").getTime() - today.getTime()) / 86400000,
+          )
         : null;
       return { c, days };
     })
@@ -109,24 +147,33 @@ function ZeroAprAlerts() {
                 : days === 0
                   ? "Ends today"
                   : `${days} days left`;
-          const perMonth = days != null && days > 0 ? c.currentBalance / Math.max(1, Math.ceil(days / 30)) : null;
+          const perMonth =
+            days != null && days > 0 ? c.currentBalance / Math.max(1, Math.ceil(days / 30)) : null;
           return (
             <div key={c.id} className="py-3 grid gap-1">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="font-bold">{c.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    {c.zeroAprEndDate ? `Ends ${c.zeroAprEndDate}` : "Add end date in card settings"}
+                    {c.zeroAprEndDate
+                      ? `Ends ${c.zeroAprEndDate}`
+                      : "Add end date in card settings"}
                   </div>
                 </div>
                 <div className="text-right">
                   <div className="font-black">{formatMoney(c.currentBalance, cur)}</div>
-                  <div className="text-xs font-extrabold" style={{ color }}>{status}</div>
+                  <div className="text-xs font-extrabold" style={{ color }}>
+                    {status}
+                  </div>
                 </div>
               </div>
               {perMonth != null && (
                 <div className="text-xs text-muted-foreground">
-                  Pay ≈ <span className="font-extrabold text-foreground">{formatMoney(perMonth, cur)}</span>/month to clear it in time.
+                  Pay ≈{" "}
+                  <span className="font-extrabold text-foreground">
+                    {formatMoney(perMonth, cur)}
+                  </span>
+                  /month to clear it in time.
                 </div>
               )}
             </div>
@@ -138,9 +185,15 @@ function ZeroAprAlerts() {
 }
 
 function Row({
-  label, value, tone, bold,
+  label,
+  value,
+  tone,
+  bold,
 }: {
-  label: string; value: string; tone?: "good" | "bad" | "warn"; bold?: boolean;
+  label: string;
+  value: string;
+  tone?: "good" | "bad" | "warn";
+  bold?: boolean;
 }) {
   const t =
     tone === "good"
@@ -152,7 +205,11 @@ function Row({
           : "";
   return (
     <div className="flex items-center justify-between py-1.5">
-      <span className={`text-sm ${bold ? "font-extrabold text-foreground" : "text-muted-foreground"}`}>{label}</span>
+      <span
+        className={`text-sm ${bold ? "font-extrabold text-foreground" : "text-muted-foreground"}`}
+      >
+        {label}
+      </span>
       <span className={`${bold ? "text-xl font-black" : "font-bold"} ${t}`}>{value}</span>
     </div>
   );

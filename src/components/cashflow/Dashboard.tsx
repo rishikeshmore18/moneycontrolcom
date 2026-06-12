@@ -3,7 +3,7 @@ import { Card, KPI } from "./Card";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
   cardDueThisMonth,
-  debtMinimums,
+  debtPlannedPayments,
   netWorth,
   pendingIncome,
   projectedMonthEnd,
@@ -41,7 +41,11 @@ export function Dashboard() {
           tone={sts <= 0 ? "bad" : sts < 100 ? "warn" : "good"}
           hint={`Floor ${m(state.profile.safeToSpendFloor)}`}
         />
-        <KPI label="Total cash" value={m(totalCash(state))} hint={`${state.accounts.length} accounts`} />
+        <KPI
+          label="Total cash"
+          value={m(totalCash(state))}
+          hint={`${state.accounts.length} accounts`}
+        />
         <KPI
           label="Card debt"
           value={m(totalCardDebt(state))}
@@ -61,7 +65,8 @@ export function Dashboard() {
                 <div>
                   <div className="font-bold">{a.name}</div>
                   <div className="text-xs text-muted-foreground capitalize">
-                    {a.bankName ? `${a.bankName} · ` : ""}{a.type}
+                    {a.bankName ? `${a.bankName} · ` : ""}
+                    {a.type}
                   </div>
                 </div>
                 <div className={`font-black ${a.balance < 0 ? "text-[color:var(--bad)]" : ""}`}>
@@ -76,7 +81,7 @@ export function Dashboard() {
           <SectionTitle title="This month" />
           <Row label="Upcoming bills" value={m(upcomingBillsThisMonth(state))} />
           <Row label="Cards due this month" value={m(cardDueThisMonth(state))} />
-          <Row label="Debt minimums" value={m(debtMinimums(state))} />
+          <Row label="Debt plan" value={m(debtPlannedPayments(state))} />
           <Row label="Pending income" value={m(pendingIncome(state))} tone="good" />
           <div className="mt-3 pt-3 border-t border-border">
             <Row label="Projected month-end" value={m(projectedMonthEnd(state))} bold />
@@ -95,7 +100,9 @@ export function Dashboard() {
                 <div key={c.id}>
                   <div className="flex justify-between items-center mb-1.5">
                     <div className="font-bold">{c.name}</div>
-                    <div className={`text-sm font-bold ${over ? "text-[color:var(--warn)]" : "text-muted-foreground"}`}>
+                    <div
+                      className={`text-sm font-bold ${over ? "text-[color:var(--warn)]" : "text-muted-foreground"}`}
+                    >
                       {u.toFixed(0)}% of {m(c.limit)}
                     </div>
                   </div>
@@ -131,12 +138,16 @@ export function Dashboard() {
                 className={`font-black ${
                   t.type === "income"
                     ? "text-[color:var(--good)]"
-                    : t.type === "expense" || t.type === "card_payment"
+                    : t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment"
                       ? "text-[color:var(--bad)]"
                       : ""
                 }`}
               >
-                {t.type === "income" ? "+" : t.type === "expense" || t.type === "card_payment" ? "-" : ""}
+                {t.type === "income"
+                  ? "+"
+                  : t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment"
+                    ? "-"
+                    : ""}
                 {m(Math.abs(t.amount))}
               </div>
             </div>
@@ -155,7 +166,17 @@ function SectionTitle({ title, hint }: { title: string; hint?: string }) {
     </div>
   );
 }
-function Row({ label, value, tone, bold }: { label: string; value: string; tone?: "good"; bold?: boolean }) {
+function Row({
+  label,
+  value,
+  tone,
+  bold,
+}: {
+  label: string;
+  value: string;
+  tone?: "good";
+  bold?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between py-2">
       <span className="text-sm text-muted-foreground">{label}</span>

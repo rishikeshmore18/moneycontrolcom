@@ -1,4 +1,4 @@
-import { AppState } from "./types";
+import { AppState, Debt } from "./types";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
 import { endOfMonth } from "./dates";
 
@@ -11,9 +11,7 @@ export function totalCardDebt(state: AppState): number {
 }
 
 export function totalDebt(state: AppState): number {
-  return state.debts
-    .filter((d) => d.status === "active")
-    .reduce((s, d) => s + d.balance, 0);
+  return state.debts.filter((d) => d.status === "active").reduce((s, d) => s + d.balance, 0);
 }
 
 export function netWorth(state: AppState): number {
@@ -58,9 +56,35 @@ function toISO(d: Date): string {
 }
 
 export function debtMinimums(state: AppState): number {
-  return state.debts
-    .filter((d) => d.status === "active")
-    .reduce((s, d) => s + d.minimumPayment, 0);
+  return state.debts.filter((d) => d.status === "active").reduce((s, d) => s + d.minimumPayment, 0);
+}
+
+export function plannedDebtPayment(debt: Omit<Debt, "id"> | Debt, ref: Date = new Date()): number {
+  if (debt.status !== "active" || debt.balance <= 0) return 0;
+
+  let planned = debt.minimumPayment;
+  if (debt.payoffMode === "payments" && debt.payoffPaymentCount && debt.payoffPaymentCount > 0) {
+    planned = debt.balance / debt.payoffPaymentCount;
+  } else if (debt.payoffMode === "date" && debt.payoffTargetDate) {
+    const target = new Date(`${debt.payoffTargetDate}T00:00:00`);
+    if (!Number.isNaN(target.getTime())) {
+      const months =
+        (target.getFullYear() - ref.getFullYear()) * 12 + (target.getMonth() - ref.getMonth()) + 1;
+      planned = debt.balance / Math.max(1, months);
+    }
+  } else if (
+    debt.payoffMode === "custom" &&
+    debt.plannedMonthlyPayment &&
+    debt.plannedMonthlyPayment > 0
+  ) {
+    planned = debt.plannedMonthlyPayment;
+  }
+
+  return Math.min(debt.balance, Math.max(debt.minimumPayment, planned));
+}
+
+export function debtPlannedPayments(state: AppState): number {
+  return state.debts.reduce((s, d) => s + plannedDebtPayment(d), 0);
 }
 
 export function pendingIncome(state: AppState): number {
@@ -74,7 +98,7 @@ export function safeToSpend(state: AppState): number {
     totalCash(state) -
     upcomingBillsThisMonth(state) -
     cardDueThisMonth(state) -
-    debtMinimums(state) -
+    debtPlannedPayments(state) -
     state.profile.safeToSpendFloor
   );
 }
@@ -85,7 +109,6 @@ export function projectedMonthEnd(state: AppState): number {
     pendingIncome(state) -
     upcomingBillsThisMonth(state) -
     cardDueThisMonth(state) -
-    debtMinimums(state)
+    debtPlannedPayments(state)
   );
 }
-

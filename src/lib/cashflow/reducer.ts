@@ -56,6 +56,16 @@ export type Action =
       };
     }
   | {
+      type: "PAY_DEBT";
+      payload: {
+        debtId: string;
+        amount: number;
+        sourceAccountId: string;
+        date: string;
+        notes?: string;
+      };
+    }
+  | {
       type: "ADD_TRANSFER";
       payload: {
         fromAccountId: string;
@@ -94,7 +104,10 @@ function updateAccount(state: AppState, id: string, delta: number): Account[] {
   );
 }
 
-function addTx(state: AppState, tx: Omit<Transaction, "id" | "createdAt" | "updatedAt">): Transaction[] {
+function addTx(
+  state: AppState,
+  tx: Omit<Transaction, "id" | "createdAt" | "updatedAt">,
+): Transaction[] {
   const full: Transaction = {
     ...tx,
     id: newId(),
@@ -145,7 +158,10 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, cards: state.cards.filter((c) => c.id !== action.id) };
 
     case "ADD_DEBT":
-      return { ...state, debts: [...state.debts, { ...action.payload, id: newId() }] };
+      return {
+        ...state,
+        debts: [...state.debts, { payoffMode: "minimum", ...action.payload, id: newId() }],
+      };
     case "UPDATE_DEBT":
       return {
         ...state,
@@ -189,9 +205,7 @@ export function reducer(state: AppState, action: Action): AppState {
         next = {
           ...next,
           cards: next.cards.map((c) =>
-            c.id === p.cardId
-              ? { ...c, currentBalance: c.currentBalance + p.amount }
-              : c,
+            c.id === p.cardId ? { ...c, currentBalance: c.currentBalance + p.amount } : c,
           ),
         };
       } else if (p.sourceAccountId) {
@@ -233,10 +247,12 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       const paymentId = newId();
       const transactionsAfterRecon = state.transactions.map((t) =>
-        reconciledIds.includes(t.id) ? { ...t, reconciledByPaymentId: paymentId, updatedAt: now() } : t,
+        reconciledIds.includes(t.id)
+          ? { ...t, reconciledByPaymentId: paymentId, updatedAt: now() }
+          : t,
       );
 
-      let next: AppState = {
+      const next: AppState = {
         ...state,
         cards: state.cards.map((c) =>
           c.id === p.cardId
@@ -275,9 +291,42 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...next, transactions: [fullPayment, ...next.transactions] };
     }
 
+    case "PAY_DEBT": {
+      const p = action.payload;
+      const debt = state.debts.find((d) => d.id === p.debtId);
+      if (!debt) return state;
+      const pay = Math.min(p.amount, debt.balance);
+      if (pay <= 0) return state;
+      const nextBalance = clampNonNegative(debt.balance - pay);
+      const next: AppState = {
+        ...state,
+        debts: state.debts.map((d) =>
+          d.id === p.debtId
+            ? {
+                ...d,
+                balance: nextBalance,
+                status: nextBalance <= 0 ? "paid_off" : d.status,
+              }
+            : d,
+        ),
+        accounts: updateAccount(state, p.sourceAccountId, -pay),
+      };
+      const tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
+        type: "debt_payment",
+        amount: pay,
+        category: "Debt payment",
+        description: `Payment to ${debt.name}`,
+        date: p.date,
+        sourceAccountId: p.sourceAccountId,
+        debtId: p.debtId,
+        notes: p.notes,
+      };
+      return { ...next, transactions: addTx(next, tx) };
+    }
+
     case "ADD_TRANSFER": {
       const p = action.payload;
-      let next: AppState = {
+      const next: AppState = {
         ...state,
         accounts: state.accounts.map((a) => {
           if (a.id === p.fromAccountId)
@@ -312,9 +361,7 @@ export function reducer(state: AppState, action: Action): AppState {
         next = {
           ...next,
           accounts: next.accounts.map((x) =>
-            x.id === p.accountId
-              ? { ...x, balance: p.newBalance, updatedAt: now() }
-              : x,
+            x.id === p.accountId ? { ...x, balance: p.newBalance, updatedAt: now() } : x,
           ),
         };
         label = `Adjust ${a.name}`;
@@ -363,12 +410,20 @@ export function reducer(state: AppState, action: Action): AppState {
       const { id, paidAccountId, actualAmount } = action.payload;
       const entry = state.timesheet.find((t) => t.id === id);
       if (!entry || entry.paid) return state;
-      let next: AppState = {
+      const next: AppState = {
         ...state,
         accounts: updateAccount(state, paidAccountId, actualAmount),
         timesheet: state.timesheet.map((t) =>
           t.id === id
-            ? { ...t, paid: true, payStatus: "paid", paidAccountId, actualAmount, updatedAt: now(), userEdited: true }
+            ? {
+                ...t,
+                paid: true,
+                payStatus: "paid",
+                paidAccountId,
+                actualAmount,
+                updatedAt: now(),
+                userEdited: true,
+              }
             : t,
         ),
       };
@@ -386,7 +441,7 @@ export function reducer(state: AppState, action: Action): AppState {
       const entry = state.timesheet.find((t) => t.id === action.payload.id);
       if (!entry || !entry.paid || !entry.paidAccountId) return state;
       const amount = entry.actualAmount ?? 0;
-      let next: AppState = {
+      const next: AppState = {
         ...state,
         accounts: updateAccount(state, entry.paidAccountId, -amount),
         timesheet: state.timesheet.map((t) =>
