@@ -15,11 +15,7 @@ import {
   newId,
   todayISO,
 } from "@/lib/cashflow/dates";
-import {
-  entriesForMonth,
-  makeShiftEntry,
-  makeTimeOffEntry,
-} from "@/lib/cashflow/timesheetLogic";
+import { entriesForMonth, makeShiftEntry, makeTimeOffEntry } from "@/lib/cashflow/timesheetLogic";
 import type { TimesheetEntry } from "@/lib/cashflow/types";
 import { toast } from "./Toast";
 
@@ -64,7 +60,7 @@ export function IncomeTimesheet() {
   }, [entries]);
 
   const days = useMemo(() => monthDays(monthDate), [monthDate]);
-  const dayEntries = selectedDate ? byDate.get(selectedDate) ?? [] : [];
+  const dayEntries = selectedDate ? (byDate.get(selectedDate) ?? []) : [];
 
   function persistAndSave(entry: TimesheetEntry) {
     dispatch({ type: "UPSERT_TIMESHEET", payload: entry });
@@ -75,7 +71,9 @@ export function IncomeTimesheet() {
       <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-black tracking-tight">Timesheet</h1>
-          <p className="text-sm text-muted-foreground">Tap a day to add a shift, time off, or mark paid.</p>
+          <p className="text-sm text-muted-foreground">
+            Tap a day to add a shift, time off, or mark paid.
+          </p>
         </div>
         <Button
           variant="primary"
@@ -160,12 +158,18 @@ export function IncomeTimesheet() {
                           : "bg-primary/15 text-foreground"
                     }`}
                   >
-                    {e.entryType === "salary_paycheck" ? "💼 " : e.entryType === "time_off" ? "🌴 " : ""}
+                    {e.entryType === "salary_paycheck"
+                      ? "💼 "
+                      : e.entryType === "time_off"
+                        ? "🌴 "
+                        : ""}
                     {e.jobName}
                   </div>
                 ))}
                 {list.length > 2 && (
-                  <div className="mt-0.5 text-[10px] text-muted-foreground">+{list.length - 2} more</div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">
+                    +{list.length - 2} more
+                  </div>
                 )}
               </button>
             );
@@ -267,7 +271,11 @@ function DayDetailSheet({
             {entries.map((e) => {
               const amt = e.actualAmount ?? e.expectedAmount;
               const labelType =
-                e.entryType === "salary_paycheck" ? "Salary paycheck" : e.entryType === "time_off" ? "Time off" : "Shift";
+                e.entryType === "salary_paycheck"
+                  ? "Salary paycheck"
+                  : e.entryType === "time_off"
+                    ? "Time off"
+                    : "Shift";
               return (
                 <div
                   key={e.id}
@@ -281,7 +289,9 @@ function DayDetailSheet({
                 >
                   <div
                     className={`h-7 w-7 grid place-items-center rounded-full text-xs font-black ${
-                      e.paid ? "bg-[color:var(--good)] text-white" : "border-2 border-muted-foreground text-muted-foreground"
+                      e.paid
+                        ? "bg-[color:var(--good)] text-white"
+                        : "border-2 border-muted-foreground text-muted-foreground"
                     }`}
                   >
                     {e.paid ? "✓" : ""}
@@ -290,9 +300,7 @@ function DayDetailSheet({
                     <div className="font-extrabold truncate">{e.jobName}</div>
                     <div className="text-xs text-muted-foreground">
                       {labelType} ·{" "}
-                      {e.startTime && e.endTime
-                        ? `${e.startTime}–${e.endTime}`
-                        : `${e.hours}h`}{" "}
+                      {e.startTime && e.endTime ? `${e.startTime}–${e.endTime}` : `${e.hours}h`}{" "}
                       {e.rate > 0 && `· ${formatMoney(e.rate, cur)}/h`}
                     </div>
                   </div>
@@ -361,7 +369,9 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
       title="Mark pay received"
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             onClick={() => {
@@ -370,7 +380,12 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
               // upgrade synthetic auto entry to real one first
               let id = entry.id;
               if (entry.auto) {
-                const real: TimesheetEntry = { ...entry, id: newId(), auto: false, userEdited: true };
+                const real: TimesheetEntry = {
+                  ...entry,
+                  id: newId(),
+                  auto: false,
+                  userEdited: true,
+                };
                 dispatch({ type: "UPSERT_TIMESHEET", payload: real });
                 id = real.id;
               }
@@ -391,10 +406,14 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
         <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
           <div className="font-extrabold">{entry.jobName}</div>
           <div className="text-xs text-muted-foreground">
-            {entry.entryType === "salary_paycheck" ? "Scheduled paycheck" : "Shift"} · expected {formatMoney(expected, cur)}
+            {entry.entryType === "salary_paycheck" ? "Scheduled paycheck" : "Shift"} · expected{" "}
+            {formatMoney(expected, cur)}
           </div>
         </div>
-        <Field label="Actual amount received" hint={`Leave blank to use ${formatMoney(expected, cur)}`}>
+        <Field
+          label="Actual amount received"
+          hint={`Leave blank to use ${formatMoney(expected, cur)}`}
+        >
           <Input
             type="number"
             inputMode="decimal"
@@ -444,9 +463,12 @@ function AddEntrySheet({
   const [hoursManual, setHoursManual] = useState("4");
   const [rate, setRate] = useState("");
 
-  const computedHours = useTimeRange
-    ? hoursBetween(start, end)
-    : toNumber(hoursManual);
+  const computedHours =
+    kind === "time_off"
+      ? toNumber(hoursManual)
+      : useTimeRange
+        ? hoursBetween(start, end)
+        : toNumber(hoursManual);
   const rateNum = toNumber(rate) || job?.netHourlyRate || fullTime?.netHourlyRate || 0;
 
   function submit() {
@@ -484,8 +506,12 @@ function AddEntrySheet({
       title={`Add entry · ${date}`}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={submit}>Save</Button>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit}>
+            Save
+          </Button>
         </>
       }
     >
@@ -539,7 +565,9 @@ function AddEntrySheet({
                 type="button"
                 onClick={() => setUseTimeRange(true)}
                 className={`flex-1 px-3 py-2.5 rounded-xl font-bold text-sm border ${
-                  useTimeRange ? "border-primary text-primary" : "border-border text-muted-foreground"
+                  useTimeRange
+                    ? "border-primary text-primary"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 Start–End time
@@ -548,7 +576,9 @@ function AddEntrySheet({
                 type="button"
                 onClick={() => setUseTimeRange(false)}
                 className={`flex-1 px-3 py-2.5 rounded-xl font-bold text-sm border ${
-                  !useTimeRange ? "border-primary text-primary" : "border-border text-muted-foreground"
+                  !useTimeRange
+                    ? "border-primary text-primary"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 Manual hours
@@ -590,7 +620,10 @@ function AddEntrySheet({
           </Field>
         )}
 
-        <Field label="Hourly rate" hint={`Default ${(job?.netHourlyRate || fullTime?.netHourlyRate || 0)}/h`}>
+        <Field
+          label="Hourly rate"
+          hint={`Default ${job?.netHourlyRate || fullTime?.netHourlyRate || 0}/h`}
+        >
           <Input
             type="number"
             inputMode="decimal"
@@ -605,8 +638,7 @@ function AddEntrySheet({
             Hours: <b>{computedHours.toFixed(2)}</b>
           </div>
           <div>
-            Estimated:{" "}
-            <b>{formatMoney(computedHours * rateNum, state.profile.currency)}</b>
+            Estimated: <b>{formatMoney(computedHours * rateNum, state.profile.currency)}</b>
           </div>
         </div>
       </div>
