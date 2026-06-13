@@ -1,4 +1,4 @@
-import { AppState, Debt } from "./types";
+import { AppState, Debt, PlannedExpenseOverride, PlannedExpenseSourceType } from "./types";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
 import { endOfMonth } from "./dates";
 import { entriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
@@ -8,6 +8,13 @@ export interface CashFlowBreakdownItem {
   label: string;
   detail?: string;
   amount: number;
+  sourceType?: PlannedExpenseSourceType;
+  sourceId?: string;
+  overrideId?: string;
+  dueDate?: string;
+  dueDay?: number;
+  accountId?: string;
+  category?: string;
 }
 
 export interface CashFlowBreakdownSection {
@@ -67,8 +74,84 @@ export function netWorth(state: AppState): number {
   return totalCash(state) - totalCardDebt(state) - totalDebt(state);
 }
 
-export function upcomingBillsThisMonth(state: AppState): number {
-  return state.recurringBills.filter((b) => b.active).reduce((s, b) => s + b.amount, 0);
+function monthKey(ref: Date = new Date()): string {
+  return `${ref.getFullYear()}-${String(ref.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function clampedDay(ref: Date, day: number): number {
+  return Math.min(Math.max(1, day || 1), endOfMonth(ref).getDate());
+}
+
+function dateForMonthDay(ref: Date, day: number): string {
+  const d = new Date(ref.getFullYear(), ref.getMonth(), clampedDay(ref, day));
+  return toISO(d);
+}
+
+function monthlyOverrides(state: AppState, ref: Date = new Date()): PlannedExpenseOverride[] {
+  const month = monthKey(ref);
+  return (state.plannedExpenseOverrides ?? []).filter((override) => override.month === month);
+}
+
+function overrideFor(
+  state: AppState,
+  sourceType: PlannedExpenseSourceType,
+  sourceId: string,
+  ref: Date = new Date(),
+): PlannedExpenseOverride | undefined {
+  return monthlyOverrides(state, ref).find(
+    (override) => override.sourceType === sourceType && override.sourceId === sourceId,
+  );
+}
+
+function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
+  const recurring = state.recurringBills.flatMap((bill) => {
+    if (!bill.active) return [];
+    const override = overrideFor(state, "recurring_bill", bill.id, ref);
+    if (override?.action === "skip") return [];
+    const accountId = override?.accountId ?? bill.accountId;
+    const account = state.accounts.find((item) => item.id === accountId);
+    const dueDay = override?.dueDay ?? bill.dueDay;
+    return [
+      {
+        id: bill.id,
+        label: override?.name ?? bill.name,
+        detail: account ? `Due day ${dueDay} - ${account.name}` : `Due day ${dueDay}`,
+        amount: override?.amount ?? bill.amount,
+        sourceType: "recurring_bill" as const,
+        sourceId: bill.id,
+        overrideId: override?.id,
+        dueDay,
+        dueDate: dateForMonthDay(ref, dueDay),
+        accountId,
+        category: override?.category ?? "Bills",
+      },
+    ];
+  });
+
+  const oneTime = monthlyOverrides(state, ref)
+    .filter((override) => override.sourceType === "one_time" && override.action === "add")
+    .map((override) => {
+      const account = state.accounts.find((item) => item.id === override.accountId);
+      const dueDate = override.dueDate ?? dateForMonthDay(ref, override.dueDay ?? 1);
+      return {
+        id: override.id,
+        label: override.name ?? "Planned expense",
+        detail: account ? `Due ${dueDate} - ${account.name}` : `Due ${dueDate}`,
+        amount: override.amount ?? 0,
+        sourceType: "one_time" as const,
+        overrideId: override.id,
+        dueDay: override.dueDay,
+        dueDate,
+        accountId: override.accountId,
+        category: override.category ?? "Other",
+      };
+    });
+
+  return [...recurring, ...oneTime].filter((item) => item.amount > 0);
+}
+
+export function upcomingBillsThisMonth(state: AppState, ref: Date = new Date()): number {
+  return billExpenseItems(state, ref).reduce((s, item) => s + item.amount, 0);
 }
 
 export function cardMinimums(state: AppState): number {
@@ -80,21 +163,33 @@ export function cardMinimums(state: AppState): number {
  * current month. Uses the most recently closed cycle and the unreconciled
  * charges in that cycle as the amount actually coming due.
  */
-export function cardDueThisMonth(state: AppState): number {
-  const today = new Date();
-  const monthEnd = endOfMonth(today);
-  let total = 0;
-  for (const c of state.cards) {
-    const cycle = cycleForDate(c, today);
-    if (cycle.dueDate <= toISO(monthEnd) && cycle.dueDate >= toISO(today)) {
-      const charges = expensesInCycle(state.transactions, c.id, cycle).reduce(
+function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
+  const monthEnd = endOfMonth(ref);
+  return state.cards.flatMap((card) => {
+    const cycle = cycleForDate(card, ref);
+    if (cycle.dueDate <= toISO(monthEnd) && cycle.dueDate >= toISO(ref)) {
+      const charges = expensesInCycle(state.transactions, card.id, cycle).reduce(
         (s, t) => s + t.amount,
         0,
       );
-      total += Math.max(Math.min(c.minimumDue, c.currentBalance), charges);
+      return [
+        {
+          id: card.id,
+          label: card.name,
+          detail: `Due ${cycle.dueDate} - cycle ${cycle.cycleStart} to ${cycle.cycleEnd}`,
+          amount: Math.max(Math.min(card.minimumDue, card.currentBalance), charges),
+          sourceType: "card_due" as const,
+          sourceId: card.id,
+          dueDate: cycle.dueDate,
+        },
+      ];
     }
-  }
-  return total;
+    return [];
+  });
+}
+
+export function cardDueThisMonth(state: AppState, ref: Date = new Date()): number {
+  return cardDueItems(state, ref).reduce((s, item) => s + item.amount, 0);
 }
 
 function toISO(d: Date): string {
@@ -132,8 +227,33 @@ export function plannedDebtPayment(debt: Omit<Debt, "id"> | Debt, ref: Date = ne
   return Math.min(debt.balance, Math.max(debt.minimumPayment, planned));
 }
 
-export function debtPlannedPayments(state: AppState): number {
-  return state.debts.reduce((s, d) => s + plannedDebtPayment(d), 0);
+function debtPlanItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
+  return state.debts
+    .filter((debt) => debt.status === "active")
+    .flatMap((debt) => {
+      const override = overrideFor(state, "debt_plan", debt.id, ref);
+      if (override?.action === "skip") return [];
+      const amount = override?.amount ?? plannedDebtPayment(debt, ref);
+      if (amount <= 0) return [];
+      const dueDay = override?.dueDay ?? debt.dueDate;
+      return [
+        {
+          id: debt.id,
+          label: override?.name ?? debt.name,
+          detail: `Due day ${dueDay}`,
+          amount,
+          sourceType: "debt_plan" as const,
+          sourceId: debt.id,
+          overrideId: override?.id,
+          dueDay,
+          dueDate: dateForMonthDay(ref, dueDay),
+        },
+      ];
+    });
+}
+
+export function debtPlannedPayments(state: AppState, ref: Date = new Date()): number {
+  return debtPlanItems(state, ref).reduce((s, item) => s + item.amount, 0);
 }
 
 function unpaidPendingIncomeItems(
@@ -169,51 +289,54 @@ export function pendingIncome(state: AppState, monthDate: Date = new Date()): nu
   return unpaidPendingIncomeItems(state, monthDate).reduce((sum, item) => sum + item.amount, 0);
 }
 
-export function expensesComingBreakdown(state: AppState): CashFlowBreakdownSection[] {
-  const today = new Date();
-  const monthEnd = endOfMonth(today);
-  const billItems = state.recurringBills
-    .filter((bill) => bill.active)
-    .map((bill) => {
-      const account = state.accounts.find((item) => item.id === bill.accountId);
-      return {
-        id: bill.id,
-        label: bill.name,
-        detail: account ? `Due day ${bill.dueDay} - ${account.name}` : `Due day ${bill.dueDay}`,
-        amount: bill.amount,
-      };
-    });
-  const cardItems = state.cards.flatMap((card) => {
-    const cycle = cycleForDate(card, today);
-    if (cycle.dueDate > toISO(monthEnd) || cycle.dueDate < toISO(today)) return [];
-    const charges = expensesInCycle(state.transactions, card.id, cycle).reduce(
-      (s, t) => s + t.amount,
-      0,
-    );
-    return [
-      {
-        id: card.id,
-        label: card.name,
-        detail: `Due ${cycle.dueDate} - cycle ${cycle.cycleStart} to ${cycle.cycleEnd}`,
-        amount: Math.max(Math.min(card.minimumDue, card.currentBalance), charges),
-      },
-    ];
-  });
-  const debtItems = state.debts
-    .filter((debt) => debt.status === "active")
-    .map((debt) => ({
-      id: debt.id,
-      label: debt.name,
-      detail: `Due day ${debt.dueDate}`,
-      amount: plannedDebtPayment(debt),
-    }))
-    .filter((debt) => debt.amount > 0);
-
+export function expensesComingBreakdown(
+  state: AppState,
+  ref: Date = new Date(),
+): CashFlowBreakdownSection[] {
+  const billItems = billExpenseItems(state, ref);
+  const recurringBillItems = billItems.filter((item) => item.sourceType === "recurring_bill");
+  const oneTimeItems = billItems.filter((item) => item.sourceType === "one_time");
+  const cardItems = cardDueItems(state, ref);
+  const debtItems = debtPlanItems(state, ref);
   const sections: CashFlowBreakdownSection[] = [];
-  if (billItems.length > 0) sections.push({ title: "Bills", items: billItems });
+  if (recurringBillItems.length > 0) sections.push({ title: "Bills", items: recurringBillItems });
+  if (oneTimeItems.length > 0)
+    sections.push({ title: "One-time planned expenses", items: oneTimeItems });
   if (cardItems.length > 0) sections.push({ title: "Cards due this month", items: cardItems });
   if (debtItems.length > 0) sections.push({ title: "Debt plan", items: debtItems });
   return sections;
+}
+
+export function expensesComingTotal(state: AppState, ref: Date = new Date()): number {
+  return expensesComingBreakdown(state, ref).reduce(
+    (sum, section) => sum + section.items.reduce((sectionSum, item) => sectionSum + item.amount, 0),
+    0,
+  );
+}
+
+function nextUnpaidIncomeDate(state: AppState, ref: Date = new Date()): string | null {
+  const entries = entriesForMonth(state.timesheet, state.jobs, ref)
+    .filter(
+      (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
+    )
+    .map((entry) => entry.date)
+    .filter((date) => date >= toISO(ref))
+    .sort((a, b) => a.localeCompare(b));
+  return entries[0] ?? null;
+}
+
+export function spendableToday(state: AppState, ref: Date = new Date()): number {
+  const today = toISO(ref);
+  const nextIncomeDate = nextUnpaidIncomeDate(state, ref) ?? toISO(endOfMonth(ref));
+  const protectedExpenses = expensesComingBreakdown(state, ref).reduce(
+    (sum, section) =>
+      sum +
+      section.items
+        .filter((item) => item.dueDate && item.dueDate >= today && item.dueDate <= nextIncomeDate)
+        .reduce((sectionSum, item) => sectionSum + item.amount, 0),
+    0,
+  );
+  return spendableCash(state) - protectedExpenses - state.profile.safeToSpendFloor;
 }
 
 export function leftToSpendBreakdown(
@@ -222,8 +345,7 @@ export function leftToSpendBreakdown(
 ): CashFlowBreakdownSection[] {
   const haveNow = spendableCash(state);
   const incomeComing = pendingIncome(state, monthDate);
-  const expensesComing =
-    upcomingBillsThisMonth(state) + cardDueThisMonth(state) + debtPlannedPayments(state);
+  const expensesComing = expensesComingTotal(state, monthDate);
 
   return [
     {
@@ -248,21 +370,9 @@ export function leftToSpendBreakdown(
 }
 
 export function safeToSpend(state: AppState): number {
-  return (
-    spendableCash(state) -
-    upcomingBillsThisMonth(state) -
-    cardDueThisMonth(state) -
-    debtPlannedPayments(state) -
-    state.profile.safeToSpendFloor
-  );
+  return spendableCash(state) - expensesComingTotal(state) - state.profile.safeToSpendFloor;
 }
 
 export function projectedMonthEnd(state: AppState): number {
-  return (
-    spendableCash(state) +
-    pendingIncome(state) -
-    upcomingBillsThisMonth(state) -
-    cardDueThisMonth(state) -
-    debtPlannedPayments(state)
-  );
+  return spendableCash(state) + pendingIncome(state) - expensesComingTotal(state);
 }

@@ -2,8 +2,10 @@ import {
   Account,
   AppState,
   Card,
+  DEFAULT_CATEGORIES,
   Debt,
   Job,
+  PlannedExpenseOverride,
   RecurringBill,
   TimesheetEntry,
   Transaction,
@@ -33,6 +35,10 @@ export type Action =
   | { type: "ADD_RECURRING"; payload: Omit<RecurringBill, "id"> }
   | { type: "UPDATE_RECURRING"; payload: RecurringBill }
   | { type: "DELETE_RECURRING"; id: string }
+  | { type: "ADD_CATEGORY"; category: string }
+  | { type: "ADD_PLANNED_EXPENSE_OVERRIDE"; payload: Omit<PlannedExpenseOverride, "id"> }
+  | { type: "UPDATE_PLANNED_EXPENSE_OVERRIDE"; payload: PlannedExpenseOverride }
+  | { type: "DELETE_PLANNED_EXPENSE_OVERRIDE"; id: string }
   | {
       type: "ADD_EXPENSE";
       payload: {
@@ -117,14 +123,48 @@ function addTx(
   return [full, ...state.transactions];
 }
 
+function cleanCategory(category: string): string {
+  return category.trim();
+}
+
+function mergeCategories(...groups: (string[] | undefined)[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  groups
+    .flatMap((group) => group ?? [])
+    .forEach((category) => {
+      const clean = cleanCategory(category);
+      if (!clean) return;
+      const key = clean.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      result.push(clean);
+    });
+  return result;
+}
+
+function normalizeState(state: AppState): AppState {
+  return {
+    ...state,
+    categories: mergeCategories(
+      DEFAULT_CATEGORIES,
+      state.categories,
+      state.transactions?.map((t) => t.category),
+      state.cards?.flatMap((c) => c.preferredCategories),
+      state.plannedExpenseOverrides?.map((p) => p.category ?? ""),
+    ),
+    plannedExpenseOverrides: state.plannedExpenseOverrides ?? [],
+  };
+}
+
 export function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
     case "HYDRATE":
-      return action.state;
+      return normalizeState(action.state);
     case "RESET":
       return { ...emptyState };
     case "COMPLETE_ONBOARDING":
-      return { ...state, ...action.payload, onboarded: true };
+      return normalizeState({ ...state, ...action.payload, onboarded: true });
     case "UPDATE_PROFILE":
       return { ...state, profile: { ...state.profile, ...action.payload } };
 
@@ -197,6 +237,50 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         recurringBills: state.recurringBills.filter((b) => b.id !== action.id),
+        plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter(
+          (override) =>
+            !(override.sourceType === "recurring_bill" && override.sourceId === action.id),
+        ),
+      };
+
+    case "ADD_CATEGORY": {
+      const category = cleanCategory(action.category);
+      if (!category) return state;
+      return { ...state, categories: mergeCategories(state.categories, [category]) };
+    }
+
+    case "ADD_PLANNED_EXPENSE_OVERRIDE": {
+      const payload = action.payload;
+      const plannedExpenseOverrides = [...(state.plannedExpenseOverrides ?? [])];
+      const replacementIndex =
+        payload.sourceType !== "one_time" && payload.sourceId
+          ? plannedExpenseOverrides.findIndex(
+              (override) =>
+                override.sourceType === payload.sourceType &&
+                override.sourceId === payload.sourceId &&
+                override.month === payload.month,
+            )
+          : -1;
+      const nextOverride: PlannedExpenseOverride = { ...payload, id: newId() };
+      if (replacementIndex >= 0) plannedExpenseOverrides[replacementIndex] = nextOverride;
+      else plannedExpenseOverrides.push(nextOverride);
+      return normalizeState({ ...state, plannedExpenseOverrides });
+    }
+
+    case "UPDATE_PLANNED_EXPENSE_OVERRIDE":
+      return normalizeState({
+        ...state,
+        plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).map((override) =>
+          override.id === action.payload.id ? action.payload : override,
+        ),
+      });
+
+    case "DELETE_PLANNED_EXPENSE_OVERRIDE":
+      return {
+        ...state,
+        plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter(
+          (override) => override.id !== action.id,
+        ),
       };
 
     case "ADD_EXPENSE": {
@@ -221,7 +305,11 @@ export function reducer(state: AppState, action: Action): AppState {
         sourceAccountId: p.sourceAccountId,
         cardId: p.cardId,
       };
-      return { ...next, transactions: addTx(next, tx) };
+      return {
+        ...next,
+        categories: mergeCategories(next.categories, [p.category]),
+        transactions: addTx(next, tx),
+      };
     }
 
     case "PAY_CREDIT_CARD": {

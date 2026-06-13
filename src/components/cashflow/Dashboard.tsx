@@ -1,41 +1,79 @@
 import { useMemo, useState } from "react";
-import { CalendarClock, ChevronDown, Info, ReceiptText, Target, Wallet } from "lucide-react";
+import {
+  CalendarClock,
+  ChevronDown,
+  Eye,
+  Info,
+  Pencil,
+  Plus,
+  ReceiptText,
+  Target,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import { Card, KPI } from "./Card";
 import { Sheet } from "./Sheet";
+import { Button } from "./Button";
+import { Field, Input, Select } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
   cardDueThisMonth,
+  type CashFlowBreakdownItem,
   type CashFlowBreakdownSection,
   debtPlannedPayments,
   expensesComingBreakdown,
+  expensesComingTotal,
   leftToSpendBreakdown,
   netWorth,
   pendingIncome,
   pendingIncomeBreakdown,
   projectedMonthEnd,
   safeToSpend,
+  isSpendableAccount,
+  spendableToday,
   spendableCash,
   spendableCashBreakdown,
   totalCardDebt,
   totalCash,
   upcomingBillsThisMonth,
 } from "@/lib/cashflow/forecast";
-import { formatMoney } from "@/lib/cashflow/money";
-import { utilization } from "@/lib/cashflow/cardLogic";
+import { formatMoney, toNumber } from "@/lib/cashflow/money";
+import { cycleForDate, expensesInCycle, utilization } from "@/lib/cashflow/cardLogic";
+import { todayISO } from "@/lib/cashflow/dates";
+import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
+import { toast } from "./Toast";
+
+type BreakdownKey = "have_now" | "income_coming" | "expenses_coming" | "left_to_spend";
+
+type ExpenseAction =
+  | { type: "add_one_time" }
+  | { type: "edit_recurring_month"; item: CashFlowBreakdownItem }
+  | { type: "edit_recurring_permanent"; item: CashFlowBreakdownItem }
+  | { type: "delete_recurring"; item: CashFlowBreakdownItem }
+  | { type: "pay_bill"; item: CashFlowBreakdownItem }
+  | { type: "pay_card"; item: CashFlowBreakdownItem }
+  | { type: "view_card"; item: CashFlowBreakdownItem }
+  | { type: "skip_debt"; item: CashFlowBreakdownItem }
+  | { type: "pay_debt"; item: CashFlowBreakdownItem }
+  | { type: "edit_card"; item: CashFlowBreakdownItem }
+  | { type: "edit_debt"; item: CashFlowBreakdownItem };
+
+function monthKey(date: Date): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
 
 export function Dashboard() {
-  const { state } = useApp();
+  const { state, dispatch } = useApp();
   const cur = state.profile.currency;
   const m = (n: number) => formatMoney(n, cur);
-  const [activeBreakdown, setActiveBreakdown] = useState<
-    "have_now" | "income_coming" | "expenses_coming" | "left_to_spend" | null
-  >(null);
+  const [activeBreakdown, setActiveBreakdown] = useState<BreakdownKey | null>(null);
+  const [expenseAction, setExpenseAction] = useState<ExpenseAction | null>(null);
 
   const haveNow = spendableCash(state);
   const incomeComing = pendingIncome(state);
-  const expensesComing =
-    upcomingBillsThisMonth(state) + cardDueThisMonth(state) + debtPlannedPayments(state);
+  const expensesComing = expensesComingTotal(state);
   const leftToSpend = haveNow + incomeComing - expensesComing;
+  const spendableNow = spendableToday(state);
   const sts = safeToSpend(state);
   const recent = useMemo(() => state.transactions.slice(0, 8), [state.transactions]);
   const breakdowns = useMemo(
@@ -75,6 +113,26 @@ export function Dashboard() {
     [expensesComing, haveNow, incomeComing, leftToSpend, state],
   );
   const activeBreakdownData = activeBreakdown ? breakdowns[activeBreakdown] : null;
+  const currentMonth = monthKey(new Date());
+
+  function skipItemForMonth(item: CashFlowBreakdownItem) {
+    if (!item.sourceType || (!item.sourceId && item.sourceType !== "one_time")) return;
+    if (item.overrideId && item.sourceType === "one_time") {
+      dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId });
+      toast("Planned expense removed");
+      return;
+    }
+    dispatch({
+      type: "ADD_PLANNED_EXPENSE_OVERRIDE",
+      payload: {
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
+        month: currentMonth,
+        action: "skip",
+      },
+    });
+    toast("Skipped for this month");
+  }
 
   return (
     <div className="grid gap-5">
@@ -92,6 +150,7 @@ export function Dashboard() {
         incomeComing={incomeComing}
         expensesComing={expensesComing}
         leftToSpend={leftToSpend}
+        spendableToday={spendableNow}
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
@@ -231,6 +290,15 @@ export function Dashboard() {
         tone={activeBreakdownData?.tone ?? "teal"}
         sections={activeBreakdownData?.sections ?? []}
         formatMoney={m}
+        expenseMode={activeBreakdown === "expenses_coming"}
+        onAddExpense={() => setExpenseAction({ type: "add_one_time" })}
+        onExpenseAction={setExpenseAction}
+      />
+      <ExpenseActionSheets
+        action={expenseAction}
+        onClose={() => setExpenseAction(null)}
+        currentMonth={currentMonth}
+        skipItemForMonth={skipItemForMonth}
       />
     </div>
   );
@@ -241,6 +309,7 @@ function CashFlowFormulaCard({
   incomeComing,
   expensesComing,
   leftToSpend,
+  spendableToday,
   formatMoney,
   onOpenBreakdown,
 }: {
@@ -248,10 +317,9 @@ function CashFlowFormulaCard({
   incomeComing: number;
   expensesComing: number;
   leftToSpend: number;
+  spendableToday: number;
   formatMoney: (n: number) => string;
-  onOpenBreakdown: (
-    key: "have_now" | "income_coming" | "expenses_coming" | "left_to_spend",
-  ) => void;
+  onOpenBreakdown: (key: BreakdownKey) => void;
 }) {
   const shortfall = leftToSpend < 0;
   return (
@@ -311,7 +379,7 @@ function CashFlowFormulaCard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <FlowDetail
           tone="green"
           label="Have now"
@@ -344,6 +412,20 @@ function CashFlowFormulaCard({
           badge={shortfall ? "Needs coverage" : "Ready to use"}
           onClick={() => onOpenBreakdown("left_to_spend")}
         />
+        <div className="rounded-2xl border border-[color:var(--good)]/20 bg-muted/25 p-3 text-left">
+          <div className="text-xs font-extrabold text-[color:var(--good)]">Spendable today</div>
+          <div
+            className={`mt-1 text-lg font-black ${
+              spendableToday < 0 ? "text-[color:var(--bad)]" : ""
+            }`}
+          >
+            {formatMoney(spendableToday)}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">Before next income</div>
+          <div className="mt-2 inline-flex rounded-full bg-[color:var(--good)]/12 px-2 py-1 text-[10px] font-extrabold text-[color:var(--good)]">
+            Today check
+          </div>
+        </div>
       </div>
 
       <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
@@ -500,6 +582,9 @@ function BreakdownSheet({
   tone,
   sections,
   formatMoney,
+  expenseMode,
+  onAddExpense,
+  onExpenseAction,
 }: {
   open: boolean;
   onClose: () => void;
@@ -509,6 +594,9 @@ function BreakdownSheet({
   tone: FlowTone;
   sections: CashFlowBreakdownSection[];
   formatMoney: (n: number) => string;
+  expenseMode?: boolean;
+  onAddExpense?: () => void;
+  onExpenseAction?: (action: ExpenseAction) => void;
 }) {
   return (
     <Sheet
@@ -528,6 +616,11 @@ function BreakdownSheet({
       }
     >
       <div className="grid gap-4">
+        {expenseMode && onAddExpense && (
+          <Button variant="primary" full onClick={onAddExpense}>
+            <Plus size={16} /> Add upcoming expense
+          </Button>
+        )}
         {sections.length === 0 && (
           <div className="rounded-2xl border border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
             No items are contributing to this number right now.
@@ -545,26 +638,639 @@ function BreakdownSheet({
               </div>
               <div className="divide-y divide-border">
                 {section.items.map((item) => (
-                  <div key={item.id} className="flex items-start justify-between gap-4 px-4 py-3">
-                    <div className="min-w-0">
-                      <div className="font-bold">{item.label}</div>
-                      {item.detail && (
-                        <div className="text-xs text-muted-foreground">{item.detail}</div>
-                      )}
+                  <div key={`${section.title}-${item.id}`} className="grid gap-3 px-4 py-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="font-bold">{item.label}</div>
+                        {item.detail && (
+                          <div className="text-xs text-muted-foreground">{item.detail}</div>
+                        )}
+                      </div>
+                      <div
+                        className={`shrink-0 text-right font-black ${
+                          item.amount < 0 ? "text-[color:var(--bad)]" : ""
+                        }`}
+                      >
+                        {formatMoney(item.amount)}
+                      </div>
                     </div>
-                    <div
-                      className={`shrink-0 text-right font-black ${
-                        item.amount < 0 ? "text-[color:var(--bad)]" : ""
-                      }`}
-                    >
-                      {formatMoney(item.amount)}
-                    </div>
+                    {expenseMode && onExpenseAction && (
+                      <ExpenseItemActions item={item} onAction={onExpenseAction} />
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           );
         })}
+      </div>
+    </Sheet>
+  );
+}
+
+function ExpenseItemActions({
+  item,
+  onAction,
+}: {
+  item: CashFlowBreakdownItem;
+  onAction: (action: ExpenseAction) => void;
+}) {
+  if (item.sourceType === "recurring_bill") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <MiniAction
+          label="Edit month"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_recurring_month", item })}
+        />
+        <MiniAction
+          label="Edit all"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_recurring_permanent", item })}
+        />
+        <MiniAction label="Mark paid" onClick={() => onAction({ type: "pay_bill", item })} />
+        <MiniAction label="Skip" onClick={() => onAction({ type: "delete_recurring", item })} />
+      </div>
+    );
+  }
+  if (item.sourceType === "one_time") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <MiniAction
+          label="Edit"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_recurring_month", item })}
+        />
+        <MiniAction label="Mark paid" onClick={() => onAction({ type: "pay_bill", item })} />
+        <MiniAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => onAction({ type: "delete_recurring", item })}
+          danger
+        />
+      </div>
+    );
+  }
+  if (item.sourceType === "card_due") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <MiniAction label="Pay" onClick={() => onAction({ type: "pay_card", item })} />
+        <MiniAction
+          label="View charges"
+          icon={Eye}
+          onClick={() => onAction({ type: "view_card", item })}
+        />
+        <MiniAction
+          label="Edit card"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_card", item })}
+        />
+      </div>
+    );
+  }
+  if (item.sourceType === "debt_plan") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <MiniAction label="Pay" onClick={() => onAction({ type: "pay_debt", item })} />
+        <MiniAction
+          label="Edit plan"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_debt", item })}
+        />
+        <MiniAction label="Skip" onClick={() => onAction({ type: "skip_debt", item })} />
+      </div>
+    );
+  }
+  return null;
+}
+
+function MiniAction({
+  label,
+  icon: Icon,
+  onClick,
+  danger,
+}: {
+  label: string;
+  icon?: typeof Pencil;
+  onClick: () => void;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition hover:bg-muted ${
+        danger ? "border-[color:var(--bad)]/40 text-[color:var(--bad)]" : "border-border"
+      }`}
+    >
+      {Icon && <Icon size={13} />}
+      {label}
+    </button>
+  );
+}
+
+function ExpenseActionSheets({
+  action,
+  onClose,
+  currentMonth,
+  skipItemForMonth,
+}: {
+  action: ExpenseAction | null;
+  onClose: () => void;
+  currentMonth: string;
+  skipItemForMonth: (item: CashFlowBreakdownItem) => void;
+}) {
+  const { state, dispatch } = useApp();
+
+  if (!action) return null;
+
+  if (action.type === "add_one_time") {
+    return (
+      <PlannedExpenseSheet title="Add upcoming expense" month={currentMonth} onClose={onClose} />
+    );
+  }
+
+  if (action.type === "edit_recurring_month") {
+    return (
+      <PlannedExpenseSheet
+        title={action.item.sourceType === "one_time" ? "Edit planned expense" : "Edit this month"}
+        month={currentMonth}
+        item={action.item}
+        onClose={onClose}
+      />
+    );
+  }
+
+  if (action.type === "edit_recurring_permanent") {
+    const bill = state.recurringBills.find((item) => item.id === action.item.sourceId);
+    return bill ? <RecurringSheet onClose={onClose} initial={bill} /> : null;
+  }
+
+  if (action.type === "delete_recurring") {
+    return (
+      <Sheet open onClose={onClose} title="Delete or skip">
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="font-extrabold">{action.item.label}</div>
+            <div className="text-sm text-muted-foreground">
+              Choose whether this affects only {currentMonth} or the original recurring item.
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            full
+            onClick={() => {
+              skipItemForMonth(action.item);
+              onClose();
+            }}
+          >
+            {action.item.sourceType === "one_time" ? "Delete planned expense" : "Skip this month"}
+          </Button>
+          {action.item.sourceType === "recurring_bill" && action.item.sourceId && (
+            <Button
+              variant="danger"
+              full
+              onClick={() => {
+                if (!confirm("Delete this recurring bill permanently?")) return;
+                dispatch({ type: "DELETE_RECURRING", id: action.item.sourceId! });
+                toast("Recurring bill deleted");
+                onClose();
+              }}
+            >
+              Delete permanently
+            </Button>
+          )}
+        </div>
+      </Sheet>
+    );
+  }
+
+  if (action.type === "pay_bill") {
+    return (
+      <PayBillSheet
+        item={action.item}
+        onClose={onClose}
+        onPaid={() => {
+          skipItemForMonth(action.item);
+          onClose();
+        }}
+      />
+    );
+  }
+
+  if (action.type === "pay_card") {
+    return <PayCardSheet item={action.item} onClose={onClose} />;
+  }
+
+  if (action.type === "view_card") {
+    return <CardCycleSheet item={action.item} onClose={onClose} />;
+  }
+
+  if (action.type === "edit_card") {
+    const card = state.cards.find((item) => item.id === action.item.sourceId);
+    return card ? <CardSheet onClose={onClose} initial={card} /> : null;
+  }
+
+  if (action.type === "pay_debt") {
+    return (
+      <PayDebtSheet
+        item={action.item}
+        onClose={onClose}
+        onPaid={() => {
+          skipItemForMonth(action.item);
+          onClose();
+        }}
+      />
+    );
+  }
+
+  if (action.type === "skip_debt") {
+    return (
+      <Sheet open onClose={onClose} title="Skip debt plan">
+        <div className="grid gap-3">
+          <p className="text-sm text-muted-foreground">
+            This only removes {action.item.label} from the {currentMonth} forecast. It does not
+            change the debt balance.
+          </p>
+          <Button
+            variant="primary"
+            onClick={() => {
+              skipItemForMonth(action.item);
+              onClose();
+            }}
+          >
+            Skip this month
+          </Button>
+        </div>
+      </Sheet>
+    );
+  }
+
+  if (action.type === "edit_debt") {
+    const debt = state.debts.find((item) => item.id === action.item.sourceId);
+    return debt ? <DebtSheet onClose={onClose} initial={debt} /> : null;
+  }
+
+  return null;
+}
+
+function PlannedExpenseSheet({
+  title,
+  month,
+  item,
+  onClose,
+}: {
+  title: string;
+  month: string;
+  item?: CashFlowBreakdownItem;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const [name, setName] = useState(item?.label ?? "");
+  const [amount, setAmount] = useState(String(item?.amount ?? ""));
+  const [dueDate, setDueDate] = useState(item?.dueDate ?? `${month}-01`);
+  const [accountId, setAccountId] = useState(item?.accountId ?? state.accounts[0]?.id ?? "");
+  const [category, setCategory] = useState(item?.category ?? state.categories?.[0] ?? "Other");
+  const [newCategory, setNewCategory] = useState("");
+  const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const isExistingOneTime = item?.sourceType === "one_time" && item.overrideId;
+  const selectedCategory = category === "__new" ? newCategory.trim() : category;
+
+  function save() {
+    const amt = toNumber(amount);
+    if (!name.trim()) return toast("Name the expense");
+    if (amt <= 0) return toast("Enter an amount");
+    if (!selectedCategory) return toast("Choose a category");
+    if (category === "__new") dispatch({ type: "ADD_CATEGORY", category: selectedCategory });
+
+    const payload = {
+      sourceType:
+        item?.sourceType === "recurring_bill" ? ("recurring_bill" as const) : ("one_time" as const),
+      sourceId: item?.sourceType === "recurring_bill" ? item.sourceId : undefined,
+      month,
+      action: item?.sourceType === "recurring_bill" ? ("override" as const) : ("add" as const),
+      name: name.trim(),
+      amount: amt,
+      dueDay: Number(dueDate.slice(8, 10)) || undefined,
+      dueDate,
+      accountId,
+      category: selectedCategory,
+    };
+
+    if (isExistingOneTime) {
+      dispatch({
+        type: "UPDATE_PLANNED_EXPENSE_OVERRIDE",
+        payload: { ...payload, id: item.overrideId! },
+      });
+    } else {
+      dispatch({ type: "ADD_PLANNED_EXPENSE_OVERRIDE", payload });
+    }
+    toast("Upcoming expense saved");
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={title}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name">
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </Field>
+        <Field label="Amount">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Due date">
+          <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        </Field>
+        <Field label="Paid from">
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            {state.accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Category">
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {categories.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+            <option value="__new">Add new category</option>
+          </Select>
+        </Field>
+        {category === "__new" && (
+          <Field label="New category">
+            <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+          </Field>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
+function PayBillSheet({
+  item,
+  onClose,
+  onPaid,
+}: {
+  item: CashFlowBreakdownItem;
+  onClose: () => void;
+  onPaid: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const cur = state.profile.currency;
+  const [amount, setAmount] = useState(String(item.amount));
+  const [date, setDate] = useState(item.dueDate ?? todayISO());
+  const [accountId, setAccountId] = useState(item.accountId ?? state.accounts[0]?.id ?? "");
+  const account = state.accounts.find((candidate) => candidate.id === accountId);
+
+  function pay() {
+    const amt = toNumber(amount);
+    if (amt <= 0) return toast("Enter an amount");
+    if (!accountId) return toast("Choose an account");
+    dispatch({
+      type: "ADD_EXPENSE",
+      payload: {
+        amount: amt,
+        category: item.category ?? "Bills",
+        description: item.label,
+        date,
+        method: account?.type === "cash" ? "cash" : "debit",
+        sourceAccountId: accountId,
+      },
+    });
+    toast(`${item.label} paid - ${formatMoney(amt, cur)}`);
+    onPaid();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Mark paid"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={pay}>
+            Mark paid
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <Field label="Amount">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Payment date">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="Paid from">
+          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+            {state.accounts.filter(isSpendableAccount).map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} - {formatMoney(account.balance, cur)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+    </Sheet>
+  );
+}
+
+function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose: () => void }) {
+  const { state, dispatch } = useApp();
+  const cur = state.profile.currency;
+  const [amount, setAmount] = useState(String(item.amount));
+  const [date, setDate] = useState(todayISO());
+  const spendableAccounts = state.accounts.filter(isSpendableAccount);
+  const [sourceAccountId, setSourceAccountId] = useState(spendableAccounts[0]?.id ?? "");
+
+  function pay() {
+    const amt = toNumber(amount);
+    if (!item.sourceId) return;
+    if (amt <= 0) return toast("Enter an amount");
+    if (!sourceAccountId) return toast("Choose an account");
+    dispatch({
+      type: "PAY_CREDIT_CARD",
+      payload: { cardId: item.sourceId, amount: amt, sourceAccountId, date },
+    });
+    toast(`Paid ${formatMoney(amt, cur)} to ${item.label}`);
+    onClose();
+  }
+
+  return (
+    <PayMoneySheet
+      title="Pay card"
+      amount={amount}
+      setAmount={setAmount}
+      date={date}
+      setDate={setDate}
+      sourceAccountId={sourceAccountId}
+      setSourceAccountId={setSourceAccountId}
+      accounts={spendableAccounts}
+      currency={cur}
+      onClose={onClose}
+      onPay={pay}
+    />
+  );
+}
+
+function PayDebtSheet({
+  item,
+  onClose,
+  onPaid,
+}: {
+  item: CashFlowBreakdownItem;
+  onClose: () => void;
+  onPaid: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const cur = state.profile.currency;
+  const [amount, setAmount] = useState(String(item.amount));
+  const [date, setDate] = useState(todayISO());
+  const spendableAccounts = state.accounts.filter(isSpendableAccount);
+  const [sourceAccountId, setSourceAccountId] = useState(spendableAccounts[0]?.id ?? "");
+
+  function pay() {
+    const amt = toNumber(amount);
+    if (!item.sourceId) return;
+    if (amt <= 0) return toast("Enter an amount");
+    if (!sourceAccountId) return toast("Choose an account");
+    dispatch({
+      type: "PAY_DEBT",
+      payload: { debtId: item.sourceId, amount: amt, sourceAccountId, date },
+    });
+    toast(`Paid ${formatMoney(amt, cur)} to ${item.label}`);
+    onPaid();
+  }
+
+  return (
+    <PayMoneySheet
+      title="Pay debt"
+      amount={amount}
+      setAmount={setAmount}
+      date={date}
+      setDate={setDate}
+      sourceAccountId={sourceAccountId}
+      setSourceAccountId={setSourceAccountId}
+      accounts={spendableAccounts}
+      currency={cur}
+      onClose={onClose}
+      onPay={pay}
+    />
+  );
+}
+
+function PayMoneySheet({
+  title,
+  amount,
+  setAmount,
+  date,
+  setDate,
+  sourceAccountId,
+  setSourceAccountId,
+  accounts,
+  currency,
+  onClose,
+  onPay,
+}: {
+  title: string;
+  amount: string;
+  setAmount: (value: string) => void;
+  date: string;
+  setDate: (value: string) => void;
+  sourceAccountId: string;
+  setSourceAccountId: (value: string) => void;
+  accounts: { id: string; name: string; balance: number }[];
+  currency: string;
+  onClose: () => void;
+  onPay: () => void;
+}) {
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={title}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={onPay}>
+            Pay
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <Field label="Amount">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Payment date">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="Pay from">
+          <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} - {formatMoney(account.balance, currency)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+    </Sheet>
+  );
+}
+
+function CardCycleSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose: () => void }) {
+  const { state } = useApp();
+  const cur = state.profile.currency;
+  const card = state.cards.find((candidate) => candidate.id === item.sourceId);
+  if (!card) return null;
+  const cycle = cycleForDate(card, new Date());
+  const charges = expensesInCycle(state.transactions, card.id, cycle);
+  return (
+    <Sheet open onClose={onClose} title="Cycle charges">
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-border bg-muted/30 p-3 text-sm">
+          {cycle.cycleStart} to {cycle.cycleEnd} - due {cycle.dueDate}
+        </div>
+        {charges.length === 0 && (
+          <div className="text-sm text-muted-foreground">
+            No unreconciled charges in this cycle.
+          </div>
+        )}
+        <div className="divide-y divide-border rounded-2xl border border-border">
+          {charges.map((charge) => (
+            <div key={charge.id} className="flex items-center justify-between gap-3 px-4 py-3">
+              <div>
+                <div className="font-bold">{charge.description || charge.category}</div>
+                <div className="text-xs text-muted-foreground">{charge.date}</div>
+              </div>
+              <div className="font-black">{formatMoney(charge.amount, cur)}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </Sheet>
   );

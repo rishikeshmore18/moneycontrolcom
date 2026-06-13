@@ -14,19 +14,6 @@ import {
 import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
-const CATEGORIES = [
-  "Groceries",
-  "Gas",
-  "Dining",
-  "Entertainment",
-  "Bills",
-  "Shopping",
-  "Travel",
-  "Health",
-  "Subscriptions",
-  "Other",
-];
-
 export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const { state, dispatch } = useApp();
   const [amount, setAmount] = useState("");
@@ -45,6 +32,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   const cashAccount = state.accounts.find((a) => a.type === "cash" && isSpendableAccount(a));
   const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash" && isSpendableAccount(a));
+  const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
   const chosenDebt = state.debts.find((d) => d.id === debtId);
 
@@ -122,7 +110,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
       </div>
       <Field label="Category">
         <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-          {CATEGORIES.map((c) => (
+          {categories.map((c) => (
             <option key={c}>{c}</option>
           ))}
         </Select>

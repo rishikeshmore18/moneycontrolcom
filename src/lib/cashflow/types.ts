@@ -1,5 +1,18 @@
 // CashFlow Control — domain types
 
+export const DEFAULT_CATEGORIES = [
+  "Groceries",
+  "Gas",
+  "Dining",
+  "Entertainment",
+  "Bills",
+  "Shopping",
+  "Travel",
+  "Health",
+  "Subscriptions",
+  "Other",
+];
+
 export type Theme = "light" | "dark" | "system";
 
 export interface Profile {
@@ -136,6 +149,24 @@ export interface RecurringBill {
   active: boolean;
 }
 
+export type PlannedExpenseSourceType = "recurring_bill" | "debt_plan" | "card_due" | "one_time";
+export type PlannedExpenseOverrideAction = "skip" | "override" | "add";
+
+export interface PlannedExpenseOverride {
+  id: string;
+  sourceType: PlannedExpenseSourceType;
+  sourceId?: string;
+  month: string; // YYYY-MM
+  action: PlannedExpenseOverrideAction;
+  name?: string;
+  amount?: number;
+  dueDay?: number;
+  dueDate?: string;
+  accountId?: string;
+  category?: string;
+  notes?: string;
+}
+
 export interface AppState {
   schemaVersion: number;
   onboarded: boolean;
@@ -147,6 +178,8 @@ export interface AppState {
   timesheet: TimesheetEntry[];
   transactions: Transaction[];
   recurringBills: RecurringBill[];
+  categories: string[];
+  plannedExpenseOverrides: PlannedExpenseOverride[];
 }
 
 export const SCHEMA_VERSION = 1;
@@ -169,4 +202,6 @@ export const emptyState: AppState = {
   timesheet: [],
   transactions: [],
   recurringBills: [],
+  categories: DEFAULT_CATEGORIES,
+  plannedExpenseOverrides: [],
 };
