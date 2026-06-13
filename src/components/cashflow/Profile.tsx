@@ -5,6 +5,7 @@ import { Sheet } from "./Sheet";
 import { Button } from "./Button";
 import { Field, Input, Select } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
+import { WEEKDAY_SHORT } from "@/lib/cashflow/dates";
 import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import type {
@@ -125,6 +126,9 @@ export function Profile() {
               <div className="text-xs text-muted-foreground">
                 {j.type.replace("_", " ")} · {formatMoney(j.netHourlyRate, cur)}/h
               </div>
+              {j.type === "part_time" && jobScheduleSummary(j) && (
+                <div className="text-xs text-muted-foreground">{jobScheduleSummary(j)}</div>
+              )}
             </div>
             <div className="text-xs text-muted-foreground">{j.payFrequency}</div>
           </>
@@ -534,6 +538,21 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
   );
 }
 
+function normalizedScheduledWeekdays(days: number[] | undefined): number[] {
+  return Array.from(new Set((days ?? []).filter((day) => day >= 0 && day <= 6))).sort(
+    (a, b) => a - b,
+  );
+}
+
+function jobScheduleSummary(
+  job: Pick<Job, "scheduledWeekdays" | "scheduledHoursPerShift">,
+): string {
+  const days = normalizedScheduledWeekdays(job.scheduledWeekdays);
+  const hours = job.scheduledHoursPerShift ?? 0;
+  if (days.length === 0 || hours <= 0) return "";
+  return `${days.map((day) => WEEKDAY_SHORT[day]).join(", ")} - ${hours}h/shift`;
+}
+
 export function JobSheet({ onClose, initial }: { onClose: () => void; initial?: Job }) {
   const { state, dispatch } = useApp();
   const [j, setJ] = useState<Omit<Job, "id">>(
@@ -544,6 +563,8 @@ export function JobSheet({ onClose, initial }: { onClose: () => void; initial?: 
       netPaycheckAmount: 0,
       payFrequency: "weekly",
       paydayWeekday: 5,
+      scheduledWeekdays: [],
+      scheduledHoursPerShift: 0,
       defaultDepositAccountId: state.accounts[0]?.id ?? "",
     },
   );
@@ -552,8 +573,15 @@ export function JobSheet({ onClose, initial }: { onClose: () => void; initial?: 
   }
   function save() {
     if (!j.name.trim()) return toast("Name the job");
-    if (initial) dispatch({ type: "UPDATE_JOB", payload: { ...initial, ...j } });
-    else dispatch({ type: "ADD_JOB", payload: j });
+    const payload: Omit<Job, "id"> = {
+      ...j,
+      scheduledWeekdays:
+        j.type === "part_time" ? normalizedScheduledWeekdays(j.scheduledWeekdays) : undefined,
+      scheduledHoursPerShift:
+        j.type === "part_time" ? Math.max(0, j.scheduledHoursPerShift ?? 0) : undefined,
+    };
+    if (initial) dispatch({ type: "UPDATE_JOB", payload: { ...initial, ...payload } });
+    else dispatch({ type: "ADD_JOB", payload });
     toast("Saved");
     onClose();
   }
@@ -626,6 +654,49 @@ export function JobSheet({ onClose, initial }: { onClose: () => void; initial?: 
               onChange={(e) => up("biweeklyAnchorDate", e.target.value)}
             />
           </Field>
+        )}
+        {j.type === "part_time" && (
+          <>
+            <Field label="Work days">
+              <div className="flex flex-wrap gap-2">
+                {WEEKDAY_SHORT.map((day, index) => {
+                  const active = (j.scheduledWeekdays ?? []).includes(index);
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => {
+                        const current = j.scheduledWeekdays ?? [];
+                        up(
+                          "scheduledWeekdays",
+                          active
+                            ? current.filter((selected) => selected !== index)
+                            : normalizedScheduledWeekdays([...current, index]),
+                        );
+                      }}
+                      className={`h-10 rounded-xl border px-3 text-sm font-extrabold transition ${
+                        active
+                          ? "border-primary bg-primary/20 text-foreground"
+                          : "border-border bg-muted/40 text-muted-foreground hover:bg-muted"
+                      }`}
+                      aria-pressed={active}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+            <Field label="Hours per shift">
+              <Input
+                type="number"
+                min={0}
+                step="0.25"
+                value={j.scheduledHoursPerShift ?? ""}
+                onChange={(e) => up("scheduledHoursPerShift", toNumber(e.target.value))}
+              />
+            </Field>
+          </>
         )}
         <Field label="Default deposit account">
           <Select

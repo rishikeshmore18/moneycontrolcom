@@ -75,20 +75,107 @@ export function syntheticSalaryEntries(
     }));
 }
 
+function entriesInMonth(all: TimesheetEntry[], monthDate: Date): TimesheetEntry[] {
+  const start = startOfMonth(monthDate);
+  const end = endOfMonth(monthDate);
+  return all.filter((e) => {
+    const d = new Date(e.date);
+    return d >= start && d <= end;
+  });
+}
+
+function roundedHours(hours: number): number {
+  return Math.round(hours * 100) / 100;
+}
+
+function roundedAmount(amount: number): number {
+  return Math.round(amount * 100) / 100;
+}
+
+export function syntheticPartTimeForecastEntries(
+  jobs: Job[],
+  monthDate: Date,
+  realEntries: TimesheetEntry[],
+): TimesheetEntry[] {
+  const start = startOfMonth(monthDate);
+  const end = endOfMonth(monthDate);
+  const inMonth = entriesInMonth(realEntries, monthDate);
+  const realShiftKeys = new Set(
+    inMonth
+      .filter((entry) => entry.entryType === "work_shift")
+      .map((entry) => `${entry.jobId}:${entry.date}`),
+  );
+  const timeOffHours = new Map<string, number>();
+
+  inMonth
+    .filter((entry) => entry.entryType === "time_off")
+    .forEach((entry) => {
+      const key = `${entry.jobId}:${entry.date}`;
+      timeOffHours.set(key, (timeOffHours.get(key) ?? 0) + entry.hours);
+    });
+
+  return jobs.flatMap((job) => {
+    if (job.type !== "part_time") return [];
+
+    const weekdays = Array.from(
+      new Set((job.scheduledWeekdays ?? []).filter((day) => day >= 0 && day <= 6)),
+    );
+    const scheduledHours = Math.max(0, job.scheduledHoursPerShift ?? 0);
+    if (weekdays.length === 0 || scheduledHours <= 0 || job.netHourlyRate <= 0) return [];
+
+    const weekdaySet = new Set(weekdays);
+    const entries: TimesheetEntry[] = [];
+    for (let d = new Date(start); d <= end; d = addDays(d, 1)) {
+      if (!weekdaySet.has(d.getDay())) continue;
+      const date = toISODate(d);
+      const key = `${job.id}:${date}`;
+      if (realShiftKeys.has(key)) continue;
+
+      const hours = roundedHours(Math.max(0, scheduledHours - (timeOffHours.get(key) ?? 0)));
+      if (hours <= 0) continue;
+
+      entries.push({
+        id: `auto-part-${job.id}-${date}`,
+        jobId: job.id,
+        jobName: job.name,
+        entryType: "work_shift",
+        date,
+        hours,
+        rate: job.netHourlyRate,
+        expectedAmount: roundedAmount(hours * job.netHourlyRate),
+        paid: false,
+        payStatus: "unpaid",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        userEdited: false,
+        auto: true,
+      });
+    }
+
+    return entries;
+  });
+}
+
 export function entriesForMonth(
   all: TimesheetEntry[],
   jobs: Job[],
   monthDate: Date,
 ): TimesheetEntry[] {
-  const start = startOfMonth(monthDate);
-  const end = endOfMonth(monthDate);
-  const inMonth = all.filter((e) => {
-    const d = new Date(e.date);
-    return d >= start && d <= end;
-  });
+  const inMonth = entriesInMonth(all, monthDate);
   const fullTime = jobs.find((j) => j.type === "full_time");
   const synth = syntheticSalaryEntries(fullTime, monthDate, all);
   return [...inMonth, ...synth];
+}
+
+export function forecastIncomeEntriesForMonth(
+  all: TimesheetEntry[],
+  jobs: Job[],
+  monthDate: Date,
+): TimesheetEntry[] {
+  return [
+    ...entriesForMonth(all, jobs, monthDate),
+    ...syntheticPartTimeForecastEntries(jobs, monthDate, all),
+  ];
 }
 
 export function makeShiftEntry(input: {

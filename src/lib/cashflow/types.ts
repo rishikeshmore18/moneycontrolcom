@@ -84,6 +84,8 @@ export interface Job {
   paydayWeekday: number; // 0=Sun..6=Sat
   biweeklyAnchorDate?: string; // ISO date
   semimonthlyDays?: [number, number]; // e.g. [1, 15]
+  scheduledWeekdays?: number[]; // part-time forecast days, 0=Sun..6=Sat
+  scheduledHoursPerShift?: number;
   defaultDepositAccountId: string;
 }
 

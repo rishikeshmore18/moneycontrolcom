@@ -14,7 +14,7 @@ import {
   fromISODate,
   startOfMonth,
 } from "./dates";
-import { entriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
+import { forecastIncomeEntriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
 
 export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months";
 
@@ -442,19 +442,26 @@ function unpaidPendingIncomeItems(
 ): CashFlowBreakdownItem[] {
   const range = cashFlowPeriodRange(period, monthDate);
   const entries = monthRefsForRange(range).flatMap((monthRef) =>
-    entriesForMonth(state.timesheet, state.jobs, monthRef),
+    forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
   );
 
   return entries
-    .filter((t) => !t.paid && t.date >= range.start && t.date <= range.end)
+    .filter(
+      (t) =>
+        !t.paid &&
+        t.entryType !== "time_off" &&
+        t.date >= range.start &&
+        t.date <= range.end &&
+        timesheetEntryAmount(t) > 0,
+    )
     .map((t) => ({
       id: t.id,
       label: t.jobName,
       detail:
         t.entryType === "salary_paycheck"
           ? `Scheduled paycheck - ${formatDisplayDate(t.date)}`
-          : t.entryType === "time_off"
-            ? `Time off deduction - ${formatDisplayDate(t.date)}`
+          : t.auto
+            ? `Planned shift - ${formatDisplayDate(t.date)}`
             : `Shift - ${formatDisplayDate(t.date)}`,
       amount: timesheetEntryAmount(t),
     }));
@@ -530,7 +537,7 @@ export function expensesComingTotal(
 }
 
 function nextUnpaidIncomeDate(state: AppState, ref: Date = new Date()): string | null {
-  const entries = entriesForMonth(state.timesheet, state.jobs, ref)
+  const entries = forecastIncomeEntriesForMonth(state.timesheet, state.jobs, ref)
     .filter(
       (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
     )
