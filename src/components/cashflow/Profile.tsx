@@ -647,7 +647,10 @@ export function JobSheet({ onClose, initial }: { onClose: () => void; initial?: 
           />
         </Field>
         {j.payFrequency === "biweekly" && (
-          <Field label="Known payday (anchor)">
+          <Field
+            label="Known payday (anchor)"
+            hint="Use one real payday so biweekly forecasts land on the right weeks."
+          >
             <Input
               type="date"
               value={j.biweeklyAnchorDate ?? ""}

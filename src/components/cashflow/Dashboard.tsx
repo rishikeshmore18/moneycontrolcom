@@ -19,6 +19,8 @@ import {
   type CashFlowBreakdownItem,
   type CashFlowBreakdownSection,
   type CashFlowPeriod,
+  type ForecastDateRange,
+  cashFlowPeriodRange,
   cashFlowPeriodLabels,
   expensesComingBreakdown,
   expensesComingTotal,
@@ -42,7 +44,7 @@ import {
   isLikelyPendingNearStatement,
   utilization,
 } from "@/lib/cashflow/cardLogic";
-import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
+import { endOfMonth, formatDisplayDate, todayISO, toISODate } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
@@ -70,6 +72,14 @@ function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
+function defaultCustomRange(): ForecastDateRange {
+  const today = new Date();
+  return {
+    start: todayISO(),
+    end: toISODate(endOfMonth(today)),
+  };
+}
+
 export function Dashboard() {
   const { state, dispatch } = useApp();
   const cur = state.profile.currency;
@@ -77,10 +87,12 @@ export function Dashboard() {
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownKey | null>(null);
   const [expenseAction, setExpenseAction] = useState<ExpenseAction | null>(null);
   const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
+  const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange());
 
   const haveNow = spendableCash(state);
-  const incomeComing = pendingIncome(state, new Date(), cashFlowPeriod);
-  const expensesComing = expensesComingTotal(state, new Date(), cashFlowPeriod);
+  const selectedRange = cashFlowPeriodRange(cashFlowPeriod, new Date(), customRange);
+  const incomeComing = pendingIncome(state, new Date(), cashFlowPeriod, customRange);
+  const expensesComing = expensesComingTotal(state, new Date(), cashFlowPeriod, customRange);
   const leftToSpend = haveNow + incomeComing - expensesComing;
   const spendableNow = spendableToday(state);
   const sts = safeToSpend(state);
@@ -96,17 +108,20 @@ export function Dashboard() {
       },
       income_coming: {
         title: "Income coming",
-        helper: "Expected this month and not received yet",
+        helper:
+          cashFlowPeriod === "this_month"
+            ? "Expected this month and not received yet"
+            : `Expected between ${formatDisplayDate(selectedRange.start)} and ${formatDisplayDate(selectedRange.end)}`,
         total: incomeComing,
         tone: "blue" as const,
-        sections: pendingIncomeBreakdown(state, new Date(), cashFlowPeriod),
+        sections: pendingIncomeBreakdown(state, new Date(), cashFlowPeriod, customRange),
       },
       expenses_coming: {
         title: "Expenses coming",
         helper: "Bills, upcoming card bills, and debt plan",
         total: expensesComing,
         tone: "orange" as const,
-        sections: expensesComingBreakdown(state, new Date(), cashFlowPeriod),
+        sections: expensesComingBreakdown(state, new Date(), cashFlowPeriod, customRange),
       },
       left_to_spend: {
         title: leftToSpend < 0 ? "Shortfall" : "Left to spend",
@@ -116,7 +131,7 @@ export function Dashboard() {
             : "Available after planned expenses",
         total: leftToSpend,
         tone: leftToSpend < 0 ? ("red" as const) : ("teal" as const),
-        sections: leftToSpendBreakdown(state, new Date(), cashFlowPeriod),
+        sections: leftToSpendBreakdown(state, new Date(), cashFlowPeriod, customRange),
       },
       spendable_today: {
         title: "Spendable today",
@@ -126,7 +141,18 @@ export function Dashboard() {
         sections: spendableTodayBreakdown(state),
       },
     }),
-    [cashFlowPeriod, expensesComing, haveNow, incomeComing, leftToSpend, spendableNow, state],
+    [
+      cashFlowPeriod,
+      customRange,
+      expensesComing,
+      haveNow,
+      incomeComing,
+      leftToSpend,
+      selectedRange.end,
+      selectedRange.start,
+      spendableNow,
+      state,
+    ],
   );
   const activeBreakdownData = activeBreakdown ? breakdowns[activeBreakdown] : null;
   const currentMonth = monthKey(new Date());
@@ -178,6 +204,8 @@ export function Dashboard() {
         spendableToday={spendableNow}
         period={cashFlowPeriod}
         onPeriodChange={setCashFlowPeriod}
+        customRange={customRange}
+        onCustomRangeChange={setCustomRange}
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
@@ -348,6 +376,8 @@ function CashFlowFormulaCard({
   spendableToday,
   period,
   onPeriodChange,
+  customRange,
+  onCustomRangeChange,
   formatMoney,
   onOpenBreakdown,
 }: {
@@ -358,6 +388,8 @@ function CashFlowFormulaCard({
   spendableToday: number;
   period: CashFlowPeriod;
   onPeriodChange: (period: CashFlowPeriod) => void;
+  customRange: ForecastDateRange;
+  onCustomRangeChange: (range: ForecastDateRange) => void;
   formatMoney: (n: number) => string;
   onOpenBreakdown: (key: BreakdownKey) => void;
 }) {
@@ -383,6 +415,26 @@ function CashFlowFormulaCard({
           ))}
         </Select>
       </div>
+      {period === "custom" && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Start date">
+            <Input
+              type="date"
+              value={customRange.start}
+              onChange={(event) =>
+                onCustomRangeChange({ ...customRange, start: event.target.value })
+              }
+            />
+          </Field>
+          <Field label="End date">
+            <Input
+              type="date"
+              value={customRange.end}
+              onChange={(event) => onCustomRangeChange({ ...customRange, end: event.target.value })}
+            />
+          </Field>
+        </div>
+      )}
 
       <div
         className="mt-4 overflow-x-auto overscroll-x-contain pb-2"
@@ -442,7 +494,7 @@ function CashFlowFormulaCard({
           tone="blue"
           label="Income coming"
           value={formatMoney(incomeComing)}
-          helper="Expected this month"
+          helper={period === "this_month" ? "Expected this month" : "Expected in period"}
           badge={incomeComing > 0 ? "Not received yet" : "No income pending"}
           onClick={() => onOpenBreakdown("income_coming")}
         />

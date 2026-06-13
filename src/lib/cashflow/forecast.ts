@@ -1,4 +1,11 @@
-import { AppState, Debt, PlannedExpenseOverride, PlannedExpenseSourceType } from "./types";
+import {
+  AppState,
+  Debt,
+  Job,
+  PlannedExpenseOverride,
+  PlannedExpenseSourceType,
+  TimesheetEntry,
+} from "./types";
 import {
   currentOpenCycle,
   expensesInCycle,
@@ -16,12 +23,13 @@ import {
 } from "./dates";
 import { forecastIncomeEntriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
 
-export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months";
+export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months" | "custom";
 
 export const cashFlowPeriodLabels: Record<CashFlowPeriod, string> = {
   this_month: "This month",
   next_30_days: "Next 30 days",
   next_6_months: "Next 6 months",
+  custom: "Custom range",
 };
 
 export interface ForecastDateRange {
@@ -111,8 +119,17 @@ function monthKey(ref: Date = new Date()): string {
 export function cashFlowPeriodRange(
   period: CashFlowPeriod,
   ref: Date = new Date(),
+  customRange?: ForecastDateRange,
 ): ForecastDateRange {
   const today = new Date(ref.getFullYear(), ref.getMonth(), ref.getDate());
+  if (period === "custom" && customRange?.start && customRange?.end) {
+    return customRange.start <= customRange.end
+      ? customRange
+      : { start: customRange.end, end: customRange.start };
+  }
+  if (period === "custom") {
+    return { start: toISO(today), end: toISO(today) };
+  }
   if (period === "this_month") {
     return { start: toISO(startOfMonth(today)), end: toISO(endOfMonth(today)) };
   }
@@ -435,53 +452,195 @@ export function debtPlannedPayments(state: AppState, ref: Date = new Date()): nu
   return debtPlanItems(state, ref).reduce((s, item) => s + item.amount, 0);
 }
 
+function nextWeekdayAfter(date: Date, weekday: number): Date {
+  const target = Math.min(6, Math.max(0, weekday));
+  const daysUntil = (target - date.getDay() + 7) % 7 || 7;
+  return addDays(date, daysUntil);
+}
+
+function nextSemimonthlyDateAfter(date: Date, days: [number, number] | undefined): Date {
+  const targets = [...(days ?? [1, 15])].sort((a, b) => a - b);
+  for (let monthOffset = 0; monthOffset <= 1; monthOffset += 1) {
+    const ref = new Date(date.getFullYear(), date.getMonth() + monthOffset, 1);
+    const last = endOfMonth(ref).getDate();
+    for (const target of targets) {
+      const candidate = new Date(ref.getFullYear(), ref.getMonth(), Math.min(target, last));
+      if (candidate > date) return candidate;
+    }
+  }
+  return new Date(date.getFullYear(), date.getMonth() + 2, 1);
+}
+
+function nextMonthlyDateAfter(date: Date, dayOfMonth: number): Date {
+  for (let monthOffset = 0; monthOffset <= 1; monthOffset += 1) {
+    const ref = new Date(date.getFullYear(), date.getMonth() + monthOffset, 1);
+    const candidate = new Date(ref.getFullYear(), ref.getMonth(), clampedDay(ref, dayOfMonth));
+    if (candidate > date) return candidate;
+  }
+  return new Date(date.getFullYear(), date.getMonth() + 2, 1);
+}
+
+function firstBiweeklyPayDateAfter(date: Date, anchorDate: Date): Date {
+  let payday = new Date(anchorDate);
+  while (payday <= date) payday = addDays(payday, 14);
+  while (addDays(payday, -14) > date) payday = addDays(payday, -14);
+  return payday;
+}
+
+function fallbackBiweeklyAnchor(job: Job, firstWorkDate: string): Date {
+  return nextWeekdayAfter(addDays(fromISODate(firstWorkDate), 7), job.paydayWeekday);
+}
+
+function payDateForWorkEntry(
+  entry: TimesheetEntry,
+  job: Job | undefined,
+  fallbackAnchor?: Date,
+): string {
+  if (!job) return entry.date;
+  const workDate = fromISODate(entry.date);
+
+  if (job.payFrequency === "weekly") {
+    return toISO(nextWeekdayAfter(workDate, job.paydayWeekday));
+  }
+  if (job.payFrequency === "biweekly") {
+    const anchor = job.biweeklyAnchorDate ? fromISODate(job.biweeklyAnchorDate) : fallbackAnchor;
+    if (!anchor || Number.isNaN(anchor.getTime()))
+      return toISO(nextWeekdayAfter(workDate, job.paydayWeekday));
+    return toISO(firstBiweeklyPayDateAfter(workDate, anchor));
+  }
+  if (job.payFrequency === "semimonthly") {
+    return toISO(nextSemimonthlyDateAfter(workDate, job.semimonthlyDays));
+  }
+  if (job.payFrequency === "monthly") {
+    return toISO(nextMonthlyDateAfter(workDate, Math.max(1, job.paydayWeekday || 1)));
+  }
+  return entry.date;
+}
+
+function monthRefsForIncomeRange(range: ForecastDateRange): Date[] {
+  const expanded: ForecastDateRange = {
+    start: toISO(addMonths(startOfMonth(fromISODate(range.start)), -1)),
+    end: range.end,
+  };
+  return monthRefsForRange(expanded);
+}
+
+function paycheckDetail(payDate: string, entries: TimesheetEntry[]): string {
+  const dates = Array.from(new Set(entries.map((entry) => entry.date))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const shiftLabel = entries.length === 1 ? "1 shift" : `${entries.length} shifts`;
+  const dateSpan =
+    dates.length === 1
+      ? formatDisplayDate(dates[0])
+      : `${formatDisplayDate(dates[0])} to ${formatDisplayDate(dates[dates.length - 1])}`;
+  const source = entries.every((entry) => entry.auto)
+    ? "planned"
+    : entries.some((entry) => entry.auto)
+      ? "entered/planned"
+      : "entered";
+  return `Payday ${formatDisplayDate(payDate)} - ${shiftLabel}, ${source} work ${dateSpan}`;
+}
+
+function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlowBreakdownItem[] {
+  const jobsById = new Map(state.jobs.map((job) => [job.id, job]));
+  const entries = monthRefsForIncomeRange(range).flatMap((monthRef) =>
+    forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
+  );
+  const unpaidPositiveEntries = entries.filter(
+    (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
+  );
+  const workEntries = unpaidPositiveEntries
+    .filter((entry) => entry.entryType === "work_shift")
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const anchorMonthStart = toISO(startOfMonth(fromISODate(range.start)));
+  const anchorMonthEnd = toISO(endOfMonth(fromISODate(range.start)));
+  const firstWorkDateByJob = new Map<string, string>();
+  workEntries
+    .filter((entry) => entry.date >= anchorMonthStart && entry.date <= anchorMonthEnd)
+    .forEach((entry) => {
+      if (!firstWorkDateByJob.has(entry.jobId)) firstWorkDateByJob.set(entry.jobId, entry.date);
+    });
+  workEntries.forEach((entry) => {
+    if (!firstWorkDateByJob.has(entry.jobId)) firstWorkDateByJob.set(entry.jobId, entry.date);
+  });
+  const fallbackAnchors = new Map<string, Date>();
+  firstWorkDateByJob.forEach((firstWorkDate, jobId) => {
+    const job = jobsById.get(jobId);
+    if (job?.payFrequency === "biweekly" && !job.biweeklyAnchorDate) {
+      fallbackAnchors.set(jobId, fallbackBiweeklyAnchor(job, firstWorkDate));
+    }
+  });
+
+  const salaryItems = unpaidPositiveEntries
+    .filter((entry) => entry.entryType === "salary_paycheck")
+    .filter((entry) => entry.date >= range.start && entry.date <= range.end)
+    .map((entry) => ({
+      id: entry.id,
+      label: entry.jobName,
+      detail: `Scheduled paycheck - ${formatDisplayDate(entry.date)}`,
+      amount: timesheetEntryAmount(entry),
+      periodDate: entry.date,
+    }));
+
+  const groups = new Map<
+    string,
+    { jobName: string; payDate: string; entries: TimesheetEntry[]; amount: number }
+  >();
+
+  workEntries.forEach((entry) => {
+    const job = jobsById.get(entry.jobId);
+    const payDate = payDateForWorkEntry(entry, job, fallbackAnchors.get(entry.jobId));
+    if (payDate < range.start || payDate > range.end) return;
+    const key = `${entry.jobId}:${payDate}`;
+    const existing = groups.get(key) ?? {
+      jobName: entry.jobName,
+      payDate,
+      entries: [],
+      amount: 0,
+    };
+    existing.entries.push(entry);
+    existing.amount += timesheetEntryAmount(entry);
+    groups.set(key, existing);
+  });
+
+  const paycheckItems = Array.from(groups.entries()).map(([key, group]) => ({
+    id: `paycheck-${key}`,
+    label: group.jobName,
+    detail: paycheckDetail(group.payDate, group.entries),
+    amount: Math.round(group.amount * 100) / 100,
+    periodDate: group.payDate,
+  }));
+
+  return sortByDueDate([...salaryItems, ...paycheckItems]);
+}
+
 function unpaidPendingIncomeItems(
   state: AppState,
   monthDate: Date = new Date(),
   period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): CashFlowBreakdownItem[] {
-  const range = cashFlowPeriodRange(period, monthDate);
-  const entries = monthRefsForRange(range).flatMap((monthRef) =>
-    forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
-  );
-
-  return entries
-    .filter(
-      (t) =>
-        !t.paid &&
-        t.entryType !== "time_off" &&
-        t.date >= range.start &&
-        t.date <= range.end &&
-        timesheetEntryAmount(t) > 0,
-    )
-    .map((t) => ({
-      id: t.id,
-      label: t.jobName,
-      detail:
-        t.entryType === "salary_paycheck"
-          ? `Scheduled paycheck - ${formatDisplayDate(t.date)}`
-          : t.auto
-            ? `Planned shift - ${formatDisplayDate(t.date)}`
-            : `Shift - ${formatDisplayDate(t.date)}`,
-      amount: timesheetEntryAmount(t),
-    }));
+  return incomeItemsForRange(state, cashFlowPeriodRange(period, monthDate, customRange));
 }
 
 export function pendingIncomeBreakdown(
   state: AppState,
   monthDate: Date = new Date(),
   period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
-  const incomeItems = unpaidPendingIncomeItems(state, monthDate, period);
-  return incomeItems.length > 0 ? [{ title: "Unpaid income", items: incomeItems }] : [];
+  const incomeItems = unpaidPendingIncomeItems(state, monthDate, period, customRange);
+  return incomeItems.length > 0 ? [{ title: "Upcoming paydays", items: incomeItems }] : [];
 }
 
 export function pendingIncome(
   state: AppState,
   monthDate: Date = new Date(),
   period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): number {
-  return unpaidPendingIncomeItems(state, monthDate, period).reduce(
+  return unpaidPendingIncomeItems(state, monthDate, period, customRange).reduce(
     (sum, item) => sum + item.amount,
     0,
   );
@@ -521,28 +680,32 @@ export function expensesComingBreakdown(
   state: AppState,
   ref: Date = new Date(),
   period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
-  return expenseSectionsForRange(state, ref, cashFlowPeriodRange(period, ref));
+  return expenseSectionsForRange(state, ref, cashFlowPeriodRange(period, ref, customRange));
 }
 
 export function expensesComingTotal(
   state: AppState,
   ref: Date = new Date(),
   period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): number {
-  return expensesComingBreakdown(state, ref, period).reduce(
+  return expensesComingBreakdown(state, ref, period, customRange).reduce(
     (sum, section) => sum + section.items.reduce((sectionSum, item) => sectionSum + item.amount, 0),
     0,
   );
 }
 
 function nextUnpaidIncomeDate(state: AppState, ref: Date = new Date()): string | null {
-  const entries = forecastIncomeEntriesForMonth(state.timesheet, state.jobs, ref)
-    .filter(
-      (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
-    )
-    .map((entry) => entry.date)
-    .filter((date) => date >= toISO(ref))
+  const today = toISO(ref);
+  const range = {
+    start: today,
+    end: toISO(new Date(ref.getFullYear(), ref.getMonth() + 6, ref.getDate())),
+  };
+  const entries = incomeItemsForRange(state, range)
+    .map((entry) => entry.periodDate ?? entry.dueDate)
+    .filter((date): date is string => !!date && date >= today)
     .sort((a, b) => a.localeCompare(b));
   return entries[0] ?? null;
 }
@@ -617,10 +780,11 @@ export function leftToSpendBreakdown(
   state: AppState,
   monthDate: Date = new Date(),
   period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
   const haveNow = spendableCash(state);
-  const incomeComing = pendingIncome(state, monthDate, period);
-  const expensesComing = expensesComingTotal(state, monthDate, period);
+  const incomeComing = pendingIncome(state, monthDate, period, customRange);
+  const expensesComing = expensesComingTotal(state, monthDate, period, customRange);
 
   return [
     {
