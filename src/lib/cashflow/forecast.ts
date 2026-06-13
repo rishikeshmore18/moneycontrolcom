@@ -111,17 +111,18 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
     const accountId = override?.accountId ?? bill.accountId;
     const account = state.accounts.find((item) => item.id === accountId);
     const dueDay = override?.dueDay ?? bill.dueDay;
+    const dueDate = dateForMonthDay(ref, dueDay);
     return [
       {
         id: bill.id,
         label: override?.name ?? bill.name,
-        detail: account ? `Due day ${dueDay} - ${account.name}` : `Due day ${dueDay}`,
+        detail: account ? `Due ${dueDate} - ${account.name}` : `Due ${dueDate}`,
         amount: override?.amount ?? bill.amount,
         sourceType: "recurring_bill" as const,
         sourceId: bill.id,
         overrideId: override?.id,
         dueDay,
-        dueDate: dateForMonthDay(ref, dueDay),
+        dueDate,
         accountId,
         category: override?.category ?? "Bills",
       },
@@ -236,17 +237,18 @@ function debtPlanItems(state: AppState, ref: Date = new Date()): CashFlowBreakdo
       const amount = override?.amount ?? plannedDebtPayment(debt, ref);
       if (amount <= 0) return [];
       const dueDay = override?.dueDay ?? debt.dueDate;
+      const dueDate = dateForMonthDay(ref, dueDay);
       return [
         {
           id: debt.id,
           label: override?.name ?? debt.name,
-          detail: `Due day ${dueDay}`,
+          detail: `Due ${dueDate}`,
           amount,
           sourceType: "debt_plan" as const,
           sourceId: debt.id,
           overrideId: override?.id,
           dueDay,
-          dueDate: dateForMonthDay(ref, dueDay),
+          dueDate,
         },
       ];
     });
