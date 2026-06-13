@@ -352,18 +352,70 @@ function nextUnpaidIncomeDate(state: AppState, ref: Date = new Date()): string |
   return entries[0] ?? null;
 }
 
-export function spendableToday(state: AppState, ref: Date = new Date()): number {
+function protectedExpenseSections(
+  state: AppState,
+  ref: Date = new Date(),
+): { nextIncomeDate: string; sections: CashFlowBreakdownSection[]; total: number } {
   const today = toISO(ref);
   const nextIncomeDate = nextUnpaidIncomeDate(state, ref) ?? toISO(endOfMonth(ref));
-  const protectedExpenses = expensesComingBreakdown(state, ref).reduce(
-    (sum, section) =>
-      sum +
-      section.items
-        .filter((item) => item.dueDate && item.dueDate >= today && item.dueDate <= nextIncomeDate)
-        .reduce((sectionSum, item) => sectionSum + item.amount, 0),
+  const sections = expensesComingBreakdown(state, ref)
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => item.dueDate && item.dueDate >= today && item.dueDate <= nextIncomeDate,
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
+  const total = sections.reduce(
+    (sum, section) => sum + section.items.reduce((sectionSum, item) => sectionSum + item.amount, 0),
     0,
   );
+
+  return { nextIncomeDate, sections, total };
+}
+
+export function spendableToday(state: AppState, ref: Date = new Date()): number {
+  const protectedExpenses = protectedExpenseSections(state, ref).total;
   return spendableCash(state) - protectedExpenses - state.profile.safeToSpendFloor;
+}
+
+export function spendableTodayBreakdown(
+  state: AppState,
+  ref: Date = new Date(),
+): CashFlowBreakdownSection[] {
+  const haveNow = spendableCash(state);
+  const {
+    nextIncomeDate,
+    sections,
+    total: protectedExpenses,
+  } = protectedExpenseSections(state, ref);
+
+  return [
+    {
+      title: "Today check formula",
+      items: [
+        {
+          id: "spendable-today-have-now",
+          label: "Have now",
+          detail: "Current spendable cash",
+          amount: haveNow,
+        },
+        {
+          id: "spendable-today-protected-expenses",
+          label: "Expenses before next income",
+          detail: `Due between today and ${nextIncomeDate}`,
+          amount: -protectedExpenses,
+        },
+        {
+          id: "spendable-today-floor",
+          label: "Safe-to-spend floor",
+          detail: "Cash buffer kept aside",
+          amount: -state.profile.safeToSpendFloor,
+        },
+      ],
+    },
+    ...sections,
+  ];
 }
 
 export function leftToSpendBreakdown(

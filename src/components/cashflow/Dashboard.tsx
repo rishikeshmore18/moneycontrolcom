@@ -30,6 +30,7 @@ import {
   safeToSpend,
   isSpendableAccount,
   spendableToday,
+  spendableTodayBreakdown,
   spendableCash,
   spendableCashBreakdown,
   totalCardDebt,
@@ -48,7 +49,12 @@ import { todayISO } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
-type BreakdownKey = "have_now" | "income_coming" | "expenses_coming" | "left_to_spend";
+type BreakdownKey =
+  | "have_now"
+  | "income_coming"
+  | "expenses_coming"
+  | "left_to_spend"
+  | "spendable_today";
 
 type ExpenseAction =
   | { type: "add_one_time" }
@@ -114,8 +120,15 @@ export function Dashboard() {
         tone: leftToSpend < 0 ? ("red" as const) : ("teal" as const),
         sections: leftToSpendBreakdown(state),
       },
+      spendable_today: {
+        title: "Spendable today",
+        helper: "Cash you can use before the next unpaid income arrives",
+        total: spendableNow,
+        tone: spendableNow < 0 ? ("red" as const) : ("green" as const),
+        sections: spendableTodayBreakdown(state),
+      },
     }),
-    [expensesComing, haveNow, incomeComing, leftToSpend, state],
+    [expensesComing, haveNow, incomeComing, leftToSpend, spendableNow, state],
   );
   const activeBreakdownData = activeBreakdown ? breakdowns[activeBreakdown] : null;
   const currentMonth = monthKey(new Date());
@@ -417,20 +430,14 @@ function CashFlowFormulaCard({
           badge={shortfall ? "Needs coverage" : "Ready to use"}
           onClick={() => onOpenBreakdown("left_to_spend")}
         />
-        <div className="rounded-2xl border border-[color:var(--good)]/20 bg-muted/25 p-3 text-left">
-          <div className="text-xs font-extrabold text-[color:var(--good)]">Spendable today</div>
-          <div
-            className={`mt-1 text-lg font-black ${
-              spendableToday < 0 ? "text-[color:var(--bad)]" : ""
-            }`}
-          >
-            {formatMoney(spendableToday)}
-          </div>
-          <div className="mt-1 text-xs text-muted-foreground">Before next income</div>
-          <div className="mt-2 inline-flex rounded-full bg-[color:var(--good)]/12 px-2 py-1 text-[10px] font-extrabold text-[color:var(--good)]">
-            Today check
-          </div>
-        </div>
+        <FlowDetail
+          tone={spendableToday < 0 ? "red" : "green"}
+          label="Spendable today"
+          value={formatMoney(spendableToday)}
+          helper="Before next income"
+          badge="Today check"
+          onClick={() => onOpenBreakdown("spendable_today")}
+        />
       </div>
 
       <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
