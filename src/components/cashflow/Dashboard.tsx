@@ -16,6 +16,7 @@ import { Button } from "./Button";
 import { Field, Input, Select } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
+  type CashFlowAffordability,
   type CashFlowBreakdownItem,
   type CashFlowBreakdownSection,
   type CashFlowPeriod,
@@ -24,6 +25,7 @@ import {
   cashFlowPeriodLabels,
   expensesComingBreakdown,
   expensesComingTotal,
+  expenseAffordabilityById,
   leftToSpendBreakdown,
   netWorth,
   pendingIncome,
@@ -105,6 +107,10 @@ export function Dashboard() {
   const expensesComing = expensesComingTotal(state, new Date(), cashFlowPeriod, customRange);
   const leftToSpend = haveNow + incomeComing - expensesComing;
   const spendableNow = spendableToday(state, new Date(), cashFlowPeriod, customRange);
+  const affordabilityById = useMemo(
+    () => expenseAffordabilityById(state, new Date(), cashFlowPeriod, customRange),
+    [cashFlowPeriod, customRange, state],
+  );
   const sts = safeToSpend(state);
   const recent = useMemo(() => state.transactions.slice(0, 8), [state.transactions]);
   const breakdowns = useMemo(
@@ -366,6 +372,11 @@ export function Dashboard() {
         total={activeBreakdownData?.total ?? 0}
         tone={activeBreakdownData?.tone ?? "teal"}
         sections={activeBreakdownData?.sections ?? []}
+        affordabilityById={
+          activeBreakdown === "expenses_coming" || activeBreakdown === "spendable_today"
+            ? affordabilityById
+            : undefined
+        }
         formatMoney={m}
         incomeMode={activeBreakdown === "income_coming"}
         expenseMode={activeBreakdown === "expenses_coming"}
@@ -696,6 +707,7 @@ function BreakdownSheet({
   total,
   tone,
   sections,
+  affordabilityById,
   formatMoney,
   incomeMode,
   expenseMode,
@@ -712,6 +724,7 @@ function BreakdownSheet({
   total: number;
   tone: FlowTone;
   sections: CashFlowBreakdownSection[];
+  affordabilityById?: Record<string, CashFlowAffordability>;
   formatMoney: (n: number) => string;
   incomeMode?: boolean;
   expenseMode?: boolean;
@@ -721,6 +734,10 @@ function BreakdownSheet({
   onAddExpense?: () => void;
   onExpenseAction?: (action: ExpenseAction) => void;
 }) {
+  const [activeAffordability, setActiveAffordability] = useState<CashFlowAffordability | null>(
+    null,
+  );
+
   return (
     <Sheet
       open={open}
@@ -760,40 +777,160 @@ function BreakdownSheet({
                 </div>
               </div>
               <div className="divide-y divide-border">
-                {section.items.map((item) => (
-                  <div key={`${section.title}-${item.id}`} className="grid gap-3 px-4 py-3">
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="min-w-0">
-                        <div className="font-bold">{item.label}</div>
-                        {item.detail && (
-                          <div className="text-xs text-muted-foreground">{item.detail}</div>
-                        )}
+                {section.items.map((item) => {
+                  const affordability = affordabilityById?.[item.id];
+                  return (
+                    <div key={`${section.title}-${item.id}`} className="grid gap-3 px-4 py-3">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <div className="flex min-w-0 items-center gap-2">
+                            <div className="truncate font-bold">{item.label}</div>
+                            {affordability && (
+                              <AffordabilityMarker
+                                affordability={affordability}
+                                onClick={() => setActiveAffordability(affordability)}
+                              />
+                            )}
+                          </div>
+                          {item.detail && (
+                            <div className="text-xs text-muted-foreground">{item.detail}</div>
+                          )}
+                        </div>
+                        <div
+                          className={`shrink-0 text-right font-black ${
+                            item.amount < 0 ? "text-[color:var(--bad)]" : ""
+                          }`}
+                        >
+                          {formatMoney(item.amount)}
+                        </div>
                       </div>
-                      <div
-                        className={`shrink-0 text-right font-black ${
-                          item.amount < 0 ? "text-[color:var(--bad)]" : ""
-                        }`}
-                      >
-                        {formatMoney(item.amount)}
-                      </div>
+                      {expenseMode && onExpenseAction && (
+                        <ExpenseItemActions item={item} onAction={onExpenseAction} />
+                      )}
+                      {incomeMode && onIncomeAction && (
+                        <IncomeItemActions item={item} onAction={onIncomeAction} />
+                      )}
+                      {spendableMode && onSpendableAction && (
+                        <SpendableItemActions item={item} onAction={onSpendableAction} />
+                      )}
                     </div>
-                    {expenseMode && onExpenseAction && (
-                      <ExpenseItemActions item={item} onAction={onExpenseAction} />
-                    )}
-                    {incomeMode && onIncomeAction && (
-                      <IncomeItemActions item={item} onAction={onIncomeAction} />
-                    )}
-                    {spendableMode && onSpendableAction && (
-                      <SpendableItemActions item={item} onAction={onSpendableAction} />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           );
         })}
       </div>
+      {activeAffordability && (
+        <AffordabilityDialog
+          affordability={activeAffordability}
+          formatMoney={formatMoney}
+          onClose={() => setActiveAffordability(null)}
+        />
+      )}
     </Sheet>
+  );
+}
+
+function AffordabilityMarker({
+  affordability,
+  onClick,
+}: {
+  affordability: CashFlowAffordability;
+  onClick: () => void;
+}) {
+  const blocked = !affordability.affordable;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={
+        blocked ? "Not enough projected cash on this date" : "Enough projected cash on this date"
+      }
+      className={`h-3 w-3 shrink-0 rounded-full border transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring ${
+        blocked
+          ? "border-[color:var(--bad)] bg-[color:var(--bad)] shadow-[0_0_0_3px_rgba(255,51,71,0.16)]"
+          : "border-[color:var(--good)] bg-[color:var(--good)]/75"
+      }`}
+    />
+  );
+}
+
+function AffordabilityDialog({
+  affordability,
+  formatMoney,
+  onClose,
+}: {
+  affordability: CashFlowAffordability;
+  formatMoney: (n: number) => string;
+  onClose: () => void;
+}) {
+  const blocked = !affordability.affordable;
+  return (
+    <div className="fixed inset-x-4 bottom-5 z-[90] mx-auto max-w-sm rounded-2xl border border-border bg-card p-4 shadow-2xl sm:bottom-auto sm:right-8 sm:top-24 sm:mx-0">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-black">
+            {blocked ? "Cash short on this date" : "Covered on this date"}
+          </div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {affordability.label} on {formatDisplayDate(affordability.date)}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+          aria-label="Close affordability details"
+        >
+          x
+        </button>
+      </div>
+      <div className="mt-3 grid gap-2 text-sm">
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">Projected cash before</span>
+          <span className="font-bold">{formatMoney(affordability.balanceBefore)}</span>
+        </div>
+        <div className="flex justify-between gap-3">
+          <span className="text-muted-foreground">This expense</span>
+          <span className="font-bold text-[color:var(--bad)]">
+            -{formatMoney(affordability.amount)}
+          </span>
+        </div>
+        <div className="flex justify-between gap-3 border-t border-border pt-2">
+          <span className="text-muted-foreground">Projected cash after</span>
+          <span
+            className={`font-black ${
+              affordability.balanceAfter < 0 ? "text-[color:var(--bad)]" : ""
+            }`}
+          >
+            {formatMoney(affordability.balanceAfter)}
+          </span>
+        </div>
+      </div>
+      <div className="mt-3 rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+        {blocked ? (
+          affordability.recoveryDate ? (
+            <>
+              Paying this on {formatDisplayDate(affordability.date)} would put projected cash below
+              zero. Based on scheduled income and expenses, projected cash recovers on{" "}
+              {formatDisplayDate(affordability.recoveryDate)} to{" "}
+              {formatMoney(affordability.recoveryBalance ?? 0)}.
+            </>
+          ) : (
+            <>
+              Paying this on {formatDisplayDate(affordability.date)} would put projected cash below
+              zero, and the selected forecast range does not show a later recovery date.
+            </>
+          )
+        ) : (
+          <>
+            The selected forecast shows enough projected cash to cover this expense on{" "}
+            {formatDisplayDate(affordability.date)}.
+          </>
+        )}
+      </div>
+    </div>
   );
 }
 

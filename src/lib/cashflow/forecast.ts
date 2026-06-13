@@ -67,6 +67,19 @@ export interface CashFlowBreakdownSection {
   items: CashFlowBreakdownItem[];
 }
 
+export interface CashFlowAffordability {
+  itemId: string;
+  eventId: string;
+  label: string;
+  date: string;
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  affordable: boolean;
+  recoveryDate?: string;
+  recoveryBalance?: number;
+}
+
 export function totalCash(state: AppState): number {
   return state.accounts.reduce((s, a) => s + a.balance, 0);
 }
@@ -944,6 +957,7 @@ interface CashFlowTimelineEvent {
   detail: string;
   date: string;
   amount: number;
+  balanceBefore: number;
   balanceAfter: number;
   sourceItem?: CashFlowBreakdownItem;
 }
@@ -983,6 +997,7 @@ function spendableTodayProjection(
           detail: item.detail ? `${section.title} - ${item.detail}` : section.title,
           date: item.dueDate ?? item.periodDate ?? today,
           amount: -item.amount,
+          sourceItem: item,
         })),
       ),
     ...cardCashFlowItemsForRange(state, ref, range).map((item) => ({
@@ -1004,9 +1019,10 @@ function spendableTodayProjection(
   let runningBalance = startingCash;
   let lowestBalance = startingCash;
   const events = orderedEvents.map((event) => {
+    const balanceBefore = runningBalance;
     runningBalance += event.amount;
     lowestBalance = Math.min(lowestBalance, runningBalance);
-    return { ...event, balanceAfter: runningBalance };
+    return { ...event, balanceBefore, balanceAfter: runningBalance };
   });
 
   return {
@@ -1016,6 +1032,43 @@ function spendableTodayProjection(
     safeSurplus: lowestBalance - state.profile.safeToSpendFloor,
     events,
   };
+}
+
+export function expenseAffordabilityById(
+  state: AppState,
+  ref: Date = new Date(),
+  period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
+): Record<string, CashFlowAffordability> {
+  const projection = spendableTodayProjection(state, ref, period, customRange);
+  const expenseEvents = projection.events.filter((event) => event.amount < 0);
+  const affordability: Record<string, CashFlowAffordability> = {};
+
+  expenseEvents.forEach((event) => {
+    const eventIndex = projection.events.findIndex((candidate) => candidate.id === event.id);
+    const recovery =
+      event.balanceAfter < 0
+        ? projection.events.slice(eventIndex + 1).find((candidate) => candidate.balanceAfter >= 0)
+        : undefined;
+    const itemId = event.sourceItem?.id ?? event.id;
+    const itemAffordability: CashFlowAffordability = {
+      itemId,
+      eventId: event.id,
+      label: event.label,
+      date: event.date,
+      amount: Math.abs(event.amount),
+      balanceBefore: event.balanceBefore,
+      balanceAfter: event.balanceAfter,
+      affordable: event.balanceAfter >= 0,
+      recoveryDate: recovery?.date,
+      recoveryBalance: recovery?.balanceAfter,
+    };
+
+    affordability[itemId] = itemAffordability;
+    affordability[event.id] = itemAffordability;
+  });
+
+  return affordability;
 }
 
 export function spendableToday(
