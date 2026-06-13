@@ -867,9 +867,7 @@ function expenseSectionsForRange(
   );
   const recurringBillItems = billItems.filter((item) => item.sourceType === "recurring_bill");
   const oneTimeItems = billItems.filter((item) => item.sourceType === "one_time");
-  const cardItems = sortByDueDate(
-    cardDueItems(state, ref).filter((item) => itemInRange(item, range)),
-  );
+  const cardItems = cardCashFlowItemsForRange(state, ref, range);
   const debtItems = sortByDueDate(
     monthRefs
       .flatMap((monthRef) => debtPlanItems(state, monthRef))
