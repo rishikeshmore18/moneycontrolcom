@@ -18,6 +18,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const { state, dispatch } = useApp();
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Groceries");
+  const [otherCategory, setOtherCategory] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(todayISO());
   const [method, setMethod] = useState<"credit_card" | "debit" | "cash" | "debt_payment" | "other">(
@@ -33,13 +34,17 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const cashAccount = state.accounts.find((a) => a.type === "cash" && isSpendableAccount(a));
   const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash" && isSpendableAccount(a));
   const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const selectedCategory =
+    category === "Other" && otherCategory.trim() ? otherCategory.trim() : category;
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
   const chosenDebt = state.debts.find((d) => d.id === debtId);
 
   const recommendation = useMemo(
     () =>
-      method === "credit_card" && amt > 0 ? recommendCardForCategory(state, category, amt) : null,
-    [state, category, method, amt],
+      method === "credit_card" && amt > 0
+        ? recommendCardForCategory(state, selectedCategory, amt)
+        : null,
+    [state, selectedCategory, method, amt],
   );
 
   const chosenAccount = state.accounts.find(
@@ -77,7 +82,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
       type: "ADD_EXPENSE",
       payload: {
         amount: amt,
-        category,
+        category: selectedCategory,
         description,
         date,
         method,
@@ -115,6 +120,15 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           ))}
         </Select>
       </Field>
+      {category === "Other" && (
+        <Field label="Category name" hint="Leave blank to keep this as Other.">
+          <Input
+            value={otherCategory}
+            onChange={(e) => setOtherCategory(e.target.value)}
+            placeholder="e.g. Parking, Laundry"
+          />
+        </Field>
+      )}
       <Field label="Description (optional)">
         <Input
           value={description}

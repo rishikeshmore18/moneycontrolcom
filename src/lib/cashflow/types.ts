@@ -3,7 +3,9 @@
 export const DEFAULT_CATEGORIES = [
   "Groceries",
   "Gas",
+  "Cab",
   "Dining",
+  "Fast Food / Quick Bites",
   "Entertainment",
   "Bills",
   "Shopping",
