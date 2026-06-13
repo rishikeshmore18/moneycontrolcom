@@ -169,6 +169,19 @@ export interface PlannedExpenseOverride {
   notes?: string;
 }
 
+export type PlannedIncomeOverrideAction = "skip" | "override";
+
+export interface PlannedIncomeOverride {
+  id: string;
+  sourceId: string;
+  jobId?: string;
+  payDate: string;
+  action: PlannedIncomeOverrideAction;
+  label?: string;
+  amount?: number;
+  notes?: string;
+}
+
 export interface AppState {
   schemaVersion: number;
   onboarded: boolean;
@@ -182,6 +195,7 @@ export interface AppState {
   recurringBills: RecurringBill[];
   categories: string[];
   plannedExpenseOverrides: PlannedExpenseOverride[];
+  plannedIncomeOverrides: PlannedIncomeOverride[];
 }
 
 export const SCHEMA_VERSION = 1;
@@ -206,4 +220,5 @@ export const emptyState: AppState = {
   recurringBills: [],
   categories: DEFAULT_CATEGORIES,
   plannedExpenseOverrides: [],
+  plannedIncomeOverrides: [],
 };

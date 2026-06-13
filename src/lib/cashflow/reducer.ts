@@ -6,6 +6,7 @@ import {
   Debt,
   Job,
   PlannedExpenseOverride,
+  PlannedIncomeOverride,
   RecurringBill,
   TimesheetEntry,
   Transaction,
@@ -40,6 +41,9 @@ export type Action =
   | { type: "ADD_PLANNED_EXPENSE_OVERRIDE"; payload: Omit<PlannedExpenseOverride, "id"> }
   | { type: "UPDATE_PLANNED_EXPENSE_OVERRIDE"; payload: PlannedExpenseOverride }
   | { type: "DELETE_PLANNED_EXPENSE_OVERRIDE"; id: string }
+  | { type: "ADD_PLANNED_INCOME_OVERRIDE"; payload: Omit<PlannedIncomeOverride, "id"> }
+  | { type: "UPDATE_PLANNED_INCOME_OVERRIDE"; payload: PlannedIncomeOverride }
+  | { type: "DELETE_PLANNED_INCOME_OVERRIDE"; id: string }
   | {
       type: "ADD_EXPENSE";
       payload: {
@@ -160,6 +164,7 @@ function normalizeState(state: AppState): AppState {
       state.plannedExpenseOverrides?.map((p) => p.category ?? ""),
     ),
     plannedExpenseOverrides: state.plannedExpenseOverrides ?? [],
+    plannedIncomeOverrides: state.plannedIncomeOverrides ?? [],
   };
 }
 
@@ -225,7 +230,13 @@ export function reducer(state: AppState, action: Action): AppState {
         jobs: state.jobs.map((j) => (j.id === action.payload.id ? action.payload : j)),
       };
     case "DELETE_JOB":
-      return { ...state, jobs: state.jobs.filter((j) => j.id !== action.id) };
+      return {
+        ...state,
+        jobs: state.jobs.filter((j) => j.id !== action.id),
+        plannedIncomeOverrides: (state.plannedIncomeOverrides ?? []).filter(
+          (override) => override.jobId !== action.id,
+        ),
+      };
 
     case "ADD_RECURRING":
       return {
@@ -285,6 +296,35 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter(
+          (override) => override.id !== action.id,
+        ),
+      };
+
+    case "ADD_PLANNED_INCOME_OVERRIDE": {
+      const payload = action.payload;
+      const plannedIncomeOverrides = [...(state.plannedIncomeOverrides ?? [])];
+      const replacementIndex = plannedIncomeOverrides.findIndex(
+        (override) =>
+          override.sourceId === payload.sourceId && override.payDate === payload.payDate,
+      );
+      const nextOverride: PlannedIncomeOverride = { ...payload, id: newId() };
+      if (replacementIndex >= 0) plannedIncomeOverrides[replacementIndex] = nextOverride;
+      else plannedIncomeOverrides.push(nextOverride);
+      return { ...state, plannedIncomeOverrides };
+    }
+
+    case "UPDATE_PLANNED_INCOME_OVERRIDE":
+      return {
+        ...state,
+        plannedIncomeOverrides: (state.plannedIncomeOverrides ?? []).map((override) =>
+          override.id === action.payload.id ? action.payload : override,
+        ),
+      };
+
+    case "DELETE_PLANNED_INCOME_OVERRIDE":
+      return {
+        ...state,
+        plannedIncomeOverrides: (state.plannedIncomeOverrides ?? []).filter(
           (override) => override.id !== action.id,
         ),
       };

@@ -45,7 +45,7 @@ import {
   utilization,
 } from "@/lib/cashflow/cardLogic";
 import { endOfMonth, formatDisplayDate, todayISO, toISODate } from "@/lib/cashflow/dates";
-import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
+import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
 type BreakdownKey =
@@ -68,6 +68,11 @@ type ExpenseAction =
   | { type: "edit_card"; item: CashFlowBreakdownItem }
   | { type: "edit_debt"; item: CashFlowBreakdownItem };
 
+type IncomeAction =
+  | { type: "edit_once"; item: CashFlowBreakdownItem }
+  | { type: "edit_job"; item: CashFlowBreakdownItem }
+  | { type: "remove"; item: CashFlowBreakdownItem };
+
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -86,6 +91,7 @@ export function Dashboard() {
   const m = (n: number) => formatMoney(n, cur);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownKey | null>(null);
   const [expenseAction, setExpenseAction] = useState<ExpenseAction | null>(null);
+  const [incomeAction, setIncomeAction] = useState<IncomeAction | null>(null);
   const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
   const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange());
 
@@ -354,10 +360,13 @@ export function Dashboard() {
         tone={activeBreakdownData?.tone ?? "teal"}
         sections={activeBreakdownData?.sections ?? []}
         formatMoney={m}
+        incomeMode={activeBreakdown === "income_coming"}
         expenseMode={activeBreakdown === "expenses_coming"}
+        onIncomeAction={setIncomeAction}
         onAddExpense={() => setExpenseAction({ type: "add_one_time" })}
         onExpenseAction={setExpenseAction}
       />
+      <IncomeActionSheets action={incomeAction} onClose={() => setIncomeAction(null)} />
       <ExpenseActionSheets
         action={expenseAction}
         onClose={() => setExpenseAction(null)}
@@ -678,7 +687,9 @@ function BreakdownSheet({
   tone,
   sections,
   formatMoney,
+  incomeMode,
   expenseMode,
+  onIncomeAction,
   onAddExpense,
   onExpenseAction,
 }: {
@@ -690,7 +701,9 @@ function BreakdownSheet({
   tone: FlowTone;
   sections: CashFlowBreakdownSection[];
   formatMoney: (n: number) => string;
+  incomeMode?: boolean;
   expenseMode?: boolean;
+  onIncomeAction?: (action: IncomeAction) => void;
   onAddExpense?: () => void;
   onExpenseAction?: (action: ExpenseAction) => void;
 }) {
@@ -753,6 +766,9 @@ function BreakdownSheet({
                     {expenseMode && onExpenseAction && (
                       <ExpenseItemActions item={item} onAction={onExpenseAction} />
                     )}
+                    {incomeMode && onIncomeAction && (
+                      <IncomeItemActions item={item} onAction={onIncomeAction} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -761,6 +777,36 @@ function BreakdownSheet({
         })}
       </div>
     </Sheet>
+  );
+}
+
+function IncomeItemActions({
+  item,
+  onAction,
+}: {
+  item: CashFlowBreakdownItem;
+  onAction: (action: IncomeAction) => void;
+}) {
+  if (!item.incomeSourceType) return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <MiniAction
+        label="Edit this payday"
+        icon={Pencil}
+        onClick={() => onAction({ type: "edit_once", item })}
+      />
+      <MiniAction
+        label="Edit job"
+        icon={Pencil}
+        onClick={() => onAction({ type: "edit_job", item })}
+      />
+      <MiniAction
+        label="Skip / remove"
+        icon={Trash2}
+        onClick={() => onAction({ type: "remove", item })}
+        danger
+      />
+    </div>
   );
 }
 
@@ -862,6 +908,160 @@ function MiniAction({
       {Icon && <Icon size={13} />}
       {label}
     </button>
+  );
+}
+
+function IncomeActionSheets({
+  action,
+  onClose,
+}: {
+  action: IncomeAction | null;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+
+  if (!action) return null;
+
+  if (action.type === "edit_once") {
+    return <IncomePaydayOverrideSheet item={action.item} onClose={onClose} />;
+  }
+
+  if (action.type === "edit_job") {
+    const job = state.jobs.find((item) => item.id === action.item.jobId);
+    return job ? <JobSheet onClose={onClose} initial={job} /> : null;
+  }
+
+  if (action.type === "remove") {
+    const job = state.jobs.find((item) => item.id === action.item.jobId);
+    const payDate = action.item.payDate ?? action.item.periodDate ?? todayISO();
+    return (
+      <Sheet open onClose={onClose} title="Skip or remove income">
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="font-extrabold">{action.item.label}</div>
+            <div className="text-sm text-muted-foreground">
+              Payday {formatDisplayDate(payDate)}. Choose whether this affects only this payday or
+              the job going forward.
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            full
+            onClick={() => {
+              dispatch({
+                type: "ADD_PLANNED_INCOME_OVERRIDE",
+                payload: {
+                  sourceId: action.item.id,
+                  jobId: action.item.jobId,
+                  payDate,
+                  action: "skip",
+                  label: action.item.label,
+                },
+              });
+              toast("Skipped this payday");
+              onClose();
+            }}
+          >
+            Skip this payday only
+          </Button>
+          {job && (
+            <Button
+              variant="danger"
+              full
+              onClick={() => {
+                if (!confirm(`Delete ${job.name} permanently?`)) return;
+                dispatch({ type: "DELETE_JOB", id: job.id });
+                toast("Job deleted");
+                onClose();
+              }}
+            >
+              Delete job permanently
+            </Button>
+          )}
+        </div>
+      </Sheet>
+    );
+  }
+
+  return null;
+}
+
+function IncomePaydayOverrideSheet({
+  item,
+  onClose,
+}: {
+  item: CashFlowBreakdownItem;
+  onClose: () => void;
+}) {
+  const { dispatch } = useApp();
+  const [label, setLabel] = useState(item.label);
+  const [amount, setAmount] = useState(String(item.amount));
+  const payDate = item.payDate ?? item.periodDate ?? todayISO();
+
+  function save() {
+    const amt = toNumber(amount);
+    if (!label.trim()) return toast("Name the income");
+    if (amt <= 0) return toast("Enter an amount");
+    dispatch({
+      type: "ADD_PLANNED_INCOME_OVERRIDE",
+      payload: {
+        sourceId: item.id,
+        jobId: item.jobId,
+        payDate,
+        action: "override",
+        label: label.trim(),
+        amount: amt,
+      },
+    });
+    toast("Payday updated");
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Edit this payday"
+      footer={
+        <div className="flex w-full items-center justify-between gap-2">
+          <div>
+            {item.overrideId && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  dispatch({ type: "DELETE_PLANNED_INCOME_OVERRIDE", id: item.overrideId! });
+                  toast("One-time edit removed");
+                  onClose();
+                }}
+              >
+                Clear edit
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={save}>
+              Save
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+          This changes only the payday on {formatDisplayDate(payDate)}. Edit the job for future
+          paydays.
+        </div>
+        <Field label="Name">
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} />
+        </Field>
+        <Field label="Expected amount">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+      </div>
+    </Sheet>
   );
 }
 

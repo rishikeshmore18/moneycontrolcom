@@ -53,6 +53,11 @@ export interface CashFlowBreakdownItem {
   cycleEnd?: string;
   periodDate?: string;
   pendingAmount?: number;
+  jobId?: string;
+  payDate?: string;
+  incomeSourceType?: "salary_paycheck" | "work_paycheck";
+  incomeEntryIds?: string[];
+  incomeEntries?: TimesheetEntry[];
 }
 
 export interface CashFlowBreakdownSection {
@@ -544,6 +549,7 @@ function paycheckDetail(payDate: string, entries: TimesheetEntry[]): string {
 
 function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlowBreakdownItem[] {
   const jobsById = new Map(state.jobs.map((job) => [job.id, job]));
+  const incomeOverrides = state.plannedIncomeOverrides ?? [];
   const entries = monthRefsForIncomeRange(range).flatMap((monthRef) =>
     forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
   );
@@ -581,6 +587,11 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
       detail: `Scheduled paycheck - ${formatDisplayDate(entry.date)}`,
       amount: timesheetEntryAmount(entry),
       periodDate: entry.date,
+      jobId: entry.jobId,
+      payDate: entry.date,
+      incomeSourceType: "salary_paycheck" as const,
+      incomeEntryIds: [entry.id],
+      incomeEntries: [entry],
     }));
 
   const groups = new Map<
@@ -610,9 +621,35 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
     detail: paycheckDetail(group.payDate, group.entries),
     amount: Math.round(group.amount * 100) / 100,
     periodDate: group.payDate,
+    jobId: group.entries[0]?.jobId,
+    payDate: group.payDate,
+    incomeSourceType: "work_paycheck" as const,
+    incomeEntryIds: group.entries.map((entry) => entry.id),
+    incomeEntries: group.entries,
   }));
 
-  return sortByDueDate([...salaryItems, ...paycheckItems]);
+  const items = [...salaryItems, ...paycheckItems].flatMap((item) => {
+    const override = incomeOverrides.find(
+      (candidate) => candidate.sourceId === item.id && candidate.payDate === item.payDate,
+    );
+    if (override?.action === "skip") return [];
+    if (override?.action === "override") {
+      const amount = override.amount ?? item.amount;
+      if (amount <= 0) return [];
+      return [
+        {
+          ...item,
+          label: override.label ?? item.label,
+          amount,
+          overrideId: override.id,
+          detail: `${item.detail} - edited for this payday`,
+        },
+      ];
+    }
+    return [item];
+  });
+
+  return sortByDueDate(items);
 }
 
 function unpaidPendingIncomeItems(
