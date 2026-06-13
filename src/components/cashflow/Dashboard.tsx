@@ -74,6 +74,8 @@ type IncomeAction =
   | { type: "edit_job"; item: CashFlowBreakdownItem }
   | { type: "remove"; item: CashFlowBreakdownItem };
 
+type SpendableAction = { type: "change_card_payment_date"; item: CashFlowBreakdownItem };
+
 function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
@@ -93,6 +95,7 @@ export function Dashboard() {
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownKey | null>(null);
   const [expenseAction, setExpenseAction] = useState<ExpenseAction | null>(null);
   const [incomeAction, setIncomeAction] = useState<IncomeAction | null>(null);
+  const [spendableAction, setSpendableAction] = useState<SpendableAction | null>(null);
   const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
   const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange());
 
@@ -101,7 +104,7 @@ export function Dashboard() {
   const incomeComing = pendingIncome(state, new Date(), cashFlowPeriod, customRange);
   const expensesComing = expensesComingTotal(state, new Date(), cashFlowPeriod, customRange);
   const leftToSpend = haveNow + incomeComing - expensesComing;
-  const spendableNow = spendableToday(state);
+  const spendableNow = spendableToday(state, new Date(), cashFlowPeriod, customRange);
   const sts = safeToSpend(state);
   const recent = useMemo(() => state.transactions.slice(0, 8), [state.transactions]);
   const breakdowns = useMemo(
@@ -142,10 +145,13 @@ export function Dashboard() {
       },
       spendable_today: {
         title: "Spendable today",
-        helper: "Surplus after future income, expenses, and your cash floor",
+        helper:
+          cashFlowPeriod === "this_month"
+            ? "Safe surplus through this month"
+            : `Safe surplus through ${formatDisplayDate(selectedRange.end)}`,
         total: spendableNow,
         tone: spendableNow < 0 ? ("red" as const) : ("green" as const),
-        sections: spendableTodayBreakdown(state),
+        sections: spendableTodayBreakdown(state, new Date(), cashFlowPeriod, customRange),
       },
     }),
     [
@@ -363,11 +369,14 @@ export function Dashboard() {
         formatMoney={m}
         incomeMode={activeBreakdown === "income_coming"}
         expenseMode={activeBreakdown === "expenses_coming"}
+        spendableMode={activeBreakdown === "spendable_today"}
         onIncomeAction={setIncomeAction}
+        onSpendableAction={setSpendableAction}
         onAddExpense={() => setExpenseAction({ type: "add_one_time" })}
         onExpenseAction={setExpenseAction}
       />
       <IncomeActionSheets action={incomeAction} onClose={() => setIncomeAction(null)} />
+      <SpendableActionSheets action={spendableAction} onClose={() => setSpendableAction(null)} />
       <ExpenseActionSheets
         action={expenseAction}
         onClose={() => setExpenseAction(null)}
@@ -690,7 +699,9 @@ function BreakdownSheet({
   formatMoney,
   incomeMode,
   expenseMode,
+  spendableMode,
   onIncomeAction,
+  onSpendableAction,
   onAddExpense,
   onExpenseAction,
 }: {
@@ -704,7 +715,9 @@ function BreakdownSheet({
   formatMoney: (n: number) => string;
   incomeMode?: boolean;
   expenseMode?: boolean;
+  spendableMode?: boolean;
   onIncomeAction?: (action: IncomeAction) => void;
+  onSpendableAction?: (action: SpendableAction) => void;
   onAddExpense?: () => void;
   onExpenseAction?: (action: ExpenseAction) => void;
 }) {
@@ -770,6 +783,9 @@ function BreakdownSheet({
                     {incomeMode && onIncomeAction && (
                       <IncomeItemActions item={item} onAction={onIncomeAction} />
                     )}
+                    {spendableMode && onSpendableAction && (
+                      <SpendableItemActions item={item} onAction={onSpendableAction} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -778,6 +794,25 @@ function BreakdownSheet({
         })}
       </div>
     </Sheet>
+  );
+}
+
+function SpendableItemActions({
+  item,
+  onAction,
+}: {
+  item: CashFlowBreakdownItem;
+  onAction: (action: SpendableAction) => void;
+}) {
+  if (item.sourceType !== "card_due") return null;
+  return (
+    <div className="flex flex-wrap gap-2">
+      <MiniAction
+        label="Change payment date"
+        icon={CalendarClock}
+        onClick={() => onAction({ type: "change_card_payment_date", item })}
+      />
+    </div>
   );
 }
 
@@ -990,6 +1025,111 @@ function IncomeActionSheets({
   }
 
   return null;
+}
+
+function SpendableActionSheets({
+  action,
+  onClose,
+}: {
+  action: SpendableAction | null;
+  onClose: () => void;
+}) {
+  if (!action) return null;
+
+  if (action.type === "change_card_payment_date") {
+    return <CardPaymentDateSheet item={action.item} onClose={onClose} />;
+  }
+
+  return null;
+}
+
+function CardPaymentDateSheet({
+  item,
+  onClose,
+}: {
+  item: CashFlowBreakdownItem;
+  onClose: () => void;
+}) {
+  const { dispatch } = useApp();
+  const originalDate = item.dueDate ?? item.periodDate ?? todayISO();
+  const [date, setDate] = useState(originalDate);
+  const [amount, setAmount] = useState(String(Math.abs(item.amount)));
+
+  function save() {
+    const amt = toNumber(amount);
+    if (amt <= 0) return toast("Enter an amount");
+    const payload = {
+      sourceType: "card_due" as const,
+      sourceId: item.id,
+      month: originalDate.slice(0, 7),
+      action: "override" as const,
+      name: item.label,
+      amount: amt,
+      dueDay: Number(date.slice(8, 10)) || undefined,
+      dueDate: date,
+    };
+
+    if (item.overrideId) {
+      dispatch({
+        type: "UPDATE_PLANNED_EXPENSE_OVERRIDE",
+        payload: { ...payload, id: item.overrideId },
+      });
+    } else {
+      dispatch({ type: "ADD_PLANNED_EXPENSE_OVERRIDE", payload });
+    }
+    toast("Card payment date updated");
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Card payment date"
+      footer={
+        <div className="flex w-full items-center justify-between gap-2">
+          <div>
+            {item.overrideId && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId! });
+                  toast("Card payment date reset");
+                  onClose();
+                }}
+              >
+                Reset date
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={save}>
+              Save
+            </Button>
+          </div>
+        </div>
+      }
+    >
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+          Move this protected card payment to the date you expect to pay it. The spendable forecast
+          will count it in whichever selected range contains that date.
+        </div>
+        <Field label="Card payment">
+          <Input value={item.label} readOnly />
+        </Field>
+        <Field label="Expected payment date">
+          <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </Field>
+        <Field label="Protected amount">
+          <Input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        </Field>
+      </div>
+    </Sheet>
+  );
 }
 
 function IncomePaydayOverrideSheet({

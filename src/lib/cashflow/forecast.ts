@@ -417,8 +417,10 @@ function eventDateInRange(date: string, range: ForecastDateRange): boolean {
   return date >= range.start && date <= range.end;
 }
 
-function clampEventDate(date: string, range: ForecastDateRange): string {
-  return date < range.start ? range.start : date;
+function cardPaymentOverride(state: AppState, itemId: string): PlannedExpenseOverride | undefined {
+  return (state.plannedExpenseOverrides ?? []).find(
+    (override) => override.sourceType === "card_due" && override.sourceId === itemId,
+  );
 }
 
 function cardCashFlowItemsForRange(
@@ -428,6 +430,27 @@ function cardCashFlowItemsForRange(
 ): CashFlowBreakdownItem[] {
   const today = toISO(ref);
   const items: CashFlowBreakdownItem[] = [];
+  const generationEnd = toISO(addMonths(fromISODate(range.end), 2));
+
+  function pushCardItem(item: CashFlowBreakdownItem) {
+    const override = cardPaymentOverride(state, item.id);
+    if (override?.action === "skip") return;
+    const rawDueDate = override?.dueDate ?? item.dueDate ?? item.periodDate ?? today;
+    if (!eventDateInRange(rawDueDate, range)) return;
+    const amount = override?.amount ?? item.amount;
+    if (amount <= 0) return;
+    items.push({
+      ...item,
+      label: override?.name ?? item.label,
+      amount,
+      overrideId: override?.id,
+      dueDate: rawDueDate,
+      periodDate: rawDueDate,
+      detail: override?.dueDate
+        ? `${item.detail} - payment date changed to ${formatDisplayDate(rawDueDate)}`
+        : item.detail,
+    });
+  }
 
   state.cards.forEach((card) => {
     if (card.currentBalance <= 0) return;
@@ -441,17 +464,15 @@ function cardCashFlowItemsForRange(
           : fallbackCycle.dueDate >= today
             ? fallbackCycle.dueDate
             : today;
-      const dueDate = clampEventDate(rawDueDate, range);
-      if (!eventDateInRange(dueDate, range)) return;
-      items.push({
-        id: `${card.id}:cash-payoff`,
+      pushCardItem({
+        id: `${card.id}:cash-payoff:${rawDueDate}`,
         label: card.name,
-        detail: `Card balance planned for payment by ${formatDisplayDate(dueDate)}`,
+        detail: `Card balance planned for payment by ${formatDisplayDate(rawDueDate)}`,
         amount: card.currentBalance,
         sourceType: "card_due",
         sourceId: card.id,
-        dueDate,
-        periodDate: dueDate,
+        dueDate: rawDueDate,
+        periodDate: rawDueDate,
       });
       return;
     }
@@ -461,40 +482,34 @@ function cardCashFlowItemsForRange(
     const currentTargetPaydown = paydownToTarget(card);
 
     if (card.zeroAprEndDate && cycle.cycleEnd >= card.zeroAprEndDate) {
-      const dueDate = clampEventDate(cycle.cycleEnd, range);
-      if (eventDateInRange(dueDate, range)) {
-        items.push({
-          id: `${card.id}:promo-payoff:${cycle.cycleEnd}`,
-          label: card.name,
-          detail: `0% APR payoff before statement closes ${formatDisplayDate(cycle.cycleEnd)}`,
-          amount: remainingBalance,
-          sourceType: "card_due",
-          sourceId: card.id,
-          dueDate,
-          cycleStart: cycle.cycleStart,
-          cycleEnd: cycle.cycleEnd,
-          periodDate: dueDate,
-        });
-      }
+      pushCardItem({
+        id: `${card.id}:promo-payoff:${cycle.cycleEnd}`,
+        label: card.name,
+        detail: `0% APR payoff before statement closes ${formatDisplayDate(cycle.cycleEnd)}`,
+        amount: remainingBalance,
+        sourceType: "card_due",
+        sourceId: card.id,
+        dueDate: cycle.cycleEnd,
+        cycleStart: cycle.cycleStart,
+        cycleEnd: cycle.cycleEnd,
+        periodDate: cycle.cycleEnd,
+      });
       return;
     }
 
     if (currentTargetPaydown > 0) {
-      const dueDate = clampEventDate(cycle.cycleEnd, range);
-      if (eventDateInRange(dueDate, range)) {
-        items.push({
-          id: `${card.id}:target-paydown:${cycle.cycleEnd}`,
-          label: card.name,
-          detail: `Pay down to ${card.targetUtilizationPercent}% before statement closes ${formatDisplayDate(cycle.cycleEnd)}`,
-          amount: currentTargetPaydown,
-          sourceType: "card_due",
-          sourceId: card.id,
-          dueDate,
-          cycleStart: cycle.cycleStart,
-          cycleEnd: cycle.cycleEnd,
-          periodDate: dueDate,
-        });
-      }
+      pushCardItem({
+        id: `${card.id}:target-paydown:${cycle.cycleEnd}`,
+        label: card.name,
+        detail: `Pay down to ${card.targetUtilizationPercent}% before statement closes ${formatDisplayDate(cycle.cycleEnd)}`,
+        amount: currentTargetPaydown,
+        sourceType: "card_due",
+        sourceId: card.id,
+        dueDate: cycle.cycleEnd,
+        cycleStart: cycle.cycleStart,
+        cycleEnd: cycle.cycleEnd,
+        periodDate: cycle.cycleEnd,
+      });
       remainingBalance = Math.max(0, remainingBalance - currentTargetPaydown);
     }
 
@@ -504,10 +519,9 @@ function cardCashFlowItemsForRange(
         ? remainingBalance
         : Math.min(card.minimumDue, remainingBalance);
       const rawDueDate = promoEndsThisCycle ? cycle.cycleEnd : cycle.dueDate;
-      const dueDate = clampEventDate(rawDueDate, range);
 
-      if (amount > 0 && eventDateInRange(dueDate, range)) {
-        items.push({
+      if (amount > 0) {
+        pushCardItem({
           id: `${card.id}:${promoEndsThisCycle ? "promo-payoff" : "minimum-due"}:${cycle.cycleEnd}`,
           label: promoEndsThisCycle ? card.name : `${card.name} minimum`,
           detail: promoEndsThisCycle
@@ -516,15 +530,15 @@ function cardCashFlowItemsForRange(
           amount,
           sourceType: "card_due",
           sourceId: card.id,
-          dueDate,
+          dueDate: rawDueDate,
           cycleStart: cycle.cycleStart,
           cycleEnd: cycle.cycleEnd,
-          periodDate: dueDate,
+          periodDate: rawDueDate,
         });
       }
 
       remainingBalance = Math.max(0, remainingBalance - amount);
-      if (promoEndsThisCycle || cycle.cycleEnd > range.end) break;
+      if (promoEndsThisCycle || cycle.cycleEnd > generationEnd) break;
       cycle = currentOpenCycle(card, addDays(fromISODate(cycle.cycleEnd), 1));
     }
   });
@@ -938,11 +952,14 @@ interface CashFlowTimelineEvent {
   date: string;
   amount: number;
   balanceAfter: number;
+  sourceItem?: CashFlowBreakdownItem;
 }
 
 function spendableTodayProjection(
   state: AppState,
   ref: Date = new Date(),
+  period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): {
   range: ForecastDateRange;
   startingCash: number;
@@ -951,9 +968,10 @@ function spendableTodayProjection(
   events: CashFlowTimelineEvent[];
 } {
   const today = toISO(ref);
+  const selectedRange = cashFlowPeriodRange(period, ref, customRange);
   const range = {
-    start: today,
-    end: toISO(new Date(ref.getFullYear(), ref.getMonth() + 6, ref.getDate())),
+    start: selectedRange.start < today ? today : selectedRange.start,
+    end: selectedRange.end < today ? today : selectedRange.end,
   };
   const incomeEvents = incomeItemsForRange(state, range).map((item) => ({
     id: `income-${item.id}`,
@@ -980,6 +998,7 @@ function spendableTodayProjection(
       detail: item.detail ? `Upcoming card bills - ${item.detail}` : "Upcoming card bills",
       date: item.dueDate ?? item.periodDate ?? today,
       amount: -item.amount,
+      sourceItem: item,
     })),
   ];
   const orderedEvents = [...incomeEvents, ...expenseEvents].sort((a, b) => {
@@ -1006,15 +1025,22 @@ function spendableTodayProjection(
   };
 }
 
-export function spendableToday(state: AppState, ref: Date = new Date()): number {
-  return spendableTodayProjection(state, ref).safeSurplus;
+export function spendableToday(
+  state: AppState,
+  ref: Date = new Date(),
+  period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
+): number {
+  return spendableTodayProjection(state, ref, period, customRange).safeSurplus;
 }
 
 export function spendableTodayBreakdown(
   state: AppState,
   ref: Date = new Date(),
+  period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
-  const projection = spendableTodayProjection(state, ref);
+  const projection = spendableTodayProjection(state, ref, period, customRange);
   const pressureEvents = projection.events
     .filter((event) => event.balanceAfter <= projection.lowestBalance + 0.001)
     .slice(0, 5);
@@ -1067,15 +1093,25 @@ export function spendableTodayBreakdown(
   if (cardEvents.length > 0) {
     sections.push({
       title: "Card payments protected",
-      items: cardEvents.map((event) => ({
-        id: `card-${event.id}`,
-        label: event.label,
-        detail: `${formatDisplayDate(event.date)} - balance after ${formatMoney(
-          event.balanceAfter,
-          state.profile.currency,
-        )}`,
-        amount: event.amount,
-      })),
+      items: cardEvents.map((event) => {
+        const sourceItem = event.sourceItem;
+        return {
+          id: sourceItem?.id ?? `card-${event.id}`,
+          label: event.label,
+          detail: `${formatDisplayDate(event.date)} - balance after ${formatMoney(
+            event.balanceAfter,
+            state.profile.currency,
+          )}`,
+          amount: event.amount,
+          sourceType: sourceItem?.sourceType,
+          sourceId: sourceItem?.sourceId,
+          overrideId: sourceItem?.overrideId,
+          dueDate: sourceItem?.dueDate ?? event.date,
+          periodDate: sourceItem?.periodDate ?? event.date,
+          cycleStart: sourceItem?.cycleStart,
+          cycleEnd: sourceItem?.cycleEnd,
+        };
+      }),
     });
   }
 
