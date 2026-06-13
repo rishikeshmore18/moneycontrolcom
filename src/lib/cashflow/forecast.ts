@@ -8,7 +8,6 @@ import {
   TimesheetEntry,
 } from "./types";
 import {
-  cycleForDate,
   currentOpenCycle,
   expensesInCycle,
   isLikelyPendingNearStatement,
@@ -456,22 +455,18 @@ function cardCashFlowItemsForRange(
     if (card.currentBalance <= 0) return;
 
     if (!isZeroAprCard(card)) {
-      const dueCycle = cycleForDate(card, ref);
-      const fallbackCycle = currentOpenCycle(card, ref);
-      const rawDueDate =
-        dueCycle.dueDate >= today
-          ? dueCycle.dueDate
-          : fallbackCycle.dueDate >= today
-            ? fallbackCycle.dueDate
-            : today;
+      const cycle = currentOpenCycle(card, ref);
+      const rawDueDate = cycle.cycleEnd >= today ? cycle.cycleEnd : today;
       pushCardItem({
         id: `${card.id}:cash-payoff:${rawDueDate}`,
         label: card.name,
-        detail: `Card balance planned for payment by ${formatDisplayDate(rawDueDate)}`,
+        detail: `Statement closes ${formatDisplayDate(cycle.cycleEnd)} - planned for payment when generated`,
         amount: card.currentBalance,
         sourceType: "card_due",
         sourceId: card.id,
         dueDate: rawDueDate,
+        cycleStart: cycle.cycleStart,
+        cycleEnd: cycle.cycleEnd,
         periodDate: rawDueDate,
       });
       return;
@@ -518,7 +513,7 @@ function cardCashFlowItemsForRange(
       const amount = promoEndsThisCycle
         ? remainingBalance
         : Math.min(card.minimumDue, remainingBalance);
-      const rawDueDate = promoEndsThisCycle ? cycle.cycleEnd : cycle.dueDate;
+      const rawDueDate = cycle.cycleEnd;
 
       if (amount > 0) {
         pushCardItem({
@@ -526,7 +521,7 @@ function cardCashFlowItemsForRange(
           label: promoEndsThisCycle ? card.name : `${card.name} minimum`,
           detail: promoEndsThisCycle
             ? `0% APR payoff before statement closes ${formatDisplayDate(cycle.cycleEnd)}`
-            : `Estimated minimum due ${formatDisplayDate(cycle.dueDate)} after statement closes ${formatDisplayDate(cycle.cycleEnd)}`,
+            : `Estimated minimum after statement closes ${formatDisplayDate(cycle.cycleEnd)} - due ${formatDisplayDate(cycle.dueDate)}`,
           amount,
           sourceType: "card_due",
           sourceId: card.id,
