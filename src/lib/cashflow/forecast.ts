@@ -49,7 +49,9 @@ export interface CashFlowBreakdownItem {
   overrideId?: string;
   dueDate?: string;
   dueDay?: number;
+  paymentMethod?: "account" | "card";
   accountId?: string;
+  cardId?: string;
   category?: string;
   cycleStart?: string;
   cycleEnd?: string;
@@ -249,18 +251,30 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
     if (!bill.active) return [];
     const override = overrideFor(state, "recurring_bill", bill.id, ref);
     if (override?.action === "skip") return [];
+    const paymentMethod =
+      override?.paymentMethod ??
+      bill.paymentMethod ??
+      (override?.cardId || bill.cardId ? "card" : "account");
     const accountId = override?.accountId ?? bill.accountId;
+    const cardId = override?.cardId ?? bill.cardId;
     const account = state.accounts.find((item) => item.id === accountId);
+    const card = state.cards.find((item) => item.id === cardId);
     const baseDueDate = recurringBillDueDate(bill, ref);
     const dueDay = override?.dueDay ?? Number(baseDueDate.slice(8, 10));
     const dueDate =
       override?.dueDate ?? (override?.dueDay ? dateForMonthDay(ref, dueDay) : baseDueDate);
+    const destination =
+      paymentMethod === "card" && card
+        ? card.name
+        : paymentMethod === "card"
+          ? "Credit card"
+          : account?.name;
     return [
       {
         id: `${bill.id}:${monthKey(ref)}`,
         label: override?.name ?? bill.name,
-        detail: account
-          ? `Due ${formatDisplayDate(dueDate)} - ${account.name}`
+        detail: destination
+          ? `Due ${formatDisplayDate(dueDate)} - ${destination}`
           : `Due ${formatDisplayDate(dueDate)}`,
         amount: override?.amount ?? bill.amount,
         sourceType: "recurring_bill" as const,
@@ -268,7 +282,9 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
         overrideId: override?.id,
         dueDay,
         dueDate,
+        paymentMethod,
         accountId,
+        cardId,
         category: override?.category ?? "Bills",
       },
     ];
@@ -277,20 +293,30 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
   const oneTime = monthlyOverrides(state, ref)
     .filter((override) => override.sourceType === "one_time" && override.action === "add")
     .map((override) => {
+      const paymentMethod = override.paymentMethod ?? (override.cardId ? "card" : "account");
       const account = state.accounts.find((item) => item.id === override.accountId);
+      const card = state.cards.find((item) => item.id === override.cardId);
       const dueDate = override.dueDate ?? dateForMonthDay(ref, override.dueDay ?? 1);
+      const destination =
+        paymentMethod === "card" && card
+          ? card.name
+          : paymentMethod === "card"
+            ? "Credit card"
+            : account?.name;
       return {
         id: override.id,
         label: override.name ?? "Planned expense",
-        detail: account
-          ? `Due ${formatDisplayDate(dueDate)} - ${account.name}`
+        detail: destination
+          ? `Due ${formatDisplayDate(dueDate)} - ${destination}`
           : `Due ${formatDisplayDate(dueDate)}`,
         amount: override.amount ?? 0,
         sourceType: "one_time" as const,
         overrideId: override.id,
         dueDay: override.dueDay,
         dueDate,
+        paymentMethod,
         accountId: override.accountId,
+        cardId: override.cardId,
         category: override.category ?? "Other",
       };
     });

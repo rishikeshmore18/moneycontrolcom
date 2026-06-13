@@ -172,6 +172,11 @@ export function Profile() {
             <div>
               <div className="font-bold">{b.name}</div>
               <div className="text-xs text-muted-foreground">{recurringBillScheduleLabel(b)}</div>
+              {b.cardId && (
+                <div className="text-xs text-[color:var(--warn)]">
+                  Charges to {state.cards.find((card) => card.id === b.cardId)?.name ?? "card"}
+                </div>
+              )}
             </div>
             <div className="font-black">{formatMoney(b.amount, cur)}</div>
           </>
@@ -864,7 +869,9 @@ export function RecurringSheet({
       dueRule: "day_of_month",
       dueWeek: 1,
       dueWeekday: 4,
+      paymentMethod: "account",
       accountId: state.accounts[0]?.id ?? "",
+      cardId: state.cards[0]?.id,
       active: true,
     },
   );
@@ -873,8 +880,14 @@ export function RecurringSheet({
   }
   function save() {
     if (!b.name.trim()) return toast("Name it");
+    const paymentMethod = b.paymentMethod ?? (b.cardId ? "card" : "account");
+    if (paymentMethod === "account" && !b.accountId) return toast("Choose an account");
+    if (paymentMethod === "card" && !b.cardId) return toast("Choose a card");
     const payload: Omit<RecurringBill, "id"> = {
       ...b,
+      paymentMethod,
+      accountId: paymentMethod === "account" ? b.accountId : "",
+      cardId: paymentMethod === "card" ? b.cardId : undefined,
       dueRule: b.dueRule ?? "day_of_month",
       dueDay: Math.min(Math.max(1, b.dueDay || 1), 31),
       dueWeek:
@@ -965,15 +978,37 @@ export function RecurringSheet({
             </Field>
           </>
         )}
-        <Field label="Paid from">
-          <Select value={b.accountId} onChange={(e) => up("accountId", e.target.value)}>
-            {state.accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
+        <Field label="Paid with">
+          <Select
+            value={b.paymentMethod ?? (b.cardId ? "card" : "account")}
+            onChange={(e) => up("paymentMethod", e.target.value as "account" | "card")}
+          >
+            <option value="account">Account</option>
+            <option value="card">Credit card</option>
           </Select>
         </Field>
+        {(b.paymentMethod ?? (b.cardId ? "card" : "account")) === "account" ? (
+          <Field label="Account">
+            <Select value={b.accountId} onChange={(e) => up("accountId", e.target.value)}>
+              {state.accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="Credit card">
+            <Select value={b.cardId ?? ""} onChange={(e) => up("cardId", e.target.value)}>
+              <option value="">Pick a card...</option>
+              {state.cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
     </Sheet>
   );

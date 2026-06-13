@@ -152,7 +152,9 @@ export interface RecurringBill {
   dueRule?: "day_of_month" | "weekday_of_month";
   dueWeek?: number; // 1=first week, 5=last matching weekday
   dueWeekday?: number; // 0=Sun..6=Sat
+  paymentMethod?: "account" | "card";
   accountId: string;
+  cardId?: string;
   active: boolean;
 }
 
@@ -169,7 +171,9 @@ export interface PlannedExpenseOverride {
   amount?: number;
   dueDay?: number;
   dueDate?: string;
+  paymentMethod?: "account" | "card";
   accountId?: string;
+  cardId?: string;
   category?: string;
   notes?: string;
 }

@@ -1643,7 +1643,11 @@ function PlannedExpenseSheet({
   const [name, setName] = useState(item?.label ?? "");
   const [amount, setAmount] = useState(String(item?.amount ?? ""));
   const [dueDate, setDueDate] = useState(item?.dueDate ?? `${month}-01`);
+  const [paymentMethod, setPaymentMethod] = useState<"account" | "card">(
+    item?.paymentMethod ?? (item?.cardId ? "card" : "account"),
+  );
   const [accountId, setAccountId] = useState(item?.accountId ?? state.accounts[0]?.id ?? "");
+  const [cardId, setCardId] = useState(item?.cardId ?? state.cards[0]?.id ?? "");
   const [category, setCategory] = useState(item?.category ?? state.categories?.[0] ?? "Other");
   const [newCategory, setNewCategory] = useState("");
   const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
@@ -1655,6 +1659,8 @@ function PlannedExpenseSheet({
     if (!name.trim()) return toast("Name the expense");
     if (amt <= 0) return toast("Enter an amount");
     if (!selectedCategory) return toast("Choose a category");
+    if (paymentMethod === "account" && !accountId) return toast("Choose an account");
+    if (paymentMethod === "card" && !cardId) return toast("Choose a card");
     if (category === "__new") dispatch({ type: "ADD_CATEGORY", category: selectedCategory });
 
     const payload = {
@@ -1667,7 +1673,9 @@ function PlannedExpenseSheet({
       amount: amt,
       dueDay: Number(dueDate.slice(8, 10)) || undefined,
       dueDate,
-      accountId,
+      paymentMethod,
+      accountId: paymentMethod === "account" ? accountId : undefined,
+      cardId: paymentMethod === "card" ? cardId : undefined,
       category: selectedCategory,
     };
 
@@ -1709,15 +1717,36 @@ function PlannedExpenseSheet({
         <Field label="Due date">
           <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
         </Field>
-        <Field label="Paid from">
-          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            {state.accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
+        <Field label="Paid with">
+          <Select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value as "account" | "card")}
+          >
+            <option value="account">Account</option>
+            <option value="card">Credit card</option>
           </Select>
         </Field>
+        {paymentMethod === "account" ? (
+          <Field label="Account">
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              {state.accounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="Credit card">
+            <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
+              {state.cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="Category">
           <Select value={category} onChange={(e) => setCategory(e.target.value)}>
             {categories.map((item) => (
@@ -1751,13 +1780,18 @@ function PayBillSheet({
   const cur = state.profile.currency;
   const [amount, setAmount] = useState(String(item.amount));
   const [date, setDate] = useState(item.dueDate ?? todayISO());
+  const [paymentMethod, setPaymentMethod] = useState<"account" | "card">(
+    item.paymentMethod ?? (item.cardId ? "card" : "account"),
+  );
   const [accountId, setAccountId] = useState(item.accountId ?? state.accounts[0]?.id ?? "");
+  const [cardId, setCardId] = useState(item.cardId ?? state.cards[0]?.id ?? "");
   const account = state.accounts.find((candidate) => candidate.id === accountId);
 
   function pay() {
     const amt = toNumber(amount);
     if (amt <= 0) return toast("Enter an amount");
-    if (!accountId) return toast("Choose an account");
+    if (paymentMethod === "account" && !accountId) return toast("Choose an account");
+    if (paymentMethod === "card" && !cardId) return toast("Choose a card");
     dispatch({
       type: "ADD_EXPENSE",
       payload: {
@@ -1765,8 +1799,10 @@ function PayBillSheet({
         category: item.category ?? "Bills",
         description: item.label,
         date,
-        method: account?.type === "cash" ? "cash" : "debit",
-        sourceAccountId: accountId,
+        method:
+          paymentMethod === "card" ? "credit_card" : account?.type === "cash" ? "cash" : "debit",
+        sourceAccountId: paymentMethod === "account" ? accountId : undefined,
+        cardId: paymentMethod === "card" ? cardId : undefined,
       },
     });
     toast(`${item.label} paid - ${formatMoney(amt, cur)}`);
@@ -1796,15 +1832,36 @@ function PayBillSheet({
         <Field label="Payment date">
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        <Field label="Paid from">
-          <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-            {state.accounts.filter(isSpendableAccount).map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name} - {formatMoney(account.balance, cur)}
-              </option>
-            ))}
+        <Field label="Paid with">
+          <Select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value as "account" | "card")}
+          >
+            <option value="account">Account</option>
+            <option value="card">Credit card</option>
           </Select>
         </Field>
+        {paymentMethod === "account" ? (
+          <Field label="Account">
+            <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+              {state.accounts.filter(isSpendableAccount).map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name} - {formatMoney(account.balance, cur)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="Credit card">
+            <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
+              {state.cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
       </div>
     </Sheet>
   );
