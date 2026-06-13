@@ -867,68 +867,79 @@ function AffordabilityDialog({
 }) {
   const blocked = !affordability.affordable;
   return (
-    <div className="fixed inset-x-4 bottom-5 z-[90] mx-auto max-w-sm rounded-2xl border border-border bg-card p-4 shadow-2xl sm:bottom-auto sm:right-8 sm:top-24 sm:mx-0">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="text-sm font-black">
-            {blocked ? "Cash short on this date" : "Covered on this date"}
+    <div
+      className="fixed inset-0 z-[90] grid place-items-center bg-black/65 px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Expense affordability details"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-border bg-[color:var(--card)] p-5 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div
+              className={`text-sm font-black ${
+                blocked ? "text-[color:var(--bad)]" : "text-[color:var(--good)]"
+              }`}
+            >
+              {blocked ? "Cash short on this date" : "Covered on this date"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {affordability.label} on {formatDisplayDate(affordability.date)}
+            </div>
           </div>
-          <div className="mt-1 text-xs text-muted-foreground">
-            {affordability.label} on {formatDisplayDate(affordability.date)}
-          </div>
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-full p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-          aria-label="Close affordability details"
-        >
-          x
-        </button>
-      </div>
-      <div className="mt-3 grid gap-2 text-sm">
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">Projected cash before</span>
-          <span className="font-bold">{formatMoney(affordability.balanceBefore)}</span>
-        </div>
-        <div className="flex justify-between gap-3">
-          <span className="text-muted-foreground">This expense</span>
-          <span className="font-bold text-[color:var(--bad)]">
-            -{formatMoney(affordability.amount)}
-          </span>
-        </div>
-        <div className="flex justify-between gap-3 border-t border-border pt-2">
-          <span className="text-muted-foreground">Projected cash after</span>
-          <span
-            className={`font-black ${
-              affordability.balanceAfter < 0 ? "text-[color:var(--bad)]" : ""
-            }`}
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-muted text-lg leading-none text-muted-foreground transition hover:bg-muted/80 hover:text-foreground"
+            aria-label="Close affordability details"
           >
-            {formatMoney(affordability.balanceAfter)}
-          </span>
+            x
+          </button>
         </div>
-      </div>
-      <div className="mt-3 rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
-        {blocked ? (
-          affordability.recoveryDate ? (
-            <>
-              Paying this on {formatDisplayDate(affordability.date)} would put projected cash below
-              zero. Based on scheduled income and expenses, projected cash recovers on{" "}
-              {formatDisplayDate(affordability.recoveryDate)} to{" "}
-              {formatMoney(affordability.recoveryBalance ?? 0)}.
-            </>
+        <div className="mt-4 grid gap-2 rounded-2xl border border-border bg-muted/20 p-3 text-sm">
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">Projected cash before</span>
+            <span className="font-bold">{formatMoney(affordability.balanceBefore)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-muted-foreground">This expense</span>
+            <span className="font-bold text-[color:var(--bad)]">
+              -{formatMoney(affordability.amount)}
+            </span>
+          </div>
+          <div className="flex justify-between gap-3 border-t border-border pt-2">
+            <span className="text-muted-foreground">Projected cash after</span>
+            <span
+              className={`font-black ${
+                affordability.balanceAfter < 0 ? "text-[color:var(--bad)]" : ""
+              }`}
+            >
+              {formatMoney(affordability.balanceAfter)}
+            </span>
+          </div>
+        </div>
+        <div className="mt-4 rounded-xl border border-border bg-[color:var(--background)] p-3 text-xs leading-relaxed text-muted-foreground">
+          {blocked ? (
+            affordability.recoveryDate ? (
+              <>
+                Paying this on {formatDisplayDate(affordability.date)} would put projected cash
+                below zero. Based on scheduled income and expenses, projected cash recovers on{" "}
+                {formatDisplayDate(affordability.recoveryDate)} to{" "}
+                {formatMoney(affordability.recoveryBalance ?? 0)}.
+              </>
+            ) : (
+              <>
+                Paying this on {formatDisplayDate(affordability.date)} would put projected cash
+                below zero, and the selected forecast range does not show a later recovery date.
+              </>
+            )
           ) : (
             <>
-              Paying this on {formatDisplayDate(affordability.date)} would put projected cash below
-              zero, and the selected forecast range does not show a later recovery date.
+              The selected forecast shows enough projected cash to cover this expense on{" "}
+              {formatDisplayDate(affordability.date)}.
             </>
-          )
-        ) : (
-          <>
-            The selected forecast shows enough projected cash to cover this expense on{" "}
-            {formatDisplayDate(affordability.date)}.
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
