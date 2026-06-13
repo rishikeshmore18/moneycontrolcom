@@ -1,5 +1,5 @@
 import { AppState, Debt, PlannedExpenseOverride, PlannedExpenseSourceType } from "./types";
-import { cycleForDate, expensesInCycle } from "./cardLogic";
+import { currentOpenCycle, expensesInCycle, isLikelyPendingNearStatement } from "./cardLogic";
 import { endOfMonth } from "./dates";
 import { entriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
 
@@ -15,6 +15,9 @@ export interface CashFlowBreakdownItem {
   dueDay?: number;
   accountId?: string;
   category?: string;
+  cycleStart?: string;
+  cycleEnd?: string;
+  pendingAmount?: number;
 }
 
 export interface CashFlowBreakdownSection {
@@ -160,37 +163,59 @@ export function cardMinimums(state: AppState): number {
 }
 
 /**
- * Cycle-aware: sum of card balances whose payment due date falls in the
- * current month. Uses the most recently closed cycle and the unreconciled
- * charges in that cycle as the amount actually coming due.
+ * Cycle-aware: expected upcoming card statements. Current card balances are
+ * treated as posted balances; tracked expenses in the final two days before
+ * statement close are held out as likely pending unless they are already part
+ * of an untracked posted balance snapshot.
  */
 function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
-  const monthEnd = endOfMonth(ref);
   return state.cards.flatMap((card) => {
-    const cycle = cycleForDate(card, ref);
-    if (cycle.dueDate <= toISO(monthEnd) && cycle.dueDate >= toISO(ref)) {
-      const charges = expensesInCycle(state.transactions, card.id, cycle).reduce(
-        (s, t) => s + t.amount,
-        0,
-      );
-      return [
-        {
-          id: card.id,
-          label: card.name,
-          detail: `Due ${cycle.dueDate} - cycle ${cycle.cycleStart} to ${cycle.cycleEnd}`,
-          amount: Math.max(Math.min(card.minimumDue, card.currentBalance), charges),
-          sourceType: "card_due" as const,
-          sourceId: card.id,
-          dueDate: cycle.dueDate,
-        },
-      ];
-    }
-    return [];
+    const cycle = currentOpenCycle(card, ref);
+    const cycleExpenses = expensesInCycle(state.transactions, card.id, cycle);
+    const postedCycleExpenses = cycleExpenses.filter(
+      (expense) => !isLikelyPendingNearStatement(expense.date, cycle),
+    );
+    const postedTrackedAmount = postedCycleExpenses.reduce((s, t) => s + t.amount, 0);
+    const unreconciledTrackedAmount = state.transactions
+      .filter(
+        (transaction) =>
+          transaction.type === "expense" &&
+          transaction.cardId === card.id &&
+          !transaction.reconciledByPaymentId,
+      )
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+    const untrackedPostedBalance = Math.max(0, card.currentBalance - unreconciledTrackedAmount);
+    const pendingTrackedAmount = cycleExpenses.reduce(
+      (sum, expense) =>
+        sum + (isLikelyPendingNearStatement(expense.date, cycle) ? expense.amount : 0),
+      0,
+    );
+    const amount = Math.min(card.currentBalance, untrackedPostedBalance + postedTrackedAmount);
+
+    if (amount <= 0) return [];
+    return [
+      {
+        id: card.id,
+        label: card.name,
+        detail: `Statement closes ${cycle.cycleEnd} - due ${cycle.dueDate}`,
+        amount,
+        sourceType: "card_due" as const,
+        sourceId: card.id,
+        dueDate: cycle.dueDate,
+        cycleStart: cycle.cycleStart,
+        cycleEnd: cycle.cycleEnd,
+        pendingAmount: pendingTrackedAmount,
+      },
+    ];
   });
 }
 
-export function cardDueThisMonth(state: AppState, ref: Date = new Date()): number {
+export function upcomingCardBills(state: AppState, ref: Date = new Date()): number {
   return cardDueItems(state, ref).reduce((s, item) => s + item.amount, 0);
+}
+
+export function cardDueThisMonth(state: AppState, ref: Date = new Date()): number {
+  return upcomingCardBills(state, ref);
 }
 
 function toISO(d: Date): string {
@@ -304,7 +329,7 @@ export function expensesComingBreakdown(
   if (recurringBillItems.length > 0) sections.push({ title: "Bills", items: recurringBillItems });
   if (oneTimeItems.length > 0)
     sections.push({ title: "One-time planned expenses", items: oneTimeItems });
-  if (cardItems.length > 0) sections.push({ title: "Cards due this month", items: cardItems });
+  if (cardItems.length > 0) sections.push({ title: "Upcoming card bills", items: cardItems });
   if (debtItems.length > 0) sections.push({ title: "Debt plan", items: debtItems });
   return sections;
 }
@@ -363,7 +388,7 @@ export function leftToSpendBreakdown(
         {
           id: "expenses-coming",
           label: "Expenses coming",
-          detail: "Bills, cards, and debt plan",
+          detail: "Bills, upcoming card bills, and debt plan",
           amount: -expensesComing,
         },
       ],

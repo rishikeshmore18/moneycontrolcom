@@ -17,7 +17,6 @@ import { Button } from "./Button";
 import { Field, Input, Select } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
 import {
-  cardDueThisMonth,
   type CashFlowBreakdownItem,
   type CashFlowBreakdownSection,
   debtPlannedPayments,
@@ -35,10 +34,16 @@ import {
   spendableCashBreakdown,
   totalCardDebt,
   totalCash,
+  upcomingCardBills,
   upcomingBillsThisMonth,
 } from "@/lib/cashflow/forecast";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
-import { cycleForDate, expensesInCycle, utilization } from "@/lib/cashflow/cardLogic";
+import {
+  currentOpenCycle,
+  expensesInCycle,
+  isLikelyPendingNearStatement,
+  utilization,
+} from "@/lib/cashflow/cardLogic";
 import { todayISO } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
@@ -94,7 +99,7 @@ export function Dashboard() {
       },
       expenses_coming: {
         title: "Expenses coming",
-        helper: "Bills, card due amounts, and debt plan for this month",
+        helper: "Bills, upcoming card bills, and debt plan",
         total: expensesComing,
         tone: "orange" as const,
         sections: expensesComingBreakdown(state),
@@ -206,7 +211,7 @@ export function Dashboard() {
         <Card>
           <SectionTitle title="This month" />
           <Row label="Upcoming bills" value={m(upcomingBillsThisMonth(state))} />
-          <Row label="Cards due this month" value={m(cardDueThisMonth(state))} />
+          <Row label="Upcoming card bills" value={m(upcomingCardBills(state))} />
           <Row label="Debt plan" value={m(debtPlannedPayments(state))} />
           <Row label="Pending income" value={m(pendingIncome(state))} tone="good" />
           <div className="mt-3 pt-3 border-t border-border">
@@ -1247,30 +1252,73 @@ function CardCycleSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClos
   const cur = state.profile.currency;
   const card = state.cards.find((candidate) => candidate.id === item.sourceId);
   if (!card) return null;
-  const cycle = cycleForDate(card, new Date());
+  const cycle =
+    item.cycleStart && item.cycleEnd && item.dueDate
+      ? { cycleStart: item.cycleStart, cycleEnd: item.cycleEnd, dueDate: item.dueDate }
+      : currentOpenCycle(card, new Date());
   const charges = expensesInCycle(state.transactions, card.id, cycle);
+  const postedCharges = charges.filter(
+    (charge) => !isLikelyPendingNearStatement(charge.date, cycle),
+  );
+  const pendingCharges = charges.filter((charge) =>
+    isLikelyPendingNearStatement(charge.date, cycle),
+  );
   return (
-    <Sheet open onClose={onClose} title="Cycle charges">
+    <Sheet open onClose={onClose} title="Upcoming card bill">
       <div className="grid gap-3">
         <div className="rounded-2xl border border-border bg-muted/30 p-3 text-sm">
-          {cycle.cycleStart} to {cycle.cycleEnd} - due {cycle.dueDate}
+          Statement closes {cycle.cycleEnd} - due {cycle.dueDate}
+          <div className="mt-1 text-xs text-muted-foreground">
+            Cycle {cycle.cycleStart} to {cycle.cycleEnd}
+          </div>
         </div>
         {charges.length === 0 && (
           <div className="text-sm text-muted-foreground">
-            No unreconciled charges in this cycle.
+            No individual charges are tracked for this cycle. The card current balance is treated as
+            posted.
           </div>
         )}
-        <div className="divide-y divide-border rounded-2xl border border-border">
-          {charges.map((charge) => (
-            <div key={charge.id} className="flex items-center justify-between gap-3 px-4 py-3">
-              <div>
-                <div className="font-bold">{charge.description || charge.category}</div>
-                <div className="text-xs text-muted-foreground">{charge.date}</div>
+        {postedCharges.length > 0 ? (
+          <div className="divide-y divide-border rounded-2xl border border-border">
+            {postedCharges.map((charge) => (
+              <div key={charge.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div>
+                  <div className="font-bold">{charge.description || charge.category}</div>
+                  <div className="text-xs text-muted-foreground">{charge.date}</div>
+                </div>
+                <div className="font-black">{formatMoney(charge.amount, cur)}</div>
               </div>
-              <div className="font-black">{formatMoney(charge.amount, cur)}</div>
+            ))}
+          </div>
+        ) : (
+          charges.length > 0 && (
+            <div className="rounded-2xl border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+              No tracked charges are counted in this statement because the tracked charges are in
+              the likely pending window.
             </div>
-          ))}
-        </div>
+          )
+        )}
+        {pendingCharges.length > 0 && (
+          <div className="rounded-2xl border border-border bg-muted/20 p-3">
+            <div className="text-sm font-extrabold">Held for next statement</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Expenses within 2 days of statement close are treated as likely pending.
+            </div>
+            <div className="mt-2 divide-y divide-border">
+              {pendingCharges.map((charge) => (
+                <div key={charge.id} className="flex items-center justify-between gap-3 py-2">
+                  <div>
+                    <div className="text-sm font-bold">{charge.description || charge.category}</div>
+                    <div className="text-xs text-muted-foreground">{charge.date}</div>
+                  </div>
+                  <div className="font-black text-muted-foreground">
+                    {formatMoney(charge.amount, cur)}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Sheet>
   );
