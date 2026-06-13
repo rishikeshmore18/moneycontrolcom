@@ -10,6 +10,7 @@ import {
   paydownToTarget,
   utilization,
 } from "@/lib/cashflow/cardLogic";
+import { formatDisplayDate } from "@/lib/cashflow/dates";
 import type { Card as CardT } from "@/lib/cashflow/types";
 
 export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
@@ -139,7 +140,7 @@ function ZeroAprBanner({ card, currency }: { card: CardT; currency: string }) {
         <span className="font-extrabold" style={{ color }}>
           {label}
         </span>
-        <span className="text-muted-foreground">ends {card.zeroAprEndDate}</span>
+        <span className="text-muted-foreground">ends {formatDisplayDate(card.zeroAprEndDate)}</span>
       </div>
       {card.currentBalance > 0 && promoEndsThisCycle && (
         <div className="mt-1 text-muted-foreground">

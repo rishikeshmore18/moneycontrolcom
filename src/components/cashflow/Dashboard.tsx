@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   CalendarClock,
-  ChevronDown,
   Eye,
   Info,
   Pencil,
@@ -19,14 +18,14 @@ import { useApp } from "@/lib/cashflow/AppContext";
 import {
   type CashFlowBreakdownItem,
   type CashFlowBreakdownSection,
-  debtPlannedPayments,
+  type CashFlowPeriod,
+  cashFlowPeriodLabels,
   expensesComingBreakdown,
   expensesComingTotal,
   leftToSpendBreakdown,
   netWorth,
   pendingIncome,
   pendingIncomeBreakdown,
-  projectedMonthEnd,
   safeToSpend,
   isSpendableAccount,
   spendableToday,
@@ -35,8 +34,6 @@ import {
   spendableCashBreakdown,
   totalCardDebt,
   totalCash,
-  upcomingCardBills,
-  upcomingBillsThisMonth,
 } from "@/lib/cashflow/forecast";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import {
@@ -45,7 +42,7 @@ import {
   isLikelyPendingNearStatement,
   utilization,
 } from "@/lib/cashflow/cardLogic";
-import { todayISO } from "@/lib/cashflow/dates";
+import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
@@ -79,10 +76,11 @@ export function Dashboard() {
   const m = (n: number) => formatMoney(n, cur);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownKey | null>(null);
   const [expenseAction, setExpenseAction] = useState<ExpenseAction | null>(null);
+  const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
 
   const haveNow = spendableCash(state);
-  const incomeComing = pendingIncome(state);
-  const expensesComing = expensesComingTotal(state);
+  const incomeComing = pendingIncome(state, new Date(), cashFlowPeriod);
+  const expensesComing = expensesComingTotal(state, new Date(), cashFlowPeriod);
   const leftToSpend = haveNow + incomeComing - expensesComing;
   const spendableNow = spendableToday(state);
   const sts = safeToSpend(state);
@@ -101,14 +99,14 @@ export function Dashboard() {
         helper: "Expected this month and not received yet",
         total: incomeComing,
         tone: "blue" as const,
-        sections: pendingIncomeBreakdown(state),
+        sections: pendingIncomeBreakdown(state, new Date(), cashFlowPeriod),
       },
       expenses_coming: {
         title: "Expenses coming",
         helper: "Bills, upcoming card bills, and debt plan",
         total: expensesComing,
         tone: "orange" as const,
-        sections: expensesComingBreakdown(state),
+        sections: expensesComingBreakdown(state, new Date(), cashFlowPeriod),
       },
       left_to_spend: {
         title: leftToSpend < 0 ? "Shortfall" : "Left to spend",
@@ -118,7 +116,7 @@ export function Dashboard() {
             : "Available after planned expenses",
         total: leftToSpend,
         tone: leftToSpend < 0 ? ("red" as const) : ("teal" as const),
-        sections: leftToSpendBreakdown(state),
+        sections: leftToSpendBreakdown(state, new Date(), cashFlowPeriod),
       },
       spendable_today: {
         title: "Spendable today",
@@ -128,13 +126,22 @@ export function Dashboard() {
         sections: spendableTodayBreakdown(state),
       },
     }),
-    [expensesComing, haveNow, incomeComing, leftToSpend, spendableNow, state],
+    [cashFlowPeriod, expensesComing, haveNow, incomeComing, leftToSpend, spendableNow, state],
   );
   const activeBreakdownData = activeBreakdown ? breakdowns[activeBreakdown] : null;
   const currentMonth = monthKey(new Date());
+  const selectedExpenseSections = breakdowns.expenses_coming.sections;
+  const totalForSections = (titles: string[]) =>
+    selectedExpenseSections
+      .filter((section) => titles.includes(section.title))
+      .reduce(
+        (sum, section) => sum + section.items.reduce((itemSum, item) => itemSum + item.amount, 0),
+        0,
+      );
 
   function skipItemForMonth(item: CashFlowBreakdownItem) {
     if (!item.sourceType || (!item.sourceId && item.sourceType !== "one_time")) return;
+    const itemMonth = item.dueDate?.slice(0, 7) ?? currentMonth;
     if (item.overrideId && item.sourceType === "one_time") {
       dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId });
       toast("Planned expense removed");
@@ -145,7 +152,7 @@ export function Dashboard() {
       payload: {
         sourceType: item.sourceType,
         sourceId: item.sourceId,
-        month: currentMonth,
+        month: itemMonth,
         action: "skip",
       },
     });
@@ -169,6 +176,8 @@ export function Dashboard() {
         expensesComing={expensesComing}
         leftToSpend={leftToSpend}
         spendableToday={spendableNow}
+        period={cashFlowPeriod}
+        onPeriodChange={setCashFlowPeriod}
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
@@ -222,13 +231,22 @@ export function Dashboard() {
         </Card>
 
         <Card>
-          <SectionTitle title="This month" />
-          <Row label="Upcoming bills" value={m(upcomingBillsThisMonth(state))} />
-          <Row label="Upcoming card bills" value={m(upcomingCardBills(state))} />
-          <Row label="Debt plan" value={m(debtPlannedPayments(state))} />
-          <Row label="Pending income" value={m(pendingIncome(state))} tone="good" />
+          <SectionTitle title={cashFlowPeriodLabels[cashFlowPeriod]} />
+          <Row
+            label="Upcoming bills"
+            value={m(totalForSections(["Bills", "One-time planned expenses"]))}
+          />
+          <Row label="Upcoming card bills" value={m(totalForSections(["Upcoming card bills"]))} />
+          <Row label="Debt plan" value={m(totalForSections(["Debt plan"]))} />
+          <Row label="Pending income" value={m(incomeComing)} tone="good" />
           <div className="mt-3 pt-3 border-t border-border">
-            <Row label="Projected month-end" value={m(projectedMonthEnd(state))} bold />
+            <Row
+              label={
+                cashFlowPeriod === "this_month" ? "Projected month-end" : "Projected after period"
+              }
+              value={m(leftToSpend)}
+              bold
+            />
           </div>
         </Card>
       </div>
@@ -275,7 +293,7 @@ export function Dashboard() {
               <div className="min-w-0">
                 <div className="font-medium truncate">{t.description || t.category}</div>
                 <div className="text-xs text-muted-foreground capitalize">
-                  {t.type.replace("_", " ")} · {t.date}
+                  {t.type.replace("_", " ")} · {formatDisplayDate(t.date)}
                 </div>
               </div>
               <div
@@ -328,6 +346,8 @@ function CashFlowFormulaCard({
   expensesComing,
   leftToSpend,
   spendableToday,
+  period,
+  onPeriodChange,
   formatMoney,
   onOpenBreakdown,
 }: {
@@ -336,20 +356,32 @@ function CashFlowFormulaCard({
   expensesComing: number;
   leftToSpend: number;
   spendableToday: number;
+  period: CashFlowPeriod;
+  onPeriodChange: (period: CashFlowPeriod) => void;
   formatMoney: (n: number) => string;
   onOpenBreakdown: (key: BreakdownKey) => void;
 }) {
   const shortfall = leftToSpend < 0;
+  const periodLabel = cashFlowPeriodLabels[period];
   return (
     <Card className="!p-4 sm:!p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-black tracking-tight">This Month Cash Flow</h2>
+          <h2 className="text-lg font-black tracking-tight">{periodLabel} Cash Flow</h2>
           <Info size={15} className="text-muted-foreground" aria-hidden="true" />
         </div>
-        <button className="inline-flex items-center gap-2 rounded-2xl border border-border bg-[color:var(--card-solid)] px-3 py-2 text-xs font-bold text-foreground hover:bg-muted">
-          This month <ChevronDown size={14} />
-        </button>
+        <Select
+          aria-label="Cash flow period"
+          value={period}
+          onChange={(event) => onPeriodChange(event.target.value as CashFlowPeriod)}
+          className="w-auto min-w-[150px] px-3 py-2 text-xs font-bold"
+        >
+          {Object.entries(cashFlowPeriodLabels).map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </Select>
       </div>
 
       <div
@@ -795,6 +827,8 @@ function ExpenseActionSheets({
   const { state, dispatch } = useApp();
 
   if (!action) return null;
+  const actionMonth =
+    "item" in action ? (action.item.dueDate?.slice(0, 7) ?? currentMonth) : currentMonth;
 
   if (action.type === "add_one_time") {
     return (
@@ -806,7 +840,7 @@ function ExpenseActionSheets({
     return (
       <PlannedExpenseSheet
         title={action.item.sourceType === "one_time" ? "Edit planned expense" : "Edit this month"}
-        month={currentMonth}
+        month={actionMonth}
         item={action.item}
         onClose={onClose}
       />
@@ -825,7 +859,7 @@ function ExpenseActionSheets({
           <div className="rounded-2xl border border-border bg-muted/30 p-4">
             <div className="font-extrabold">{action.item.label}</div>
             <div className="text-sm text-muted-foreground">
-              Choose whether this affects only {currentMonth} or the original recurring item.
+              Choose whether this affects only {actionMonth} or the original recurring item.
             </div>
           </div>
           <Button
@@ -901,7 +935,7 @@ function ExpenseActionSheets({
       <Sheet open onClose={onClose} title="Skip debt plan">
         <div className="grid gap-3">
           <p className="text-sm text-muted-foreground">
-            This only removes {action.item.label} from the {currentMonth} forecast. It does not
+            This only removes {action.item.label} from the {actionMonth} forecast. It does not
             change the debt balance.
           </p>
           <Button
@@ -1280,9 +1314,10 @@ function CardCycleSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClos
     <Sheet open onClose={onClose} title="Upcoming card bill">
       <div className="grid gap-3">
         <div className="rounded-2xl border border-border bg-muted/30 p-3 text-sm">
-          Statement closes {cycle.cycleEnd} - due {cycle.dueDate}
+          Statement closes {formatDisplayDate(cycle.cycleEnd)} - due{" "}
+          {formatDisplayDate(cycle.dueDate)}
           <div className="mt-1 text-xs text-muted-foreground">
-            Cycle {cycle.cycleStart} to {cycle.cycleEnd}
+            Cycle {formatDisplayDate(cycle.cycleStart)} to {formatDisplayDate(cycle.cycleEnd)}
           </div>
         </div>
         {charges.length === 0 && (
@@ -1297,7 +1332,9 @@ function CardCycleSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClos
               <div key={charge.id} className="flex items-center justify-between gap-3 px-4 py-3">
                 <div>
                   <div className="font-bold">{charge.description || charge.category}</div>
-                  <div className="text-xs text-muted-foreground">{charge.date}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {formatDisplayDate(charge.date)}
+                  </div>
                 </div>
                 <div className="font-black">{formatMoney(charge.amount, cur)}</div>
               </div>
@@ -1322,7 +1359,9 @@ function CardCycleSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClos
                 <div key={charge.id} className="flex items-center justify-between gap-3 py-2">
                   <div>
                     <div className="text-sm font-bold">{charge.description || charge.category}</div>
-                    <div className="text-xs text-muted-foreground">{charge.date}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatDisplayDate(charge.date)}
+                    </div>
                   </div>
                   <div className="font-black text-muted-foreground">
                     {formatMoney(charge.amount, cur)}

@@ -14,6 +14,17 @@ export function fromISODate(iso: string): Date {
   return new Date(y, (m ?? 1) - 1, d ?? 1);
 }
 
+export function formatDisplayDate(iso: string | undefined): string {
+  if (!iso) return "";
+  const date = fromISODate(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return `${MONTH_NAMES[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+export function formatDisplayDates(text: string): string {
+  return text.replace(/\d{4}-\d{2}-\d{2}/g, (iso) => formatDisplayDate(iso));
+}
+
 export function startOfMonth(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), 1);
 }
@@ -30,8 +41,18 @@ export function addDays(d: Date, n: number): Date {
 }
 
 export const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 export const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

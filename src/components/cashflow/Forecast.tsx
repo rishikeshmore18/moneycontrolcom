@@ -2,6 +2,7 @@ import { Card } from "./Card";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import { timesheetEntryAmount } from "@/lib/cashflow/timesheetLogic";
+import { formatDisplayDate } from "@/lib/cashflow/dates";
 import {
   cardMinimums,
   debtPlannedPayments,
@@ -157,7 +158,7 @@ function ZeroAprAlerts() {
                   <div className="font-bold">{c.name}</div>
                   <div className="text-xs text-muted-foreground">
                     {c.zeroAprEndDate
-                      ? `Ends ${c.zeroAprEndDate}`
+                      ? `Ends ${formatDisplayDate(c.zeroAprEndDate)}`
                       : "Add end date in card settings"}
                   </div>
                 </div>

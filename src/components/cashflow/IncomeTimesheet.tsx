@@ -10,6 +10,7 @@ import {
   MONTH_NAMES,
   WEEKDAY_SHORT,
   addMonths,
+  formatDisplayDate,
   hoursBetween,
   monthDays,
   newId,
@@ -246,15 +247,7 @@ function DayDetailSheet({
 
   return (
     <>
-      <Sheet
-        open={open}
-        onClose={onClose}
-        title={new Date(date).toLocaleDateString(undefined, {
-          weekday: "long",
-          month: "long",
-          day: "numeric",
-        })}
-      >
+      <Sheet open={open} onClose={onClose} title={formatDisplayDate(date)}>
         <div className="grid gap-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
