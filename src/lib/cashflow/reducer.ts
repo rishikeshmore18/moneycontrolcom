@@ -14,6 +14,7 @@ import {
 import { clampNonNegative } from "./money";
 import { newId, todayISO } from "./dates";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
+import { upcomingCardBillItems } from "./forecast";
 
 export type Action =
   | { type: "HYDRATE"; state: AppState }
@@ -59,6 +60,7 @@ export type Action =
         sourceAccountId: string;
         date: string;
         notes?: string;
+        plannedExpenseItemId?: string;
       };
     }
   | {
@@ -102,6 +104,10 @@ export type Action =
 
 function now(): string {
   return new Date().toISOString();
+}
+
+function monthFromISO(date: string): string {
+  return date.slice(0, 7);
 }
 
 function updateAccount(state: AppState, id: string, delta: number): Account[] {
@@ -355,6 +361,46 @@ export function reducer(state: AppState, action: Action): AppState {
         accounts: updateAccount(state, p.sourceAccountId, -pay),
         transactions: transactionsAfterRecon,
       };
+      const forecastMonth = monthFromISO(p.date);
+      const monthRef = new Date(`${forecastMonth}-01T00:00:00`);
+      const plannedCardItems = upcomingCardBillItems(state, monthRef)
+        .filter((item) => item.sourceId === p.cardId)
+        .sort((a, b) => {
+          const dueDateOrder = (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
+          if (dueDateOrder !== 0) return dueDateOrder;
+          return a.id.localeCompare(b.id);
+        });
+      const skipItemIds = new Set<string>();
+      if (p.plannedExpenseItemId) {
+        skipItemIds.add(p.plannedExpenseItemId);
+      } else {
+        let remainingForPlanning = pay;
+        for (const item of plannedCardItems) {
+          if (remainingForPlanning + 0.001 < item.amount) continue;
+          skipItemIds.add(item.id);
+          remainingForPlanning -= item.amount;
+        }
+      }
+      const plannedExpenseOverrides =
+        skipItemIds.size === 0
+          ? next.plannedExpenseOverrides
+          : [
+              ...(next.plannedExpenseOverrides ?? []).filter(
+                (override) =>
+                  !(
+                    override.sourceType === "card_due" &&
+                    override.month === forecastMonth &&
+                    skipItemIds.has(override.sourceId ?? "")
+                  ),
+              ),
+              ...[...skipItemIds].map((itemId) => ({
+                id: newId(),
+                sourceType: "card_due" as const,
+                sourceId: itemId,
+                month: forecastMonth,
+                action: "skip" as const,
+              })),
+            ];
       const noteSummary =
         reconciledIds.length > 0
           ? `Reconciled ${reconciledIds.length} expense${reconciledIds.length === 1 ? "" : "s"} from ${cycle.cycleStart} → ${cycle.cycleEnd}`
@@ -377,7 +423,11 @@ export function reducer(state: AppState, action: Action): AppState {
       };
       // Suppress unused warning
       void cycleTotal;
-      return { ...next, transactions: [fullPayment, ...next.transactions] };
+      return {
+        ...next,
+        plannedExpenseOverrides,
+        transactions: [fullPayment, ...next.transactions],
+      };
     }
 
     case "PAY_DEBT": {

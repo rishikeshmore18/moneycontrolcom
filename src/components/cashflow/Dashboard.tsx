@@ -1123,7 +1123,13 @@ function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose:
     if (!sourceAccountId) return toast("Choose an account");
     dispatch({
       type: "PAY_CREDIT_CARD",
-      payload: { cardId: item.sourceId, amount: amt, sourceAccountId, date },
+      payload: {
+        cardId: item.sourceId,
+        amount: amt,
+        sourceAccountId,
+        date,
+        plannedExpenseItemId: item.id,
+      },
     });
     toast(`Paid ${formatMoney(amt, cur)} to ${item.label}`);
     onClose();

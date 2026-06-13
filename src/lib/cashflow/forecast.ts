@@ -175,15 +175,18 @@ export function cardMinimums(state: AppState): number {
  * of an untracked posted balance snapshot.
  */
 function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
+  const monthCardOverride = (itemId: string) => overrideFor(state, "card_due", itemId, ref);
   return state.cards.flatMap((card) => {
     const cycle = currentOpenCycle(card, ref);
     if (isZeroAprCard(card)) {
       const promoEndsThisCycle = !!card.zeroAprEndDate && cycle.cycleEnd >= card.zeroAprEndDate;
       if (promoEndsThisCycle) {
         if (card.currentBalance <= 0) return [];
+        const itemId = `${card.id}:promo-payoff`;
+        if (monthCardOverride(itemId)?.action === "skip") return [];
         return [
           {
-            id: `${card.id}:promo-payoff`,
+            id: itemId,
             label: card.name,
             detail: `0% APR ends ${card.zeroAprEndDate} - pay in full before statement closes ${cycle.cycleEnd}`,
             amount: card.currentBalance,
@@ -202,31 +205,37 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
       const items: CashFlowBreakdownItem[] = [];
 
       if (targetPaydown > 0) {
-        items.push({
-          id: `${card.id}:target-paydown`,
-          label: card.name,
-          detail: `Pay down to ${card.targetUtilizationPercent}% before statement closes ${cycle.cycleEnd}`,
-          amount: targetPaydown,
-          sourceType: "card_due" as const,
-          sourceId: card.id,
-          dueDate: cycle.cycleEnd,
-          cycleStart: cycle.cycleStart,
-          cycleEnd: cycle.cycleEnd,
-        });
+        const itemId = `${card.id}:target-paydown`;
+        if (monthCardOverride(itemId)?.action !== "skip") {
+          items.push({
+            id: itemId,
+            label: card.name,
+            detail: `Pay down to ${card.targetUtilizationPercent}% before statement closes ${cycle.cycleEnd}`,
+            amount: targetPaydown,
+            sourceType: "card_due" as const,
+            sourceId: card.id,
+            dueDate: cycle.cycleEnd,
+            cycleStart: cycle.cycleStart,
+            cycleEnd: cycle.cycleEnd,
+          });
+        }
       }
 
       if (estimatedMinimum > 0) {
-        items.push({
-          id: `${card.id}:minimum-due`,
-          label: targetPaydown > 0 ? `${card.name} minimum` : card.name,
-          detail: `Estimated minimum due ${cycle.dueDate} after statement closes ${cycle.cycleEnd}`,
-          amount: estimatedMinimum,
-          sourceType: "card_due" as const,
-          sourceId: card.id,
-          dueDate: cycle.dueDate,
-          cycleStart: cycle.cycleStart,
-          cycleEnd: cycle.cycleEnd,
-        });
+        const itemId = `${card.id}:minimum-due`;
+        if (monthCardOverride(itemId)?.action !== "skip") {
+          items.push({
+            id: itemId,
+            label: targetPaydown > 0 ? `${card.name} minimum` : card.name,
+            detail: `Estimated minimum due ${cycle.dueDate} after statement closes ${cycle.cycleEnd}`,
+            amount: estimatedMinimum,
+            sourceType: "card_due" as const,
+            sourceId: card.id,
+            dueDate: cycle.dueDate,
+            cycleStart: cycle.cycleStart,
+            cycleEnd: cycle.cycleEnd,
+          });
+        }
       }
 
       return items;
@@ -252,6 +261,7 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
       0,
     );
     const amount = Math.min(card.currentBalance, untrackedPostedBalance + postedTrackedAmount);
+    if (monthCardOverride(card.id)?.action === "skip") return [];
 
     if (amount <= 0) return [];
     return [
@@ -273,6 +283,13 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
 
 export function upcomingCardBills(state: AppState, ref: Date = new Date()): number {
   return cardDueItems(state, ref).reduce((s, item) => s + item.amount, 0);
+}
+
+export function upcomingCardBillItems(
+  state: AppState,
+  ref: Date = new Date(),
+): CashFlowBreakdownItem[] {
+  return cardDueItems(state, ref);
 }
 
 export function cardDueThisMonth(state: AppState, ref: Date = new Date()): number {
