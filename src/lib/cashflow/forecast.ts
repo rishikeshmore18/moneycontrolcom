@@ -21,6 +21,7 @@ import {
   fromISODate,
   startOfMonth,
 } from "./dates";
+import { formatMoney } from "./money";
 import { forecastIncomeEntriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
 
 export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months" | "custom";
@@ -769,37 +770,99 @@ function protectedExpenseSections(
   return { nextIncomeDate, sections, total };
 }
 
+interface CashFlowTimelineEvent {
+  id: string;
+  label: string;
+  detail: string;
+  date: string;
+  amount: number;
+  balanceAfter: number;
+}
+
+function spendableTodayProjection(
+  state: AppState,
+  ref: Date = new Date(),
+): {
+  range: ForecastDateRange;
+  startingCash: number;
+  lowestBalance: number;
+  safeSurplus: number;
+  events: CashFlowTimelineEvent[];
+} {
+  const today = toISO(ref);
+  const range = {
+    start: today,
+    end: toISO(new Date(ref.getFullYear(), ref.getMonth() + 6, ref.getDate())),
+  };
+  const incomeEvents = incomeItemsForRange(state, range).map((item) => ({
+    id: `income-${item.id}`,
+    label: item.label,
+    detail: item.detail ? `Income - ${item.detail}` : "Income",
+    date: item.periodDate ?? item.payDate ?? today,
+    amount: item.amount,
+  }));
+  const expenseEvents = expenseSectionsForRange(state, ref, range).flatMap((section) =>
+    section.items.map((item) => ({
+      id: `expense-${section.title}-${item.id}`,
+      label: item.label,
+      detail: item.detail ? `${section.title} - ${item.detail}` : section.title,
+      date: item.dueDate ?? item.periodDate ?? today,
+      amount: -item.amount,
+    })),
+  );
+  const orderedEvents = [...incomeEvents, ...expenseEvents].sort((a, b) => {
+    const dateOrder = a.date.localeCompare(b.date);
+    if (dateOrder !== 0) return dateOrder;
+    return a.amount - b.amount;
+  });
+
+  const startingCash = spendableCash(state);
+  let runningBalance = startingCash;
+  let lowestBalance = startingCash;
+  const events = orderedEvents.map((event) => {
+    runningBalance += event.amount;
+    lowestBalance = Math.min(lowestBalance, runningBalance);
+    return { ...event, balanceAfter: runningBalance };
+  });
+
+  return {
+    range,
+    startingCash,
+    lowestBalance,
+    safeSurplus: lowestBalance - state.profile.safeToSpendFloor,
+    events,
+  };
+}
+
 export function spendableToday(state: AppState, ref: Date = new Date()): number {
-  const protectedExpenses = protectedExpenseSections(state, ref).total;
-  return spendableCash(state) - protectedExpenses - state.profile.safeToSpendFloor;
+  return spendableTodayProjection(state, ref).safeSurplus;
 }
 
 export function spendableTodayBreakdown(
   state: AppState,
   ref: Date = new Date(),
 ): CashFlowBreakdownSection[] {
-  const haveNow = spendableCash(state);
-  const {
-    nextIncomeDate,
-    sections,
-    total: protectedExpenses,
-  } = protectedExpenseSections(state, ref);
+  const projection = spendableTodayProjection(state, ref);
+  const pressureEvents = projection.events
+    .filter((event) => event.balanceAfter <= projection.lowestBalance + 0.001)
+    .slice(0, 5);
+  const upcomingEvents = projection.events.slice(0, 10);
 
-  return [
+  const sections: CashFlowBreakdownSection[] = [
     {
-      title: "Today check formula",
+      title: "Safe surplus formula",
       items: [
         {
           id: "spendable-today-have-now",
           label: "Have now",
           detail: "Current spendable cash",
-          amount: haveNow,
+          amount: projection.startingCash,
         },
         {
-          id: "spendable-today-protected-expenses",
-          label: "Expenses before next income",
-          detail: `Due between today and ${formatDisplayDate(nextIncomeDate)}`,
-          amount: -protectedExpenses,
+          id: "spendable-today-lowest-balance",
+          label: "Lowest projected cash",
+          detail: `Lowest balance through ${formatDisplayDate(projection.range.end)}`,
+          amount: projection.lowestBalance,
         },
         {
           id: "spendable-today-floor",
@@ -809,8 +872,39 @@ export function spendableTodayBreakdown(
         },
       ],
     },
-    ...sections,
   ];
+
+  if (pressureEvents.length > 0) {
+    sections.push({
+      title: "Lowest point",
+      items: pressureEvents.map((event) => ({
+        id: `pressure-${event.id}`,
+        label: event.label,
+        detail: `${formatDisplayDate(event.date)} - projected balance ${formatMoney(
+          event.balanceAfter,
+          state.profile.currency,
+        )}`,
+        amount: event.amount,
+      })),
+    });
+  }
+
+  if (upcomingEvents.length > 0) {
+    sections.push({
+      title: "Timeline used",
+      items: upcomingEvents.map((event) => ({
+        id: event.id,
+        label: event.label,
+        detail: `${formatDisplayDate(event.date)} - ${event.detail} - balance after ${formatMoney(
+          event.balanceAfter,
+          state.profile.currency,
+        )}`,
+        amount: event.amount,
+      })),
+    });
+  }
+
+  return sections;
 }
 
 export function leftToSpendBreakdown(

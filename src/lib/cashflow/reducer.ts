@@ -102,7 +102,7 @@ export type Action =
   | { type: "DELETE_TIMESHEET"; id: string }
   | {
       type: "MARK_TIMESHEET_PAID";
-      payload: { id: string; paidAccountId: string; actualAmount: number };
+      payload: { id: string; paidAccountId: string; actualAmount: number; date?: string };
     }
   | { type: "UNMARK_TIMESHEET_PAID"; payload: { id: string } };
 
@@ -586,7 +586,7 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...next, timesheet: next.timesheet.filter((t) => t.id !== action.id) };
     }
     case "MARK_TIMESHEET_PAID": {
-      const { id, paidAccountId, actualAmount } = action.payload;
+      const { id, paidAccountId, actualAmount, date } = action.payload;
       const entry = state.timesheet.find((t) => t.id === id);
       if (!entry || entry.paid) return state;
       const next: AppState = {
@@ -611,7 +611,7 @@ export function reducer(state: AppState, action: Action): AppState {
         amount: actualAmount,
         category: entry.entryType === "salary_paycheck" ? "Salary" : "Wages",
         description: entry.jobName,
-        date: entry.date,
+        date: date ?? entry.date,
         targetAccountId: paidAccountId,
       };
       return { ...next, transactions: addTx(next, tx) };

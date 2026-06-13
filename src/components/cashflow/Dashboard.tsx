@@ -44,7 +44,7 @@ import {
   isLikelyPendingNearStatement,
   utilization,
 } from "@/lib/cashflow/cardLogic";
-import { endOfMonth, formatDisplayDate, todayISO, toISODate } from "@/lib/cashflow/dates";
+import { endOfMonth, formatDisplayDate, newId, todayISO, toISODate } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
@@ -70,6 +70,7 @@ type ExpenseAction =
 
 type IncomeAction =
   | { type: "edit_once"; item: CashFlowBreakdownItem }
+  | { type: "mark_received"; item: CashFlowBreakdownItem }
   | { type: "edit_job"; item: CashFlowBreakdownItem }
   | { type: "remove"; item: CashFlowBreakdownItem };
 
@@ -141,7 +142,7 @@ export function Dashboard() {
       },
       spendable_today: {
         title: "Spendable today",
-        helper: "Cash you can use before the next unpaid income arrives",
+        helper: "Surplus after future income, expenses, and your cash floor",
         total: spendableNow,
         tone: spendableNow < 0 ? ("red" as const) : ("green" as const),
         sections: spendableTodayBreakdown(state),
@@ -527,7 +528,7 @@ function CashFlowFormulaCard({
           tone={spendableToday < 0 ? "red" : "green"}
           label="Spendable today"
           value={formatMoney(spendableToday)}
-          helper="Before next income"
+          helper="Safe surplus"
           badge="Today check"
           onClick={() => onOpenBreakdown("spendable_today")}
         />
@@ -790,6 +791,7 @@ function IncomeItemActions({
   if (!item.incomeSourceType) return null;
   return (
     <div className="flex flex-wrap gap-2">
+      <MiniAction label="Mark received" onClick={() => onAction({ type: "mark_received", item })} />
       <MiniAction
         label="Edit this payday"
         icon={Pencil}
@@ -926,6 +928,10 @@ function IncomeActionSheets({
     return <IncomePaydayOverrideSheet item={action.item} onClose={onClose} />;
   }
 
+  if (action.type === "mark_received") {
+    return <MarkIncomeReceivedSheet item={action.item} onClose={onClose} />;
+  }
+
   if (action.type === "edit_job") {
     const job = state.jobs.find((item) => item.id === action.item.jobId);
     return job ? <JobSheet onClose={onClose} initial={job} /> : null;
@@ -1059,6 +1065,126 @@ function IncomePaydayOverrideSheet({
         </Field>
         <Field label="Expected amount">
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+      </div>
+    </Sheet>
+  );
+}
+
+function MarkIncomeReceivedSheet({
+  item,
+  onClose,
+}: {
+  item: CashFlowBreakdownItem;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const cur = state.profile.currency;
+  const job = state.jobs.find((candidate) => candidate.id === item.jobId);
+  const payDate = item.payDate ?? item.periodDate ?? todayISO();
+  const entries = item.incomeEntries ?? [];
+  const defaultAccountId = job?.defaultDepositAccountId || state.accounts[0]?.id || "";
+  const [accountId, setAccountId] = useState(defaultAccountId);
+  const [amount, setAmount] = useState(String(item.amount));
+  const [date, setDate] = useState(payDate);
+  const expectedTotal = entries.reduce(
+    (sum, entry) => sum + (entry.actualAmount ?? entry.expectedAmount),
+    0,
+  );
+
+  function markReceived() {
+    const actualTotal = toNumber(amount) || item.amount;
+    if (actualTotal <= 0) return toast("Enter an amount");
+    if (!accountId) return toast("Choose an account");
+    if (entries.length === 0) return toast("No timesheet entries found for this payday");
+
+    entries.forEach((entry, index) => {
+      const entryExpected = entry.actualAmount ?? entry.expectedAmount;
+      const allocated =
+        index === entries.length - 1
+          ? Math.round(
+              (actualTotal -
+                entries.slice(0, index).reduce((sum, previous) => {
+                  const previousExpected = previous.actualAmount ?? previous.expectedAmount;
+                  const ratio =
+                    expectedTotal > 0 ? previousExpected / expectedTotal : 1 / entries.length;
+                  return sum + Math.round(actualTotal * ratio * 100) / 100;
+                }, 0)) *
+                100,
+            ) / 100
+          : Math.round(
+              actualTotal *
+                (expectedTotal > 0 ? entryExpected / expectedTotal : 1 / entries.length) *
+                100,
+            ) / 100;
+      let entryId = entry.id;
+      if (entry.auto) {
+        entryId = newId();
+        dispatch({
+          type: "UPSERT_TIMESHEET",
+          payload: {
+            ...entry,
+            id: entryId,
+            auto: false,
+            userEdited: true,
+          },
+        });
+      }
+      dispatch({
+        type: "MARK_TIMESHEET_PAID",
+        payload: {
+          id: entryId,
+          paidAccountId: accountId,
+          actualAmount: allocated,
+          date,
+        },
+      });
+    });
+
+    if (item.overrideId) {
+      dispatch({ type: "DELETE_PLANNED_INCOME_OVERRIDE", id: item.overrideId });
+    }
+    toast(`+${formatMoney(actualTotal, cur)} received`);
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title="Mark pay received"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={markReceived}>
+            Mark received
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <div className="rounded-2xl border border-border bg-muted/30 p-4">
+          <div className="font-extrabold">{item.label}</div>
+          <div className="text-sm text-muted-foreground">
+            {item.detail ?? `Payday ${formatDisplayDate(payDate)}`}
+          </div>
+        </div>
+        <Field label="Amount received">
+          <Input type="number" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        </Field>
+        <Field label="Received date">
+          <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </Field>
+        <Field label="Deposit to">
+          <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+            {state.accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} - {formatMoney(account.balance, cur)}
+              </option>
+            ))}
+          </Select>
         </Field>
       </div>
     </Sheet>
