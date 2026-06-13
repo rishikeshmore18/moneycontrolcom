@@ -141,7 +141,7 @@ export function Dashboard() {
 
   function skipItemForMonth(item: CashFlowBreakdownItem) {
     if (!item.sourceType || (!item.sourceId && item.sourceType !== "one_time")) return;
-    const itemMonth = item.dueDate?.slice(0, 7) ?? currentMonth;
+    const itemMonth = item.periodDate?.slice(0, 7) ?? item.dueDate?.slice(0, 7) ?? currentMonth;
     if (item.overrideId && item.sourceType === "one_time") {
       dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId });
       toast("Planned expense removed");
@@ -828,7 +828,9 @@ function ExpenseActionSheets({
 
   if (!action) return null;
   const actionMonth =
-    "item" in action ? (action.item.dueDate?.slice(0, 7) ?? currentMonth) : currentMonth;
+    "item" in action
+      ? (action.item.periodDate?.slice(0, 7) ?? action.item.dueDate?.slice(0, 7) ?? currentMonth)
+      : currentMonth;
 
   if (action.type === "add_one_time") {
     return (

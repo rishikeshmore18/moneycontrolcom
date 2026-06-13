@@ -43,6 +43,7 @@ export interface CashFlowBreakdownItem {
   category?: string;
   cycleStart?: string;
   cycleEnd?: string;
+  periodDate?: string;
   pendingAmount?: number;
 }
 
@@ -135,13 +136,16 @@ function monthRefsForRange(range: ForecastDateRange): Date[] {
   return refs;
 }
 
-function dueInRange(item: CashFlowBreakdownItem, range: ForecastDateRange): boolean {
-  return !!item.dueDate && item.dueDate >= range.start && item.dueDate <= range.end;
+function itemInRange(item: CashFlowBreakdownItem, range: ForecastDateRange): boolean {
+  const rangeDate = item.periodDate ?? item.dueDate;
+  return !!rangeDate && rangeDate >= range.start && rangeDate <= range.end;
 }
 
 function sortByDueDate(items: CashFlowBreakdownItem[]): CashFlowBreakdownItem[] {
   return [...items].sort((a, b) => {
-    const dueOrder = (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
+    const dueOrder = (a.periodDate ?? a.dueDate ?? "").localeCompare(
+      b.periodDate ?? b.dueDate ?? "",
+    );
     if (dueOrder !== 0) return dueOrder;
     return a.label.localeCompare(b.label);
   });
@@ -261,6 +265,7 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
             dueDate: cycle.cycleEnd,
             cycleStart: cycle.cycleStart,
             cycleEnd: cycle.cycleEnd,
+            periodDate: cycle.cycleEnd,
           },
         ];
       }
@@ -283,6 +288,7 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
             dueDate: cycle.cycleEnd,
             cycleStart: cycle.cycleStart,
             cycleEnd: cycle.cycleEnd,
+            periodDate: cycle.cycleEnd,
           });
         }
       }
@@ -300,6 +306,7 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
             dueDate: cycle.dueDate,
             cycleStart: cycle.cycleStart,
             cycleEnd: cycle.cycleEnd,
+            periodDate: cycle.cycleEnd,
           });
         }
       }
@@ -341,6 +348,7 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
         dueDate: cycle.dueDate,
         cycleStart: cycle.cycleStart,
         cycleEnd: cycle.cycleEnd,
+        periodDate: cycle.cycleEnd,
         pendingAmount: pendingTrackedAmount,
       },
     ];
@@ -481,17 +489,17 @@ function expenseSectionsForRange(
   const billItems = sortByDueDate(
     monthRefs
       .flatMap((monthRef) => billExpenseItems(state, monthRef))
-      .filter((item) => dueInRange(item, range)),
+      .filter((item) => itemInRange(item, range)),
   );
   const recurringBillItems = billItems.filter((item) => item.sourceType === "recurring_bill");
   const oneTimeItems = billItems.filter((item) => item.sourceType === "one_time");
   const cardItems = sortByDueDate(
-    cardDueItems(state, ref).filter((item) => dueInRange(item, range)),
+    cardDueItems(state, ref).filter((item) => itemInRange(item, range)),
   );
   const debtItems = sortByDueDate(
     monthRefs
       .flatMap((monthRef) => debtPlanItems(state, monthRef))
-      .filter((item) => dueInRange(item, range)),
+      .filter((item) => itemInRange(item, range)),
   );
   const sections: CashFlowBreakdownSection[] = [];
   if (recurringBillItems.length > 0) sections.push({ title: "Bills", items: recurringBillItems });
