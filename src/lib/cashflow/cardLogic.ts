@@ -40,6 +40,18 @@ export function paymentOptions(card: Card) {
   };
 }
 
+export function isZeroAprCard(card: Card): boolean {
+  return card.type === "zero_apr" || card.type === "zero_apr_car";
+}
+
+export function targetUtilizationBalance(card: Card): number {
+  return (card.targetUtilizationPercent / 100) * card.limit;
+}
+
+export function paydownToTarget(card: Card): number {
+  return Math.max(0, card.currentBalance - targetUtilizationBalance(card));
+}
+
 /* ───────────────────────── Billing cycles ───────────────────────── */
 
 function lastDayOfMonth(y: number, m: number): number {

@@ -4,7 +4,12 @@ import { Card } from "./Card";
 import { CardSheet } from "./Profile";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
-import { availableCredit, utilization } from "@/lib/cashflow/cardLogic";
+import {
+  availableCredit,
+  currentOpenCycle,
+  paydownToTarget,
+  utilization,
+} from "@/lib/cashflow/cardLogic";
 import type { Card as CardT } from "@/lib/cashflow/types";
 
 export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
@@ -16,7 +21,9 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
     return (
       <Card>
         <h2 className="text-xl font-extrabold mb-2">No cards yet</h2>
-        <p className="text-sm text-muted-foreground">Add credit cards from your Profile to track utilization, due dates, and pay bills.</p>
+        <p className="text-sm text-muted-foreground">
+          Add credit cards from your Profile to track utilization, due dates, and pay bills.
+        </p>
       </Card>
     );
   }
@@ -100,13 +107,21 @@ function ZeroAprBanner({ card, currency }: { card: CardT; currency: string }) {
     return (
       <div className="mt-3 rounded-xl border border-[color:var(--warn)]/40 bg-[color:var(--warn)]/10 px-3 py-2 text-xs">
         <span className="font-extrabold text-[color:var(--warn)]">Set 0% APR end date</span>
-        <span className="text-muted-foreground"> — edit this card so we can warn you before interest kicks in.</span>
+        <span className="text-muted-foreground">
+          {" "}
+          — edit this card so we can warn you before interest kicks in.
+        </span>
       </div>
     );
   }
   const end = new Date(card.zeroAprEndDate + "T00:00:00");
   const today = new Date();
   const days = Math.ceil((end.getTime() - today.getTime()) / 86400000);
+  const cycle = currentOpenCycle(card, today);
+  const promoEndsThisCycle = cycle.cycleEnd >= card.zeroAprEndDate;
+  const targetPaydown = paydownToTarget(card);
+  const remainingAfterPaydown = Math.max(0, card.currentBalance - targetPaydown);
+  const estimatedMinimum = Math.min(card.minimumDue, remainingAfterPaydown);
   const tone = days < 0 ? "bad" : days <= 60 ? "warn" : "good";
   const color = `var(--${tone})`;
   const label =
@@ -121,12 +136,42 @@ function ZeroAprBanner({ card, currency }: { card: CardT; currency: string }) {
       style={{ border: `1px solid ${color}40`, background: `${color}1a` }}
     >
       <div className="flex justify-between gap-2">
-        <span className="font-extrabold" style={{ color }}>{label}</span>
+        <span className="font-extrabold" style={{ color }}>
+          {label}
+        </span>
         <span className="text-muted-foreground">ends {card.zeroAprEndDate}</span>
       </div>
-      {card.currentBalance > 0 && (
+      {card.currentBalance > 0 && promoEndsThisCycle && (
         <div className="mt-1 text-muted-foreground">
-          Pay <span className="font-extrabold text-foreground">{formatMoney(card.currentBalance, currency)}</span> by then to avoid interest charges.
+          Pay{" "}
+          <span className="font-extrabold text-foreground">
+            {formatMoney(card.currentBalance, currency)}
+          </span>{" "}
+          by then to avoid interest charges.
+        </div>
+      )}
+      {card.currentBalance > 0 && !promoEndsThisCycle && (
+        <div className="mt-1 text-muted-foreground">
+          {targetPaydown > 0 ? (
+            <>
+              Pay{" "}
+              <span className="font-extrabold text-foreground">
+                {formatMoney(targetPaydown, currency)}
+              </span>{" "}
+              before statement close to stay near your utilization target.
+            </>
+          ) : (
+            <>You are already within your utilization target for this cycle.</>
+          )}{" "}
+          {estimatedMinimum > 0 && (
+            <>
+              Then expect about{" "}
+              <span className="font-extrabold text-foreground">
+                {formatMoney(estimatedMinimum, currency)}
+              </span>{" "}
+              due on the next bill.
+            </>
+          )}
         </div>
       )}
     </div>
@@ -136,7 +181,9 @@ function ZeroAprBanner({ card, currency }: { card: CardT; currency: string }) {
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-border bg-muted/50 p-2.5">
-      <div className="text-[10px] uppercase font-bold tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-[10px] uppercase font-bold tracking-wide text-muted-foreground">
+        {label}
+      </div>
       <div className="text-sm font-black mt-0.5">{value}</div>
     </div>
   );

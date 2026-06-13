@@ -1,5 +1,11 @@
 import { AppState, Debt, PlannedExpenseOverride, PlannedExpenseSourceType } from "./types";
-import { currentOpenCycle, expensesInCycle, isLikelyPendingNearStatement } from "./cardLogic";
+import {
+  currentOpenCycle,
+  expensesInCycle,
+  isLikelyPendingNearStatement,
+  isZeroAprCard,
+  paydownToTarget,
+} from "./cardLogic";
 import { endOfMonth } from "./dates";
 import { entriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
 
@@ -171,6 +177,61 @@ export function cardMinimums(state: AppState): number {
 function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
   return state.cards.flatMap((card) => {
     const cycle = currentOpenCycle(card, ref);
+    if (isZeroAprCard(card)) {
+      const promoEndsThisCycle = !!card.zeroAprEndDate && cycle.cycleEnd >= card.zeroAprEndDate;
+      if (promoEndsThisCycle) {
+        if (card.currentBalance <= 0) return [];
+        return [
+          {
+            id: `${card.id}:promo-payoff`,
+            label: card.name,
+            detail: `0% APR ends ${card.zeroAprEndDate} - pay in full before statement closes ${cycle.cycleEnd}`,
+            amount: card.currentBalance,
+            sourceType: "card_due" as const,
+            sourceId: card.id,
+            dueDate: cycle.cycleEnd,
+            cycleStart: cycle.cycleStart,
+            cycleEnd: cycle.cycleEnd,
+          },
+        ];
+      }
+
+      const targetPaydown = paydownToTarget(card);
+      const remainingAfterPaydown = Math.max(0, card.currentBalance - targetPaydown);
+      const estimatedMinimum = Math.min(card.minimumDue, remainingAfterPaydown);
+      const items: CashFlowBreakdownItem[] = [];
+
+      if (targetPaydown > 0) {
+        items.push({
+          id: `${card.id}:target-paydown`,
+          label: card.name,
+          detail: `Pay down to ${card.targetUtilizationPercent}% before statement closes ${cycle.cycleEnd}`,
+          amount: targetPaydown,
+          sourceType: "card_due" as const,
+          sourceId: card.id,
+          dueDate: cycle.cycleEnd,
+          cycleStart: cycle.cycleStart,
+          cycleEnd: cycle.cycleEnd,
+        });
+      }
+
+      if (estimatedMinimum > 0) {
+        items.push({
+          id: `${card.id}:minimum-due`,
+          label: targetPaydown > 0 ? `${card.name} minimum` : card.name,
+          detail: `Estimated minimum due ${cycle.dueDate} after statement closes ${cycle.cycleEnd}`,
+          amount: estimatedMinimum,
+          sourceType: "card_due" as const,
+          sourceId: card.id,
+          dueDate: cycle.dueDate,
+          cycleStart: cycle.cycleStart,
+          cycleEnd: cycle.cycleEnd,
+        });
+      }
+
+      return items;
+    }
+
     const cycleExpenses = expensesInCycle(state.transactions, card.id, cycle);
     const postedCycleExpenses = cycleExpenses.filter(
       (expense) => !isLikelyPendingNearStatement(expense.date, cycle),
