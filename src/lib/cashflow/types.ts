@@ -147,6 +147,9 @@ export interface RecurringBill {
   name: string;
   amount: number;
   dueDay: number;
+  dueRule?: "day_of_month" | "weekday_of_month";
+  dueWeek?: number; // 1=first week, 5=last matching weekday
+  dueWeekday?: number; // 0=Sun..6=Sat
   accountId: string;
   active: boolean;
 }

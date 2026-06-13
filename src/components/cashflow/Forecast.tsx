@@ -9,6 +9,7 @@ import {
   debtMinimums,
   pendingIncome,
   projectedMonthEnd,
+  recurringBillScheduleLabel,
   safeToSpend,
   spendableCash,
   upcomingBillsThisMonth,
@@ -68,7 +69,9 @@ export function Forecast() {
               <div key={b.id} className="flex items-center justify-between py-2.5">
                 <div>
                   <div className="font-bold">{b.name}</div>
-                  <div className="text-xs text-muted-foreground">Day {b.dueDay}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {recurringBillScheduleLabel(b)}
+                  </div>
                 </div>
                 <div className="font-black">{m(b.amount)}</div>
               </div>

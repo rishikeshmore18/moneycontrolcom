@@ -6,7 +6,11 @@ import { Button } from "./Button";
 import { Field, Input, Select } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { WEEKDAY_SHORT } from "@/lib/cashflow/dates";
-import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
+import {
+  isSpendableAccount,
+  plannedDebtPayment,
+  recurringBillScheduleLabel,
+} from "@/lib/cashflow/forecast";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import type {
   Account,
@@ -167,7 +171,7 @@ export function Profile() {
           <>
             <div>
               <div className="font-bold">{b.name}</div>
-              <div className="text-xs text-muted-foreground">Day {b.dueDay}</div>
+              <div className="text-xs text-muted-foreground">{recurringBillScheduleLabel(b)}</div>
             </div>
             <div className="font-black">{formatMoney(b.amount, cur)}</div>
           </>
@@ -553,6 +557,8 @@ function jobScheduleSummary(
   return `${days.map((day) => WEEKDAY_SHORT[day]).join(", ")} - ${hours}h/shift`;
 }
 
+const WEEKDAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
 export function JobSheet({ onClose, initial }: { onClose: () => void; initial?: Job }) {
   const { state, dispatch } = useApp();
   const [j, setJ] = useState<Omit<Job, "id">>(
@@ -855,6 +861,9 @@ export function RecurringSheet({
       name: "",
       amount: 0,
       dueDay: 1,
+      dueRule: "day_of_month",
+      dueWeek: 1,
+      dueWeekday: 4,
       accountId: state.accounts[0]?.id ?? "",
       active: true,
     },
@@ -864,8 +873,21 @@ export function RecurringSheet({
   }
   function save() {
     if (!b.name.trim()) return toast("Name it");
-    if (initial) dispatch({ type: "UPDATE_RECURRING", payload: { ...initial, ...b } });
-    else dispatch({ type: "ADD_RECURRING", payload: b });
+    const payload: Omit<RecurringBill, "id"> = {
+      ...b,
+      dueRule: b.dueRule ?? "day_of_month",
+      dueDay: Math.min(Math.max(1, b.dueDay || 1), 31),
+      dueWeek:
+        (b.dueRule ?? "day_of_month") === "weekday_of_month"
+          ? Math.min(Math.max(1, b.dueWeek ?? 1), 5)
+          : undefined,
+      dueWeekday:
+        (b.dueRule ?? "day_of_month") === "weekday_of_month"
+          ? Math.min(Math.max(0, b.dueWeekday ?? 0), 6)
+          : undefined,
+    };
+    if (initial) dispatch({ type: "UPDATE_RECURRING", payload: { ...initial, ...payload } });
+    else dispatch({ type: "ADD_RECURRING", payload });
     toast("Saved");
     onClose();
   }
@@ -896,15 +918,53 @@ export function RecurringSheet({
             onChange={(e) => up("amount", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="Due day">
-          <Input
-            type="number"
-            min={1}
-            max={31}
-            value={b.dueDay}
-            onChange={(e) => up("dueDay", toNumber(e.target.value))}
-          />
+        <Field label="Due schedule">
+          <Select
+            value={b.dueRule ?? "day_of_month"}
+            onChange={(e) => up("dueRule", e.target.value as NonNullable<RecurringBill["dueRule"]>)}
+          >
+            <option value="day_of_month">Date of month</option>
+            <option value="weekday_of_month">Weekday of month</option>
+          </Select>
         </Field>
+        {(b.dueRule ?? "day_of_month") === "day_of_month" ? (
+          <Field label="Due day">
+            <Input
+              type="number"
+              min={1}
+              max={31}
+              value={b.dueDay}
+              onChange={(e) => up("dueDay", toNumber(e.target.value))}
+            />
+          </Field>
+        ) : (
+          <>
+            <Field label="Week of month">
+              <Select
+                value={b.dueWeek ?? 1}
+                onChange={(e) => up("dueWeek", toNumber(e.target.value))}
+              >
+                <option value={1}>Week 1</option>
+                <option value={2}>Week 2</option>
+                <option value={3}>Week 3</option>
+                <option value={4}>Week 4</option>
+                <option value={5}>Last matching week</option>
+              </Select>
+            </Field>
+            <Field label="Day of week">
+              <Select
+                value={b.dueWeekday ?? 4}
+                onChange={(e) => up("dueWeekday", toNumber(e.target.value))}
+              >
+                {WEEKDAY_LONG.map((day, index) => (
+                  <option key={day} value={index}>
+                    {day}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </>
+        )}
         <Field label="Paid from">
           <Select value={b.accountId} onChange={(e) => up("accountId", e.target.value)}>
             {state.accounts.map((a) => (

@@ -4,6 +4,7 @@ import {
   Job,
   PlannedExpenseOverride,
   PlannedExpenseSourceType,
+  RecurringBill,
   TimesheetEntry,
 } from "./types";
 import {
@@ -183,6 +184,37 @@ function dateForMonthDay(ref: Date, day: number): string {
   return toISO(d);
 }
 
+function dateForWeekdayOfMonth(ref: Date, week: number, weekday: number): string {
+  const targetWeek = Math.min(Math.max(1, week || 1), 5);
+  const targetWeekday = Math.min(Math.max(0, weekday || 0), 6);
+  const firstOfMonth = startOfMonth(ref);
+  const firstMatchingDay = 1 + ((targetWeekday - firstOfMonth.getDay() + 7) % 7);
+  let day = firstMatchingDay + (targetWeek - 1) * 7;
+  const lastDay = endOfMonth(ref).getDate();
+  if (day > lastDay) {
+    day -= 7;
+  }
+  return dateForMonthDay(ref, day);
+}
+
+export function recurringBillDueDate(bill: RecurringBill, ref: Date = new Date()): string {
+  if (bill.dueRule === "weekday_of_month") {
+    return dateForWeekdayOfMonth(ref, bill.dueWeek ?? 1, bill.dueWeekday ?? 0);
+  }
+  return dateForMonthDay(ref, bill.dueDay);
+}
+
+export function recurringBillScheduleLabel(bill: RecurringBill): string {
+  if (bill.dueRule === "weekday_of_month") {
+    const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const week = Math.min(Math.max(1, bill.dueWeek ?? 1), 5);
+    const weekLabel = week === 5 ? "last week" : `week ${week}`;
+    const weekday = weekdays[Math.min(Math.max(0, bill.dueWeekday ?? 0), 6)];
+    return `${weekday} ${weekLabel}`;
+  }
+  return `Day ${bill.dueDay}`;
+}
+
 function monthlyOverrides(state: AppState, ref: Date = new Date()): PlannedExpenseOverride[] {
   const month = monthKey(ref);
   return (state.plannedExpenseOverrides ?? []).filter((override) => override.month === month);
@@ -206,8 +238,10 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
     if (override?.action === "skip") return [];
     const accountId = override?.accountId ?? bill.accountId;
     const account = state.accounts.find((item) => item.id === accountId);
-    const dueDay = override?.dueDay ?? bill.dueDay;
-    const dueDate = dateForMonthDay(ref, dueDay);
+    const baseDueDate = recurringBillDueDate(bill, ref);
+    const dueDay = override?.dueDay ?? Number(baseDueDate.slice(8, 10));
+    const dueDate =
+      override?.dueDate ?? (override?.dueDay ? dateForMonthDay(ref, dueDay) : baseDueDate);
     return [
       {
         id: `${bill.id}:${monthKey(ref)}`,
