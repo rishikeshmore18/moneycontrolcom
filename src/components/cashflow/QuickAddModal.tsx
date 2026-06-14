@@ -14,6 +14,9 @@ import {
 import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
+type ExpenseMethod = "credit_card" | "debit" | "cash" | "debt_payment" | "other";
+type SourcePickerKind = "card" | "account" | null;
+
 export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const { state, dispatch } = useApp();
   const [amount, setAmount] = useState("");
@@ -21,9 +24,8 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [otherCategory, setOtherCategory] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(todayISO());
-  const [method, setMethod] = useState<"credit_card" | "debit" | "cash" | "debt_payment" | "other">(
-    "debit",
-  );
+  const [method, setMethod] = useState<ExpenseMethod | null>(null);
+  const [sourcePicker, setSourcePicker] = useState<SourcePickerKind>(null);
   const [cardId, setCardId] = useState<string>("");
   const [debtId, setDebtId] = useState<string>("");
   const [sourceAccountId, setSourceAccountId] = useState<string>("");
@@ -54,8 +56,22 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const chosenCard = state.cards.find((c) => c.id === cardId);
   const overLimit = chosenCard && amt > availableCredit(chosenCard);
 
+  function chooseMethod(nextMethod: ExpenseMethod) {
+    setMethod(nextMethod);
+    if (nextMethod === "credit_card" && state.cards.length > 0) {
+      setSourcePicker("card");
+      return;
+    }
+    if ((nextMethod === "debit" || nextMethod === "debt_payment") && nonCashAccounts.length > 0) {
+      setSourcePicker("account");
+      return;
+    }
+    setSourcePicker(null);
+  }
+
   function submit() {
     if (amt <= 0) return toast("Enter an amount");
+    if (!method) return toast("Choose a payment method");
     if (method === "credit_card" && !cardId) return toast("Select a card");
     if ((method === "debit" || method === "debt_payment") && !sourceAccountId)
       return toast("Select an account");
@@ -151,7 +167,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
               <button
                 key={id}
                 type="button"
-                onClick={() => setMethod(id)}
+                onClick={() => chooseMethod(id)}
                 className={`px-3 py-2.5 rounded-2xl text-sm font-bold border transition ${
                   method === id
                     ? "border-primary brand-gradient text-primary-foreground"
@@ -162,75 +178,25 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
               </button>
             ))}
           </div>
-
-          {method === "credit_card" && state.cards.length > 0 && (
-            <div className="grid gap-2">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                Select card
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {state.cards.map((card) => {
-                  const selected = cardId === card.id;
-                  return (
-                    <button
-                      key={card.id}
-                      type="button"
-                      onClick={() => setCardId(card.id)}
-                      className={`rounded-2xl border px-3 py-3 text-left transition ${
-                        selected
-                          ? "border-primary brand-gradient text-primary-foreground"
-                          : "border-border bg-[color:var(--card-solid)] hover:bg-muted"
-                      }`}
-                    >
-                      <div className="font-bold">{card.name}</div>
-                      <div
-                        className={`text-xs ${
-                          selected ? "text-primary-foreground/80" : "text-muted-foreground"
-                        }`}
-                      >
-                        Available {formatMoney(availableCredit(card), cur)}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {method === "credit_card" && chosenCard && (
+            <SelectedSourceCard
+              label="Selected card"
+              title={chosenCard.name}
+              detail={`Available ${formatMoney(availableCredit(chosenCard), cur)}`}
+              onChange={() => setSourcePicker("card")}
+            />
           )}
-
-          {(method === "debit" || method === "debt_payment") && nonCashAccounts.length > 0 && (
-            <div className="grid gap-2">
-              <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
-                Select account
-              </div>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {nonCashAccounts.map((account) => {
-                  const selected = sourceAccountId === account.id;
-                  return (
-                    <button
-                      key={account.id}
-                      type="button"
-                      onClick={() => setSourceAccountId(account.id)}
-                      className={`rounded-2xl border px-3 py-3 text-left transition ${
-                        selected
-                          ? "border-primary brand-gradient text-primary-foreground"
-                          : "border-border bg-[color:var(--card-solid)] hover:bg-muted"
-                      }`}
-                    >
-                      <div className="font-bold">
-                        {account.bankName ? `${account.bankName} ${account.name}` : account.name}
-                      </div>
-                      <div
-                        className={`text-xs ${
-                          selected ? "text-primary-foreground/80" : "text-muted-foreground"
-                        }`}
-                      >
-                        {account.type} · {formatMoney(account.balance, cur)}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {(method === "debit" || method === "debt_payment") && chosenAccount && (
+            <SelectedSourceCard
+              label="Selected account"
+              title={
+                chosenAccount.bankName
+                  ? `${chosenAccount.bankName} ${chosenAccount.name}`
+                  : chosenAccount.name
+              }
+              detail={`${chosenAccount.type} · ${formatMoney(chosenAccount.balance, cur)}`}
+              onChange={() => setSourcePicker("account")}
+            />
           )}
         </div>
       </Field>
@@ -303,6 +269,127 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         <Button variant="primary" onClick={submit}>
           {method === "debt_payment" ? "Save debt payment" : "Save expense"}
         </Button>
+      </div>
+      {sourcePicker === "card" && (
+        <SourcePickerDialog
+          title="Select card"
+          onClose={() => setSourcePicker(null)}
+          items={state.cards.map((card) => ({
+            id: card.id,
+            title: card.name,
+            detail: `Available ${formatMoney(availableCredit(card), cur)}`,
+          }))}
+          selectedId={cardId}
+          onSelect={(id) => {
+            setCardId(id);
+            setSourcePicker(null);
+          }}
+        />
+      )}
+      {sourcePicker === "account" && (
+        <SourcePickerDialog
+          title="Select account"
+          onClose={() => setSourcePicker(null)}
+          items={nonCashAccounts.map((account) => ({
+            id: account.id,
+            title: account.bankName ? `${account.bankName} ${account.name}` : account.name,
+            detail: `${account.type} · ${formatMoney(account.balance, cur)}`,
+          }))}
+          selectedId={sourceAccountId}
+          onSelect={(id) => {
+            setSourceAccountId(id);
+            setSourcePicker(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+function SelectedSourceCard({
+  label,
+  title,
+  detail,
+  onChange,
+}: {
+  label: string;
+  title: string;
+  detail: string;
+  onChange: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onChange}
+      className="rounded-2xl border border-border bg-[color:var(--card-solid)] px-4 py-3 text-left transition hover:bg-muted"
+    >
+      <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </div>
+      <div className="mt-1 font-bold">{title}</div>
+      <div className="text-xs text-muted-foreground">{detail}</div>
+    </button>
+  );
+}
+
+function SourcePickerDialog({
+  title,
+  items,
+  selectedId,
+  onSelect,
+  onClose,
+}: {
+  title: string;
+  items: { id: string; title: string; detail: string }[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[90] grid place-items-center bg-black/65 px-4 py-6"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-[color:var(--card)] p-5 shadow-2xl">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-base font-black">{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 place-items-center rounded-full bg-muted text-lg leading-none text-muted-foreground transition hover:bg-muted/80 hover:text-foreground"
+            aria-label={`Close ${title}`}
+          >
+            x
+          </button>
+        </div>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {items.map((item) => {
+            const selected = selectedId === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelect(item.id)}
+                className={`rounded-2xl border px-4 py-3 text-left transition ${
+                  selected
+                    ? "border-primary brand-gradient text-primary-foreground"
+                    : "border-border bg-[color:var(--card-solid)] hover:bg-muted"
+                }`}
+              >
+                <div className="font-bold">{item.title}</div>
+                <div
+                  className={`text-xs ${
+                    selected ? "text-primary-foreground/80" : "text-muted-foreground"
+                  }`}
+                >
+                  {item.detail}
+                </div>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
