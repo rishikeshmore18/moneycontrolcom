@@ -101,6 +101,8 @@ export function Dashboard() {
   const [spendableAction, setSpendableAction] = useState<SpendableAction | null>(null);
   const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
   const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange());
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
 
   const haveNow = spendableCash(state);
   const selectedRange = cashFlowPeriodRange(cashFlowPeriod, new Date(), customRange);
