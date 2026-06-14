@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   CalendarClock,
   Eye,
@@ -13,7 +13,7 @@ import {
 import { Card, KPI } from "./Card";
 import { Sheet } from "./Sheet";
 import { Button } from "./Button";
-import { Field, Input, Select } from "./Field";
+import { Field, Input, Select, Textarea } from "./Field";
 import { useApp } from "@/lib/cashflow/AppContext";
 import type { Transaction } from "@/lib/cashflow/types";
 import {
@@ -103,6 +103,7 @@ export function Dashboard() {
   const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange());
   const [activityOpen, setActivityOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
 
   const haveNow = spendableCash(state);
   const selectedRange = cashFlowPeriodRange(cashFlowPeriod, new Date(), customRange);
@@ -350,35 +351,51 @@ export function Dashboard() {
         {recent.length === 0 && <Empty label="No transactions yet" />}
         <div className="divide-y divide-border">
           {recent.map((t) => (
-            <button
+            <div
               key={t.id}
-              type="button"
-              onClick={() => setSelectedTx(t)}
-              className="flex w-full items-center justify-between py-2.5 text-left hover:bg-muted/40 rounded-lg px-1 -mx-1 transition-colors"
+              className="flex items-center gap-2 rounded-lg px-1 py-2.5 transition-colors hover:bg-muted/40 -mx-1"
             >
-              <div className="min-w-0">
-                <div className="font-medium truncate">{t.description || t.category}</div>
-                <div className="text-xs text-muted-foreground capitalize">
-                  {t.type.replace("_", " ")} · {formatDisplayDate(t.date)}
-                </div>
-              </div>
-              <div
-                className={`font-black shrink-0 ml-3 ${
-                  t.type === "income"
-                    ? "text-[color:var(--good)]"
-                    : t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment"
-                      ? "text-[color:var(--bad)]"
-                      : ""
-                }`}
+              <button
+                type="button"
+                onClick={() => setSelectedTx(t)}
+                className="flex min-w-0 flex-1 items-center justify-between text-left"
               >
-                {t.type === "income"
-                  ? "+"
-                  : t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment"
-                    ? "-"
-                    : ""}
-                {m(Math.abs(t.amount))}
-              </div>
-            </button>
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{t.description || t.category}</div>
+                  <div className="text-xs text-muted-foreground capitalize">
+                    {t.type.replace("_", " ")} · {formatDisplayDate(t.date)}
+                  </div>
+                </div>
+                <div
+                  className={`font-black shrink-0 ml-3 ${
+                    t.type === "income"
+                      ? "text-[color:var(--good)]"
+                      : t.type === "expense" ||
+                          t.type === "card_payment" ||
+                          t.type === "debt_payment"
+                        ? "text-[color:var(--bad)]"
+                        : ""
+                  }`}
+                >
+                  {t.type === "income"
+                    ? "+"
+                    : t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment"
+                      ? "-"
+                      : ""}
+                  {m(Math.abs(t.amount))}
+                </div>
+              </button>
+              {canEditTransaction(t) && (
+                <button
+                  type="button"
+                  onClick={() => setEditingTx(t)}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  aria-label={`Edit ${t.description || t.category}`}
+                >
+                  <Pencil size={15} />
+                </button>
+              )}
+            </div>
           ))}
         </div>
       </Card>
@@ -388,17 +405,29 @@ export function Dashboard() {
         onClose={() => setActivityOpen(false)}
         transactions={state.transactions}
         onSelect={(t) => setSelectedTx(t)}
+        onEdit={(t) => setEditingTx(t)}
         formatMoney={m}
       />
       <TransactionDetailSheet
         tx={selectedTx}
         onClose={() => setSelectedTx(null)}
+        onEdit={(t) => {
+          setSelectedTx(null);
+          setEditingTx(t);
+        }}
         accounts={state.accounts}
         cards={state.cards}
         debts={state.debts}
         formatMoney={m}
       />
-
+      <EditTransactionSheet
+        tx={editingTx}
+        onClose={() => setEditingTx(null)}
+        onSaved={(tx) => {
+          setEditingTx(null);
+          setSelectedTx(tx);
+        }}
+      />
 
       <BreakdownSheet
         open={!!activeBreakdownData}
@@ -1548,7 +1577,9 @@ function ExpenseActionSheets({
   if (!action) return null;
   const actionMonth =
     "item" in action
-      ? (action.item.periodDate?.slice(0, 7) ?? action.item.dueDate?.slice(0, 7) ?? currentMonth)
+      ? ((action.item.periodDate?.slice(0, 7) ??
+          action.item.dueDate?.slice(0, 7) ??
+          currentMonth) as string)
       : currentMonth;
 
   if (action.type === "add_one_time") {
@@ -2203,22 +2234,27 @@ function txToneClass(t: Transaction): string {
   return "";
 }
 
+function canEditTransaction(t: Transaction): boolean {
+  return t.type === "expense" && !t.reconciledByPaymentId;
+}
+
 function AllActivitySheet({
   open,
   onClose,
   transactions,
   onSelect,
+  onEdit,
   formatMoney: fm,
 }: {
   open: boolean;
   onClose: () => void;
   transactions: Transaction[];
   onSelect: (t: Transaction) => void;
+  onEdit: (t: Transaction) => void;
   formatMoney: (n: number) => string;
 }) {
   const sorted = useMemo(
-    () =>
-      [...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    () => [...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
     [transactions],
   );
   const grouped = useMemo(() => {
@@ -2244,26 +2280,43 @@ function AllActivitySheet({
               </div>
               <div className="divide-y divide-border">
                 {items.map((t) => (
-                  <button
+                  <div
                     key={t.id}
-                    type="button"
-                    onClick={() => {
-                      onSelect(t);
-                      onClose();
-                    }}
-                    className="flex w-full items-center justify-between py-2.5 text-left hover:bg-muted/40 rounded-lg px-2 transition-colors"
+                    className="flex items-center gap-2 rounded-lg px-2 py-2.5 transition-colors hover:bg-muted/40"
                   >
-                    <div className="min-w-0">
-                      <div className="font-medium truncate">{t.description || t.category}</div>
-                      <div className="text-xs text-muted-foreground capitalize">
-                        {t.type.replace("_", " ")} · {t.category}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSelect(t);
+                        onClose();
+                      }}
+                      className="flex min-w-0 flex-1 items-center justify-between text-left"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">{t.description || t.category}</div>
+                        <div className="text-xs text-muted-foreground capitalize">
+                          {t.type.replace("_", " ")} · {t.category}
+                        </div>
                       </div>
-                    </div>
-                    <div className={`font-black shrink-0 ml-3 ${txToneClass(t)}`}>
-                      {txSign(t)}
-                      {fm(Math.abs(t.amount))}
-                    </div>
-                  </button>
+                      <div className={`font-black shrink-0 ml-3 ${txToneClass(t)}`}>
+                        {txSign(t)}
+                        {fm(Math.abs(t.amount))}
+                      </div>
+                    </button>
+                    {canEditTransaction(t) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onEdit(t);
+                          onClose();
+                        }}
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                        aria-label={`Edit ${t.description || t.category}`}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -2277,6 +2330,7 @@ function AllActivitySheet({
 function TransactionDetailSheet({
   tx,
   onClose,
+  onEdit,
   accounts,
   cards,
   debts,
@@ -2284,6 +2338,7 @@ function TransactionDetailSheet({
 }: {
   tx: Transaction | null;
   onClose: () => void;
+  onEdit: (t: Transaction) => void;
   accounts: { id: string; name: string; bankName: string }[];
   cards: { id: string; name: string }[];
   debts: { id: string; name: string }[];
@@ -2304,14 +2359,26 @@ function TransactionDetailSheet({
   return (
     <Sheet open={!!tx} onClose={onClose} title={tx.description || tx.category || "Transaction"}>
       <div className="space-y-4">
-        <div className="text-center py-2">
-          <div className={`text-4xl font-black tracking-tight ${txToneClass(tx)}`}>
-            {txSign(tx)}
-            {fm(Math.abs(tx.amount))}
+        <div className="flex items-start justify-between gap-3 py-2">
+          <div className="min-w-0 flex-1 text-center">
+            <div className={`text-4xl font-black tracking-tight ${txToneClass(tx)}`}>
+              {txSign(tx)}
+              {fm(Math.abs(tx.amount))}
+            </div>
+            <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground capitalize">
+              {tx.type.replace("_", " ")}
+            </div>
           </div>
-          <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground capitalize">
-            {tx.type.replace("_", " ")}
-          </div>
+          {canEditTransaction(tx) && (
+            <button
+              type="button"
+              onClick={() => onEdit(tx)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              aria-label={`Edit ${tx.description || tx.category}`}
+            >
+              <Pencil size={16} />
+            </button>
+          )}
         </div>
         <div className="rounded-2xl bg-muted/40 divide-y divide-border">
           <Row label="Date" value={formatDisplayDate(tx.date)} />
@@ -2329,18 +2396,182 @@ function TransactionDetailSheet({
           )}
           <Row label="Recorded" value={formatDisplayDate(tx.createdAt.slice(0, 10))} />
         </div>
-        {tx.notes && (
-          <div>
-            <div className="text-xs uppercase tracking-wide text-muted-foreground font-bold mb-1">
-              Notes
-            </div>
-            <div className="rounded-2xl bg-muted/40 p-3 text-sm whitespace-pre-wrap">
-              {tx.notes}
-            </div>
+        <div className="rounded-2xl bg-muted/40 p-3">
+          <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground font-bold">
+            Note
           </div>
-        )}
+          <div className="whitespace-pre-wrap text-sm text-foreground">
+            {tx.notes?.trim() ? tx.notes : "Nil"}
+          </div>
+        </div>
       </div>
     </Sheet>
   );
 }
 
+function EditTransactionSheet({
+  tx,
+  onClose,
+  onSaved,
+}: {
+  tx: Transaction | null;
+  onClose: () => void;
+  onSaved: (tx: Transaction) => void;
+}) {
+  const { state, dispatch } = useApp();
+  const [amount, setAmount] = useState(tx ? String(tx.amount) : "");
+  const [date, setDate] = useState(tx?.date ?? todayISO());
+  const [category, setCategory] = useState(tx?.category ?? "Groceries");
+  const [newCategory, setNewCategory] = useState("");
+  const [description, setDescription] = useState(tx?.description ?? "");
+  const [notes, setNotes] = useState(tx?.notes ?? "");
+  const [sourceType, setSourceType] = useState<"account" | "card">(tx?.cardId ? "card" : "account");
+  const [sourceAccountId, setSourceAccountId] = useState(tx?.sourceAccountId ?? "");
+  const [cardId, setCardId] = useState(tx?.cardId ?? "");
+
+  useEffect(() => {
+    setAmount(tx ? String(tx.amount) : "");
+    setDate(tx?.date ?? todayISO());
+    setCategory(tx?.category ?? "Groceries");
+    setNewCategory("");
+    setDescription(tx?.description ?? "");
+    setNotes(tx?.notes ?? "");
+    setSourceType(tx?.cardId ? "card" : "account");
+    setSourceAccountId(tx?.sourceAccountId ?? "");
+    setCardId(tx?.cardId ?? "");
+  }, [tx]);
+
+  if (!tx || !canEditTransaction(tx)) return null;
+  const currentTx = tx;
+
+  const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const accountOptions = state.accounts.filter(isSpendableAccount);
+  const amountNumber = toNumber(amount);
+  const selectedCategory =
+    category === "Other" && newCategory.trim() ? newCategory.trim() : category;
+
+  function save() {
+    if (amountNumber <= 0) return toast("Enter an amount");
+    if (!selectedCategory) return toast("Choose a category");
+    if (sourceType === "account" && !sourceAccountId) return toast("Choose an account");
+    if (sourceType === "card" && !cardId) return toast("Choose a card");
+    if (category === "Other" && newCategory.trim()) {
+      dispatch({ type: "ADD_CATEGORY", category: newCategory.trim() });
+    }
+
+    const nextTx: Transaction = {
+      ...currentTx,
+      amount: amountNumber,
+      category: selectedCategory,
+      description: description.trim(),
+      date,
+      notes: notes.trim() ? notes.trim() : undefined,
+      sourceAccountId: sourceType === "account" ? sourceAccountId : undefined,
+      cardId: sourceType === "card" ? cardId : undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
+    dispatch({
+      type: "UPDATE_TRANSACTION",
+      payload: {
+        id: currentTx.id,
+        amount: amountNumber,
+        category: selectedCategory,
+        description: description.trim(),
+        date,
+        notes,
+        sourceAccountId: sourceType === "account" ? sourceAccountId : undefined,
+        cardId: sourceType === "card" ? cardId : undefined,
+      },
+    });
+
+    toast("Expense updated");
+    onSaved(nextTx);
+  }
+
+  return (
+    <Sheet
+      open={!!tx}
+      onClose={onClose}
+      title="Edit expense"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Amount">
+          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </Field>
+        <Field label="Date">
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        <Field label="Category">
+          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+            {categories.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+            <option value="Other">Other</option>
+          </Select>
+        </Field>
+        {category === "Other" && (
+          <Field label="New category" hint="Leave blank to keep Other.">
+            <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+          </Field>
+        )}
+        <Field label="Description" hint="Shown as the expense title.">
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </Field>
+        <Field label="Paid with">
+          <Select
+            value={sourceType}
+            onChange={(e) => setSourceType(e.target.value as "account" | "card")}
+          >
+            <option value="account">Account</option>
+            <option value="card">Credit card</option>
+          </Select>
+        </Field>
+        {sourceType === "account" ? (
+          <Field label="Account">
+            <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
+              <option value="">Pick an account...</option>
+              {accountOptions.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
+          <Field label="Credit card">
+            <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
+              <option value="">Pick a card...</option>
+              {state.cards.map((card) => (
+                <option key={card.id} value={card.id}>
+                  {card.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+        <div className="sm:col-span-2">
+          <Field label="Note">
+            <Textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="No note"
+            />
+          </Field>
+        </div>
+      </div>
+    </Sheet>
+  );
+}

@@ -45,6 +45,19 @@ export type Action =
   | { type: "UPDATE_PLANNED_INCOME_OVERRIDE"; payload: PlannedIncomeOverride }
   | { type: "DELETE_PLANNED_INCOME_OVERRIDE"; id: string }
   | {
+      type: "UPDATE_TRANSACTION";
+      payload: {
+        id: string;
+        amount: number;
+        category: string;
+        description: string;
+        date: string;
+        notes?: string;
+        sourceAccountId?: string;
+        cardId?: string;
+      };
+    }
+  | {
       type: "ADD_EXPENSE";
       payload: {
         amount: number;
@@ -328,6 +341,69 @@ export function reducer(state: AppState, action: Action): AppState {
           (override) => override.id !== action.id,
         ),
       };
+
+    case "UPDATE_TRANSACTION": {
+      const p = action.payload;
+      const existing = state.transactions.find((transaction) => transaction.id === p.id);
+      if (!existing || existing.type !== "expense") return state;
+
+      let next = state;
+
+      if (existing.cardId) {
+        next = {
+          ...next,
+          cards: next.cards.map((card) =>
+            card.id === existing.cardId
+              ? {
+                  ...card,
+                  currentBalance: clampNonNegative(card.currentBalance - existing.amount),
+                }
+              : card,
+          ),
+        };
+      } else if (existing.sourceAccountId) {
+        next = {
+          ...next,
+          accounts: updateAccount(next, existing.sourceAccountId, existing.amount),
+        };
+      }
+
+      if (p.cardId) {
+        next = {
+          ...next,
+          cards: next.cards.map((card) =>
+            card.id === p.cardId
+              ? { ...card, currentBalance: card.currentBalance + p.amount }
+              : card,
+          ),
+        };
+      } else if (p.sourceAccountId) {
+        next = {
+          ...next,
+          accounts: updateAccount(next, p.sourceAccountId, -p.amount),
+        };
+      }
+
+      return {
+        ...next,
+        categories: mergeCategories(next.categories, [p.category]),
+        transactions: next.transactions.map((transaction) =>
+          transaction.id === p.id
+            ? {
+                ...transaction,
+                amount: p.amount,
+                category: p.category,
+                description: p.description,
+                date: p.date,
+                notes: p.notes?.trim() ? p.notes.trim() : undefined,
+                sourceAccountId: p.sourceAccountId,
+                cardId: p.cardId,
+                updatedAt: now(),
+              }
+            : transaction,
+        ),
+      };
+    }
 
     case "ADD_EXPENSE": {
       const p = action.payload;
