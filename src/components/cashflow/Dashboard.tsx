@@ -467,7 +467,7 @@ function CashFlowFormulaCard({
       )}
 
       <div
-        className="mt-4 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain pb-2"
+        className="mt-4 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain pb-2 hidden md:block"
         style={{ scrollbarWidth: "none" }}
       >
         <div className="flex w-max min-w-full items-center">
