@@ -335,11 +335,27 @@ export function Dashboard() {
       )}
 
       <Card>
-        <SectionTitle title="Recent activity" />
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-extrabold tracking-tight">Recent activity</h3>
+          {state.transactions.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setActivityOpen(true)}
+              className="text-xs font-bold text-[color:var(--primary)] hover:underline"
+            >
+              View all ({state.transactions.length})
+            </button>
+          )}
+        </div>
         {recent.length === 0 && <Empty label="No transactions yet" />}
         <div className="divide-y divide-border">
           {recent.map((t) => (
-            <div key={t.id} className="flex items-center justify-between py-2.5">
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setSelectedTx(t)}
+              className="flex w-full items-center justify-between py-2.5 text-left hover:bg-muted/40 rounded-lg px-1 -mx-1 transition-colors"
+            >
               <div className="min-w-0">
                 <div className="font-medium truncate">{t.description || t.category}</div>
                 <div className="text-xs text-muted-foreground capitalize">
@@ -347,7 +363,7 @@ export function Dashboard() {
                 </div>
               </div>
               <div
-                className={`font-black ${
+                className={`font-black shrink-0 ml-3 ${
                   t.type === "income"
                     ? "text-[color:var(--good)]"
                     : t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment"
@@ -362,10 +378,27 @@ export function Dashboard() {
                     : ""}
                 {m(Math.abs(t.amount))}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </Card>
+
+      <AllActivitySheet
+        open={activityOpen}
+        onClose={() => setActivityOpen(false)}
+        transactions={state.transactions}
+        onSelect={(t) => setSelectedTx(t)}
+        formatMoney={m}
+      />
+      <TransactionDetailSheet
+        tx={selectedTx}
+        onClose={() => setSelectedTx(null)}
+        accounts={state.accounts}
+        cards={state.cards}
+        debts={state.debts}
+        formatMoney={m}
+      />
+
 
       <BreakdownSheet
         open={!!activeBreakdownData}
