@@ -2189,3 +2189,158 @@ function Row({
 function Empty({ label }: { label: string }) {
   return <div className="py-6 text-center text-sm text-muted-foreground">{label}</div>;
 }
+
+function txSign(t: Transaction): "+" | "-" | "" {
+  if (t.type === "income") return "+";
+  if (t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment") return "-";
+  return "";
+}
+
+function txToneClass(t: Transaction): string {
+  if (t.type === "income") return "text-[color:var(--good)]";
+  if (t.type === "expense" || t.type === "card_payment" || t.type === "debt_payment")
+    return "text-[color:var(--bad)]";
+  return "";
+}
+
+function AllActivitySheet({
+  open,
+  onClose,
+  transactions,
+  onSelect,
+  formatMoney: fm,
+}: {
+  open: boolean;
+  onClose: () => void;
+  transactions: Transaction[];
+  onSelect: (t: Transaction) => void;
+  formatMoney: (n: number) => string;
+}) {
+  const sorted = useMemo(
+    () =>
+      [...transactions].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+    [transactions],
+  );
+  const grouped = useMemo(() => {
+    const map = new Map<string, Transaction[]>();
+    for (const t of sorted) {
+      const arr = map.get(t.date) ?? [];
+      arr.push(t);
+      map.set(t.date, arr);
+    }
+    return Array.from(map.entries());
+  }, [sorted]);
+
+  return (
+    <Sheet open={open} onClose={onClose} title={`All activity (${transactions.length})`}>
+      {sorted.length === 0 ? (
+        <Empty label="No transactions yet" />
+      ) : (
+        <div className="max-h-[70vh] overflow-y-auto overscroll-contain -mx-1 px-1">
+          {grouped.map(([date, items]) => (
+            <div key={date} className="mb-4">
+              <div className="sticky top-0 z-10 bg-[color:var(--card-solid)] py-1.5 text-xs uppercase tracking-wide text-muted-foreground font-bold">
+                {formatDisplayDate(date)}
+              </div>
+              <div className="divide-y divide-border">
+                {items.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => {
+                      onSelect(t);
+                      onClose();
+                    }}
+                    className="flex w-full items-center justify-between py-2.5 text-left hover:bg-muted/40 rounded-lg px-2 transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-medium truncate">{t.description || t.category}</div>
+                      <div className="text-xs text-muted-foreground capitalize">
+                        {t.type.replace("_", " ")} · {t.category}
+                      </div>
+                    </div>
+                    <div className={`font-black shrink-0 ml-3 ${txToneClass(t)}`}>
+                      {txSign(t)}
+                      {fm(Math.abs(t.amount))}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
+function TransactionDetailSheet({
+  tx,
+  onClose,
+  accounts,
+  cards,
+  debts,
+  formatMoney: fm,
+}: {
+  tx: Transaction | null;
+  onClose: () => void;
+  accounts: { id: string; name: string; bankName: string }[];
+  cards: { id: string; name: string }[];
+  debts: { id: string; name: string }[];
+  formatMoney: (n: number) => string;
+}) {
+  if (!tx) return null;
+  const account = accounts.find((a) => a.id === tx.sourceAccountId);
+  const targetAccount = accounts.find((a) => a.id === tx.targetAccountId);
+  const card = cards.find((c) => c.id === tx.cardId);
+  const debt = debts.find((d) => d.id === tx.debtId);
+
+  let method = "—";
+  if (card) method = `Credit card · ${card.name}`;
+  else if (account) method = `${account.bankName} · ${account.name}`;
+  else if (tx.type === "income" && targetAccount)
+    method = `${targetAccount.bankName} · ${targetAccount.name}`;
+
+  return (
+    <Sheet open={!!tx} onClose={onClose} title={tx.description || tx.category || "Transaction"}>
+      <div className="space-y-4">
+        <div className="text-center py-2">
+          <div className={`text-4xl font-black tracking-tight ${txToneClass(tx)}`}>
+            {txSign(tx)}
+            {fm(Math.abs(tx.amount))}
+          </div>
+          <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground capitalize">
+            {tx.type.replace("_", " ")}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-muted/40 divide-y divide-border">
+          <Row label="Date" value={formatDisplayDate(tx.date)} />
+          <Row label="Category" value={tx.category || "—"} />
+          <Row label="Payment method" value={method} />
+          {targetAccount && tx.type === "transfer" && account && (
+            <Row label="To" value={`${targetAccount.bankName} · ${targetAccount.name}`} />
+          )}
+          {debt && <Row label="Debt" value={debt.name} />}
+          {tx.cycleStart && tx.cycleEnd && (
+            <Row
+              label="Billing cycle"
+              value={`${formatDisplayDate(tx.cycleStart)} – ${formatDisplayDate(tx.cycleEnd)}`}
+            />
+          )}
+          <Row label="Recorded" value={formatDisplayDate(tx.createdAt.slice(0, 10))} />
+        </div>
+        {tx.notes && (
+          <div>
+            <div className="text-xs uppercase tracking-wide text-muted-foreground font-bold mb-1">
+              Notes
+            </div>
+            <div className="rounded-2xl bg-muted/40 p-3 text-sm whitespace-pre-wrap">
+              {tx.notes}
+            </div>
+          </div>
+        )}
+      </div>
+    </Sheet>
+  );
+}
+
