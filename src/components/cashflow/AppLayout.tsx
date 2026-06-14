@@ -37,7 +37,7 @@ export function AppLayout({
   return (
     <div className="min-h-screen md:grid md:grid-cols-[260px_1fr]">
       <Sidebar tab={tab} setTab={setTab} />
-      <main className="px-4 pt-5 pb-28 md:px-8 md:pt-8 md:pb-10 max-w-[1400px] w-full mx-auto">
+      <main className="w-full max-w-[1400px] mx-auto overflow-x-hidden px-4 pt-5 pb-28 md:px-8 md:pt-8 md:pb-10">
         {children}
       </main>
       <BottomNav tab={tab} setTab={setTab} />

@@ -76,19 +76,42 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover, shrink-to-fit=no",
+      },
       { title: "Lovable App" },
-      { name: "description", content: "CashFlow Control is a personal finance app for tracking cash flow, debt, cards, income, and timesheets." },
+      {
+        name: "description",
+        content:
+          "CashFlow Control is a personal finance app for tracking cash flow, debt, cards, income, and timesheets.",
+      },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "CashFlow Control is a personal finance app for tracking cash flow, debt, cards, income, and timesheets." },
+      {
+        property: "og:description",
+        content:
+          "CashFlow Control is a personal finance app for tracking cash flow, debt, cards, income, and timesheets.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "CashFlow Control is a personal finance app for tracking cash flow, debt, cards, income, and timesheets." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c42e1e4d-4012-41c6-9b45-a24e9fb84579/id-preview-a16603a6--fc26ac18-1d98-4fe5-a0d9-b0e56a5bac65.lovable.app-1780890612727.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c42e1e4d-4012-41c6-9b45-a24e9fb84579/id-preview-a16603a6--fc26ac18-1d98-4fe5-a0d9-b0e56a5bac65.lovable.app-1780890612727.png" },
+      {
+        name: "twitter:description",
+        content:
+          "CashFlow Control is a personal finance app for tracking cash flow, debt, cards, income, and timesheets.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c42e1e4d-4012-41c6-9b45-a24e9fb84579/id-preview-a16603a6--fc26ac18-1d98-4fe5-a0d9-b0e56a5bac65.lovable.app-1780890612727.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c42e1e4d-4012-41c6-9b45-a24e9fb84579/id-preview-a16603a6--fc26ac18-1d98-4fe5-a0d9-b0e56a5bac65.lovable.app-1780890612727.png",
+      },
     ],
     links: [
       {

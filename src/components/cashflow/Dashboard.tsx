@@ -467,10 +467,10 @@ function CashFlowFormulaCard({
       )}
 
       <div
-        className="mt-4 overflow-x-auto overscroll-x-contain pb-2"
+        className="mt-4 w-full max-w-full overflow-x-auto overflow-y-visible overscroll-x-contain pb-2"
         style={{ scrollbarWidth: "none" }}
       >
-        <div className="flex min-w-max items-center">
+        <div className="flex w-max min-w-full items-center">
           <FlowSegment
             tone="green"
             title="Have now"
