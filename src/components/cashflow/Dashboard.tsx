@@ -511,13 +511,14 @@ function CashFlowFormulaCard({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
         <FlowDetail
           tone="green"
           label="Have now"
           value={formatMoney(haveNow)}
           helper="Current spendable cash"
           badge="In your accounts"
+          icon={Wallet}
           onClick={() => onOpenBreakdown("have_now")}
         />
         <FlowDetail
@@ -526,6 +527,7 @@ function CashFlowFormulaCard({
           value={formatMoney(incomeComing)}
           helper={period === "this_month" ? "Expected this month" : "Expected in period"}
           badge={incomeComing > 0 ? "Not received yet" : "No income pending"}
+          icon={CalendarClock}
           onClick={() => onOpenBreakdown("income_coming")}
         />
         <FlowDetail
@@ -534,6 +536,7 @@ function CashFlowFormulaCard({
           value={formatMoney(expensesComing)}
           helper="Bills and spending due"
           badge={expensesComing > 0 ? "Not paid yet" : "No upcoming expenses"}
+          icon={ReceiptText}
           onClick={() => onOpenBreakdown("expenses_coming")}
         />
         <FlowDetail
@@ -542,6 +545,7 @@ function CashFlowFormulaCard({
           value={formatMoney(leftToSpend)}
           helper="Available after expenses"
           badge={shortfall ? "Needs coverage" : "Ready to use"}
+          icon={Target}
           onClick={() => onOpenBreakdown("left_to_spend")}
         />
         <FlowDetail
@@ -550,6 +554,8 @@ function CashFlowFormulaCard({
           value={formatMoney(spendableToday)}
           helper="Safe surplus"
           badge="Today check"
+          icon={Wallet}
+          className="col-span-2 xl:col-span-1"
           onClick={() => onOpenBreakdown("spendable_today")}
         />
       </div>
@@ -672,6 +678,8 @@ function FlowDetail({
   value,
   helper,
   badge,
+  icon: Icon,
+  className,
   onClick,
 }: {
   tone: FlowTone;
@@ -679,15 +687,24 @@ function FlowDetail({
   value: string;
   helper: string;
   badge: string;
+  icon: typeof Wallet;
+  className?: string;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border bg-muted/25 p-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].detail}`}
+      className={`rounded-2xl border bg-muted/25 p-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].detail} ${className ?? ""}`}
     >
-      <div className={`text-xs font-extrabold ${flowTone[tone].text}`}>{label}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className={`text-xs font-extrabold ${flowTone[tone].text}`}>{label}</div>
+        <div
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color:var(--card-solid)] ${flowTone[tone].text}`}
+        >
+          <Icon size={16} />
+        </div>
+      </div>
       <div className="mt-1 text-lg font-black">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
       <div
