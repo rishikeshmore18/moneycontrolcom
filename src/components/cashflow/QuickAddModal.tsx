@@ -137,29 +137,101 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         />
       </Field>
       <Field label="Payment method">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {(
-            [
-              ["credit_card", "Credit card"],
-              ["debit", "Debit / bank"],
-              ["cash", "Cash"],
-              ["debt_payment", "Debt payment"],
-              ["other", "Other"],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMethod(id)}
-              className={`px-3 py-2.5 rounded-2xl text-sm font-bold border transition ${
-                method === id
-                  ? "border-primary brand-gradient text-primary-foreground"
-                  : "border-border bg-[color:var(--card-solid)] text-foreground hover:bg-muted"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        <div className="grid gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {(
+              [
+                ["credit_card", "Credit card"],
+                ["debit", "Debit / bank"],
+                ["cash", "Cash"],
+                ["debt_payment", "Debt payment"],
+                ["other", "Other"],
+              ] as const
+            ).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setMethod(id)}
+                className={`px-3 py-2.5 rounded-2xl text-sm font-bold border transition ${
+                  method === id
+                    ? "border-primary brand-gradient text-primary-foreground"
+                    : "border-border bg-[color:var(--card-solid)] text-foreground hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {method === "credit_card" && state.cards.length > 0 && (
+            <div className="grid gap-2">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Select card
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {state.cards.map((card) => {
+                  const selected = cardId === card.id;
+                  return (
+                    <button
+                      key={card.id}
+                      type="button"
+                      onClick={() => setCardId(card.id)}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${
+                        selected
+                          ? "border-primary brand-gradient text-primary-foreground"
+                          : "border-border bg-[color:var(--card-solid)] hover:bg-muted"
+                      }`}
+                    >
+                      <div className="font-bold">{card.name}</div>
+                      <div
+                        className={`text-xs ${
+                          selected ? "text-primary-foreground/80" : "text-muted-foreground"
+                        }`}
+                      >
+                        Available {formatMoney(availableCredit(card), cur)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {(method === "debit" || method === "debt_payment") && nonCashAccounts.length > 0 && (
+            <div className="grid gap-2">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                Select account
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {nonCashAccounts.map((account) => {
+                  const selected = sourceAccountId === account.id;
+                  return (
+                    <button
+                      key={account.id}
+                      type="button"
+                      onClick={() => setSourceAccountId(account.id)}
+                      className={`rounded-2xl border px-3 py-3 text-left transition ${
+                        selected
+                          ? "border-primary brand-gradient text-primary-foreground"
+                          : "border-border bg-[color:var(--card-solid)] hover:bg-muted"
+                      }`}
+                    >
+                      <div className="font-bold">
+                        {account.bankName ? `${account.bankName} ${account.name}` : account.name}
+                      </div>
+                      <div
+                        className={`text-xs ${
+                          selected ? "text-primary-foreground/80" : "text-muted-foreground"
+                        }`}
+                      >
+                        {account.type} · {formatMoney(account.balance, cur)}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </Field>
 
@@ -167,18 +239,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         <>
           {state.cards.length === 0 ? (
             <Notice tone="warn">No cards yet. Add one in your profile first.</Notice>
-          ) : (
-            <Field label="Card">
-              <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
-                <option value="">Pick a card…</option>
-                {state.cards.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} · avail {formatMoney(availableCredit(c), cur)}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          )}
+          ) : null}
           {recommendation && (
             <Notice tone="info">
               💡 Suggested: <b>{recommendation.card.name}</b> — {recommendation.reason}.{" "}
@@ -225,21 +286,12 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         </>
       )}
 
-      {(method === "debit" || method === "debt_payment") && (
-        <Field label="Source account">
-          <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
-            <option value="">Pick an account…</option>
-            {nonCashAccounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.bankName} {a.name} · {a.type} · {formatMoney(a.balance, cur)}
-              </option>
-            ))}
-          </Select>
-        </Field>
-      )}
-
       {method === "cash" && !cashAccount && (
         <Notice tone="warn">No cash account exists. Add one in profile.</Notice>
+      )}
+
+      {(method === "debit" || method === "debt_payment") && nonCashAccounts.length === 0 && (
+        <Notice tone="warn">No spendable bank accounts available. Add one in Profile first.</Notice>
       )}
 
       {overdraft && <Notice tone="warn">This will overdraw the selected account.</Notice>}
