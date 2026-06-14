@@ -873,7 +873,7 @@ function AffordabilityDialog({
       aria-modal="true"
       aria-label="Expense affordability details"
     >
-      <div className="w-full max-w-md rounded-2xl border border-border bg-[color:var(--card)] p-5 shadow-2xl">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-[color:var(--card-solid)] p-5 shadow-2xl">
         <div className="flex items-start justify-between gap-4">
           <div>
             <div
@@ -896,7 +896,7 @@ function AffordabilityDialog({
             x
           </button>
         </div>
-        <div className="mt-4 grid gap-2 rounded-2xl border border-border bg-muted/20 p-3 text-sm">
+        <div className="mt-4 grid gap-2 rounded-2xl border border-border bg-[color:var(--card-solid)] p-3 text-sm">
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Projected cash before</span>
             <span className="font-bold">{formatMoney(affordability.balanceBefore)}</span>
@@ -918,7 +918,7 @@ function AffordabilityDialog({
             </span>
           </div>
         </div>
-        <div className="mt-4 rounded-xl border border-border bg-[color:var(--background)] p-3 text-xs leading-relaxed text-muted-foreground">
+        <div className="mt-4 rounded-xl border border-border bg-[color:var(--card-solid)] p-3 text-xs leading-relaxed text-muted-foreground">
           {blocked ? (
             affordability.recoveryDate ? (
               <>

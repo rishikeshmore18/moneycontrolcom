@@ -352,7 +352,7 @@ function SourcePickerDialog({
       aria-modal="true"
       aria-label={title}
     >
-      <div className="w-full max-w-lg rounded-2xl border border-border bg-[color:var(--card)] p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-[color:var(--card-solid)] p-5 shadow-2xl">
         <div className="flex items-center justify-between gap-3">
           <div className="text-base font-black">{title}</div>
           <button
