@@ -9,6 +9,8 @@ import {
   Moon,
   Sun,
   Laptop,
+  Menu,
+  X,
 } from "lucide-react";
 import { useApp } from "@/lib/cashflow/AppContext";
 import type { Theme } from "@/lib/cashflow/types";
@@ -34,10 +36,30 @@ export function AppLayout({
   onQuickAdd: () => void;
   children: ReactNode;
 }) {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[260px_1fr]">
-      <Sidebar tab={tab} setTab={setTab} />
-      <main className="w-full max-w-[1400px] mx-auto overflow-x-hidden px-4 pt-5 pb-28 md:px-8 md:pt-8 md:pb-10">
+    <div
+      className={`min-h-screen md:grid ${sidebarOpen ? "md:grid-cols-[260px_1fr]" : "md:grid-cols-[1fr]"}`}
+    >
+      {sidebarOpen && (
+        <Sidebar
+          tab={tab}
+          setTab={setTab}
+          onClose={() => setSidebarOpen(false)}
+        />
+      )}
+      <main className="w-full max-w-[1400px] mx-auto overflow-x-hidden px-4 pt-5 pb-28 md:px-8 md:pt-6 md:pb-10">
+        {/* Desktop/tablet top bar with sidebar toggle */}
+        <div className="hidden md:flex items-center mb-4">
+          <button
+            onClick={() => setSidebarOpen((o) => !o)}
+            className="grid h-10 w-10 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] hover:bg-muted transition"
+            aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          >
+            <Menu size={18} />
+          </button>
+        </div>
         {children}
       </main>
       <BottomNav tab={tab} setTab={setTab} />
@@ -52,10 +74,27 @@ export function AppLayout({
   );
 }
 
-function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
+function Sidebar({
+  tab,
+  setTab,
+  onClose,
+}: {
+  tab: Tab;
+  setTab: (t: Tab) => void;
+  onClose: () => void;
+}) {
   return (
     <aside className="hidden md:flex md:flex-col md:sticky md:top-0 md:h-screen p-6 border-r border-border bg-[color:var(--card)] backdrop-blur-xl">
-      <Logo />
+      <div className="flex items-start justify-between gap-2">
+        <Logo />
+        <button
+          onClick={onClose}
+          className="grid h-9 w-9 place-items-center rounded-xl hover:bg-muted text-muted-foreground"
+          aria-label="Hide sidebar"
+        >
+          <X size={16} />
+        </button>
+      </div>
       <nav className="grid gap-1.5 mt-2">
         {NAV.map(({ id, label, icon: Icon }) => (
           <button
@@ -84,19 +123,19 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
 
 function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
-    <nav className="md:hidden fixed left-3 right-3 bottom-3 z-30 grid grid-cols-5 gap-1 p-2 rounded-3xl border border-border bg-[color:var(--card)] backdrop-blur-xl shadow-elegant">
+    <nav className="md:hidden fixed left-2 right-2 bottom-2 z-30 grid grid-cols-5 gap-0.5 p-1.5 rounded-3xl border border-border bg-[color:var(--card)] backdrop-blur-xl shadow-elegant">
       {NAV.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
           onClick={() => setTab(id)}
-          className={`flex flex-col items-center justify-center py-2 px-1 rounded-2xl text-[11px] font-extrabold transition ${
+          className={`flex min-w-0 flex-col items-center justify-center py-2 px-0.5 rounded-2xl text-[10px] font-extrabold transition ${
             tab === id
               ? "bg-gradient-to-br from-primary/22 to-primary-glow/15 text-foreground"
               : "text-muted-foreground"
           }`}
         >
           <Icon size={18} />
-          {label}
+          <span className="mt-0.5 w-full truncate text-center leading-tight">{label}</span>
         </button>
       ))}
     </nav>
