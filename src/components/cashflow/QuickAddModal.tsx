@@ -117,6 +117,29 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
     if (method === "debt_payment" && !debtId) return toast("Select a debt");
     if (method === "cash" && !cashAccount) return toast("Add a cash account first");
 
+    // If matched to an upcoming card bill, route through PAY_CREDIT_CARD so the
+    // cycle is reconciled and the planned item is cleared. Requires an account.
+    if (matchedItem?.sourceType === "card_due" && matchedItem.sourceId) {
+      if (method === "credit_card") return toast("Pay a card from an account, not another card");
+      const acct =
+        method === "cash" ? cashAccount?.id : method === "debit" ? sourceAccountId : undefined;
+      if (!acct) return toast("Select an account to pay the card from");
+      dispatch({
+        type: "PAY_CREDIT_CARD",
+        payload: {
+          cardId: matchedItem.sourceId,
+          amount: amt,
+          sourceAccountId: acct,
+          date,
+          notes: description,
+          plannedExpenseItemId: matchedItem.id,
+        },
+      });
+      toast(`Paid ${formatMoney(amt, cur)} to ${matchedItem.label}`);
+      onDone();
+      return;
+    }
+
     if (method === "debt_payment") {
       dispatch({
         type: "PAY_DEBT",
@@ -128,7 +151,9 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           notes: description,
         },
       });
-      toast(`Debt payment logged Â· ${formatMoney(amt, cur)}`);
+      // If this debt payment matches a planned debt-plan item, skip that plan for the month.
+      if (matchedItem?.sourceType === "debt_plan") skipMatchedPlannedItem(matchedItem);
+      toast(`Debt payment logged · ${formatMoney(amt, cur)}`);
       onDone();
       return;
     }
@@ -146,6 +171,13 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           method === "debit" ? sourceAccountId : method === "cash" ? cashAccount?.id : undefined,
       },
     });
+    // Link this expense to a matched upcoming bill (recurring / one-time)
+    if (
+      matchedItem &&
+      (matchedItem.sourceType === "recurring_bill" || matchedItem.sourceType === "one_time")
+    ) {
+      skipMatchedPlannedItem(matchedItem);
+    }
     toast(`Expense logged · ${formatMoney(amt, cur)}`);
     onDone();
   }
