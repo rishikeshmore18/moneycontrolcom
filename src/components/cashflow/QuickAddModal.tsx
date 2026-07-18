@@ -11,7 +11,8 @@ import {
   cycleForDate,
   expensesInCycle,
 } from "@/lib/cashflow/cardLogic";
-import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
+import { isSpendableAccount, plannedDebtPayment, expensesComingBreakdown } from "@/lib/cashflow/forecast";
+import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
 type ExpenseMethod = "credit_card" | "debit" | "cash" | "debt_payment" | "other";
@@ -29,6 +30,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [cardId, setCardId] = useState<string>("");
   const [debtId, setDebtId] = useState<string>("");
   const [sourceAccountId, setSourceAccountId] = useState<string>("");
+  const [matchedItemId, setMatchedItemId] = useState<string>("");
 
   const amt = toNumber(amount);
   const cur = state.profile.currency;
@@ -40,6 +42,66 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
     category === "Other" && otherCategory.trim() ? otherCategory.trim() : category;
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
   const chosenDebt = state.debts.find((d) => d.id === debtId);
+
+  const upcomingItems = useMemo<CashFlowBreakdownItem[]>(() => {
+    const sections = expensesComingBreakdown(state);
+    return sections.flatMap((s) =>
+      s.items.filter((i) =>
+        ["recurring_bill", "one_time", "card_due", "debt_plan"].includes(i.sourceType ?? ""),
+      ),
+    );
+  }, [state]);
+  const matchedItem = upcomingItems.find((i) => i.id === matchedItemId);
+
+  function skipMatchedPlannedItem(item: CashFlowBreakdownItem) {
+    if (!item.sourceType) return;
+    const itemMonth =
+      item.periodDate?.slice(0, 7) ??
+      item.dueDate?.slice(0, 7) ??
+      new Date().toISOString().slice(0, 7);
+    if (item.overrideId && item.sourceType === "one_time") {
+      dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId });
+      return;
+    }
+    if (!item.sourceId && item.sourceType !== "one_time") return;
+    dispatch({
+      type: "ADD_PLANNED_EXPENSE_OVERRIDE",
+      payload: {
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
+        month: itemMonth,
+        action: "skip",
+      },
+    });
+  }
+
+
+  function applyMatch(id: string) {
+    setMatchedItemId(id);
+    if (!id) return;
+    const item = upcomingItems.find((i) => i.id === id);
+    if (!item) return;
+    if (!amount) setAmount(String(item.amount));
+    if (!description) setDescription(item.label);
+    if (item.category && categories.includes(item.category)) setCategory(item.category);
+    if (item.sourceType === "debt_plan" && item.sourceId) {
+      chooseMethod("debt_payment");
+      setDebtId(item.sourceId);
+      const firstAcct = nonCashAccounts[0]?.id ?? "";
+      if (!sourceAccountId && firstAcct) setSourceAccountId(firstAcct);
+    } else if (item.sourceType === "card_due") {
+      // Paying a card bill from an account -> use debit flow, we branch on submit.
+      chooseMethod("debit");
+      const acct = item.accountId ?? nonCashAccounts[0]?.id ?? "";
+      if (acct) setSourceAccountId(acct);
+    } else if (item.paymentMethod === "card" && item.cardId) {
+      chooseMethod("credit_card");
+      setCardId(item.cardId);
+    } else if (item.accountId) {
+      chooseMethod("debit");
+      setSourceAccountId(item.accountId);
+    }
+  }
 
   const recommendation = useMemo(
     () =>
@@ -78,6 +140,29 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
     if (method === "debt_payment" && !debtId) return toast("Select a debt");
     if (method === "cash" && !cashAccount) return toast("Add a cash account first");
 
+    // If matched to an upcoming card bill, route through PAY_CREDIT_CARD so the
+    // cycle is reconciled and the planned item is cleared. Requires an account.
+    if (matchedItem?.sourceType === "card_due" && matchedItem.sourceId) {
+      if (method === "credit_card") return toast("Pay a card from an account, not another card");
+      const acct =
+        method === "cash" ? cashAccount?.id : method === "debit" ? sourceAccountId : undefined;
+      if (!acct) return toast("Select an account to pay the card from");
+      dispatch({
+        type: "PAY_CREDIT_CARD",
+        payload: {
+          cardId: matchedItem.sourceId,
+          amount: amt,
+          sourceAccountId: acct,
+          date,
+          notes: description,
+          plannedExpenseItemId: matchedItem.id,
+        },
+      });
+      toast(`Paid ${formatMoney(amt, cur)} to ${matchedItem.label}`);
+      onDone();
+      return;
+    }
+
     if (method === "debt_payment") {
       dispatch({
         type: "PAY_DEBT",
@@ -89,7 +174,9 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           notes: description,
         },
       });
-      toast(`Debt payment logged Â· ${formatMoney(amt, cur)}`);
+      // If this debt payment matches a planned debt-plan item, skip that plan for the month.
+      if (matchedItem?.sourceType === "debt_plan") skipMatchedPlannedItem(matchedItem);
+      toast(`Debt payment logged · ${formatMoney(amt, cur)}`);
       onDone();
       return;
     }
@@ -107,13 +194,52 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           method === "debit" ? sourceAccountId : method === "cash" ? cashAccount?.id : undefined,
       },
     });
+    // Link this expense to a matched upcoming bill (recurring / one-time)
+    if (
+      matchedItem &&
+      (matchedItem.sourceType === "recurring_bill" || matchedItem.sourceType === "one_time")
+    ) {
+      skipMatchedPlannedItem(matchedItem);
+    }
     toast(`Expense logged · ${formatMoney(amt, cur)}`);
     onDone();
   }
 
   return (
     <div className="grid gap-4">
+      {upcomingItems.length > 0 && (
+        <Field
+          label="Match with upcoming (optional)"
+          hint="Link this expense to a bill or card payment already on your forecast so nothing is double-counted."
+        >
+          <Select value={matchedItemId} onChange={(e) => applyMatch(e.target.value)}>
+            <option value="">None — log as a new expense</option>
+            {upcomingItems.map((item) => {
+              const kind =
+                item.sourceType === "card_due"
+                  ? "Card bill"
+                  : item.sourceType === "debt_plan"
+                    ? "Debt plan"
+                    : "Bill";
+              const due = item.dueDate ? ` · due ${item.dueDate}` : "";
+              return (
+                <option key={item.id} value={item.id}>
+                  {kind}: {item.label} · {formatMoney(item.amount, cur)}
+                  {due}
+                </option>
+              );
+            })}
+          </Select>
+        </Field>
+      )}
+      {matchedItem && (
+        <Notice tone="info">
+          Linked to <b>{matchedItem.label}</b>. When you save, this upcoming item will be marked
+          paid for the month so it won&apos;t show twice.
+        </Notice>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
+
         <Field label="Amount">
           <Input
             type="number"
