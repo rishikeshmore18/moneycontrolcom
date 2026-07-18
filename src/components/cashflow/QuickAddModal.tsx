@@ -207,7 +207,39 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="grid gap-4">
+      {upcomingItems.length > 0 && (
+        <Field
+          label="Match with upcoming (optional)"
+          hint="Link this expense to a bill or card payment already on your forecast so nothing is double-counted."
+        >
+          <Select value={matchedItemId} onChange={(e) => applyMatch(e.target.value)}>
+            <option value="">None — log as a new expense</option>
+            {upcomingItems.map((item) => {
+              const kind =
+                item.sourceType === "card_due"
+                  ? "Card bill"
+                  : item.sourceType === "debt_plan"
+                    ? "Debt plan"
+                    : "Bill";
+              const due = item.dueDate ? ` · due ${item.dueDate}` : "";
+              return (
+                <option key={item.id} value={item.id}>
+                  {kind}: {item.label} · {formatMoney(item.amount, cur)}
+                  {due}
+                </option>
+              );
+            })}
+          </Select>
+        </Field>
+      )}
+      {matchedItem && (
+        <Notice tone="info">
+          Linked to <b>{matchedItem.label}</b>. When you save, this upcoming item will be marked
+          paid for the month so it won&apos;t show twice.
+        </Notice>
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
+
         <Field label="Amount">
           <Input
             type="number"
