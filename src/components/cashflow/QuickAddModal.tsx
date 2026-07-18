@@ -43,6 +43,43 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
   const chosenDebt = state.debts.find((d) => d.id === debtId);
 
+  const upcomingItems = useMemo<CashFlowBreakdownItem[]>(() => {
+    const sections = expensesComingBreakdown(state);
+    return sections.flatMap((s) =>
+      s.items.filter((i) =>
+        ["recurring_bill", "one_time", "card_due", "debt_plan"].includes(i.sourceType ?? ""),
+      ),
+    );
+  }, [state]);
+  const matchedItem = upcomingItems.find((i) => i.id === matchedItemId);
+
+  function applyMatch(id: string) {
+    setMatchedItemId(id);
+    if (!id) return;
+    const item = upcomingItems.find((i) => i.id === id);
+    if (!item) return;
+    if (!amount) setAmount(String(item.amount));
+    if (!description) setDescription(item.label);
+    if (item.category && categories.includes(item.category)) setCategory(item.category);
+    if (item.sourceType === "debt_plan" && item.sourceId) {
+      chooseMethod("debt_payment");
+      setDebtId(item.sourceId);
+      const firstAcct = nonCashAccounts[0]?.id ?? "";
+      if (!sourceAccountId && firstAcct) setSourceAccountId(firstAcct);
+    } else if (item.sourceType === "card_due") {
+      // Paying a card bill from an account -> use debit flow, we branch on submit.
+      chooseMethod("debit");
+      const acct = item.accountId ?? nonCashAccounts[0]?.id ?? "";
+      if (acct) setSourceAccountId(acct);
+    } else if (item.paymentMethod === "card" && item.cardId) {
+      chooseMethod("credit_card");
+      setCardId(item.cardId);
+    } else if (item.accountId) {
+      chooseMethod("debit");
+      setSourceAccountId(item.accountId);
+    }
+  }
+
   const recommendation = useMemo(
     () =>
       method === "credit_card" && amt > 0
