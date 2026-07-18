@@ -1910,7 +1910,10 @@ function PayBillSheet({
       }
     >
       <div className="grid gap-3">
-        <Field label="Amount">
+        <Field
+          label="Amount"
+          hint={`Planned ${formatMoney(item.amount, cur)}. Change it if you're paying a different amount.`}
+        >
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
         <Field label="Payment date">
