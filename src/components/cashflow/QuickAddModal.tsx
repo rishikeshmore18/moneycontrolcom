@@ -30,6 +30,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [cardId, setCardId] = useState<string>("");
   const [debtId, setDebtId] = useState<string>("");
   const [sourceAccountId, setSourceAccountId] = useState<string>("");
+  const [matchedItemId, setMatchedItemId] = useState<string>("");
 
   const amt = toNumber(amount);
   const cur = state.profile.currency;
