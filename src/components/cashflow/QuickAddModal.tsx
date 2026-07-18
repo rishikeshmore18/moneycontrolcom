@@ -53,6 +53,29 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   }, [state]);
   const matchedItem = upcomingItems.find((i) => i.id === matchedItemId);
 
+  function skipMatchedPlannedItem(item: CashFlowBreakdownItem) {
+    if (!item.sourceType) return;
+    const itemMonth =
+      item.periodDate?.slice(0, 7) ??
+      item.dueDate?.slice(0, 7) ??
+      new Date().toISOString().slice(0, 7);
+    if (item.overrideId && item.sourceType === "one_time") {
+      dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId });
+      return;
+    }
+    if (!item.sourceId && item.sourceType !== "one_time") return;
+    dispatch({
+      type: "ADD_PLANNED_EXPENSE_OVERRIDE",
+      payload: {
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
+        month: itemMonth,
+        action: "skip",
+      },
+    });
+  }
+
+
   function applyMatch(id: string) {
     setMatchedItemId(id);
     if (!id) return;
