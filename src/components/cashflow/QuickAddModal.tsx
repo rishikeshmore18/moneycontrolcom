@@ -11,7 +11,8 @@ import {
   cycleForDate,
   expensesInCycle,
 } from "@/lib/cashflow/cardLogic";
-import { isSpendableAccount, plannedDebtPayment } from "@/lib/cashflow/forecast";
+import { isSpendableAccount, plannedDebtPayment, expensesComingBreakdown } from "@/lib/cashflow/forecast";
+import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
 type ExpenseMethod = "credit_card" | "debit" | "cash" | "debt_payment" | "other";
