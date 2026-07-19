@@ -70,8 +70,11 @@ export interface Debt {
   payoffTargetDate?: string;
   payoffPaymentCount?: number;
   plannedMonthlyPayment?: number;
+  startDate?: string; // ISO date — when this debt becomes active (esp. for "not_started")
+  endDate?: string;   // ISO date — optional cutoff after which no more planned payments
   notes?: string;
 }
+
 
 export type JobType = "full_time" | "part_time" | "custom";
 export type PayFrequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
