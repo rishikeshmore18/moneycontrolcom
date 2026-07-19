@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppProvider, useApp } from "@/lib/cashflow/AppContext";
 import { AppLayout, type Tab } from "@/components/cashflow/AppLayout";
 import { Dashboard } from "@/components/cashflow/Dashboard";
