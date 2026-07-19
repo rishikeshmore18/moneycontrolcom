@@ -616,6 +616,16 @@ export function debtMinimums(state: AppState): number {
 export function plannedDebtPayment(debt: Omit<Debt, "id"> | Debt, ref: Date = new Date()): number {
   if (debt.status !== "active" || debt.balance <= 0) return 0;
 
+  // Respect optional start/end window — additive; empty fields preserve prior behavior.
+  if (debt.startDate) {
+    const start = new Date(`${debt.startDate}T00:00:00`);
+    if (!Number.isNaN(start.getTime()) && start > ref) return 0;
+  }
+  if (debt.endDate) {
+    const end = new Date(`${debt.endDate}T23:59:59`);
+    if (!Number.isNaN(end.getTime()) && end < ref) return 0;
+  }
+
   let planned = debt.minimumPayment;
   if (debt.payoffMode === "payments" && debt.payoffPaymentCount && debt.payoffPaymentCount > 0) {
     planned = debt.balance / debt.payoffPaymentCount;
@@ -636,6 +646,7 @@ export function plannedDebtPayment(debt: Omit<Debt, "id"> | Debt, ref: Date = ne
 
   return Math.min(debt.balance, Math.max(debt.minimumPayment, planned));
 }
+
 
 function debtPlanItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
   return state.debts
