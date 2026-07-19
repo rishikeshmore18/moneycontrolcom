@@ -38,9 +38,18 @@ function Shell() {
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickFlow, setQuickFlow] = useState<"menu" | "expense">("menu");
 
+  // Auto-open Add Expense on first load after onboarding for a faster entry experience.
+  useEffect(() => {
+    if (!state.onboarded) return;
+    setQuickFlow("expense");
+    setQuickOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.onboarded]);
+
   if (!state.onboarded) {
     return <OnboardingWizard open={true} />;
   }
+
 
   return (
     <>
