@@ -65,30 +65,19 @@ export function AppLayout({
         {children}
       </main>
       <BottomNav tab={tab} setTab={setTab} />
-      {/* Split FAB: primary Add Expense + secondary More (opens full quick add menu) */}
-      <div className="fixed right-4 bottom-24 md:bottom-8 md:right-8 z-30 flex items-center gap-2">
-        {onAddExpense && (
-          <button
-            onClick={onAddExpense}
-            className="flex items-center gap-2 h-14 pl-4 pr-5 rounded-2xl brand-gradient text-primary-foreground font-extrabold shadow-elegant transition hover:-translate-y-1"
-            aria-label="Add expense"
-          >
-            <Plus size={22} strokeWidth={2.75} />
-            <span className="text-sm tracking-tight">Add expense</span>
-          </button>
-        )}
-        <button
-          onClick={onQuickAdd}
-          className="grid place-items-center h-14 w-14 rounded-2xl border border-border bg-[color:var(--card-solid)] text-foreground shadow-elegant transition hover:-translate-y-1"
-          aria-label="More quick actions"
-          title="More quick actions"
-        >
-          <span className="text-xl font-black leading-none">···</span>
-        </button>
-      </div>
+      {/* Single FAB: opens Add Expense directly (falls back to full quick add menu) */}
+      <button
+        onClick={onAddExpense ?? onQuickAdd}
+        className="fixed right-4 bottom-24 md:bottom-8 md:right-8 z-30 flex items-center gap-2 h-14 pl-4 pr-5 rounded-2xl brand-gradient text-primary-foreground font-extrabold shadow-elegant transition hover:-translate-y-1"
+        aria-label="Add expense"
+      >
+        <Plus size={22} strokeWidth={2.75} />
+        <span className="text-sm tracking-tight">Add expense</span>
+      </button>
     </div>
   );
 }
+
 
 
 function Sidebar({
