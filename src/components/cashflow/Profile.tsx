@@ -848,10 +848,30 @@ export function DebtSheet({ onClose, initial }: { onClose: () => void; initial?:
             onChange={(e) => up("dueDate", toNumber(e.target.value))}
           />
         </Field>
+        {(d.status === "not_started" || d.status === "paused") && (
+          <Field
+            label="Start date"
+            hint="When this debt begins. Forecast ignores it until this date."
+          >
+            <Input
+              type="date"
+              value={d.startDate ?? ""}
+              onChange={(e) => up("startDate", e.target.value || undefined)}
+            />
+          </Field>
+        )}
+        <Field label="End date (optional)" hint="After this date the debt drops off the forecast.">
+          <Input
+            type="date"
+            value={d.endDate ?? ""}
+            onChange={(e) => up("endDate", e.target.value || undefined)}
+          />
+        </Field>
       </div>
     </Sheet>
   );
 }
+
 
 export function RecurringSheet({
   onClose,
