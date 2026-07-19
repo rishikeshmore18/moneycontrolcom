@@ -37,7 +37,11 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   const cashAccount = state.accounts.find((a) => a.type === "cash" && isSpendableAccount(a));
   const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash" && isSpendableAccount(a));
-  const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const categories = baseCategories.includes("Miscellaneous")
+    ? baseCategories
+    : [...baseCategories, "Miscellaneous"];
+
   const selectedCategory =
     category === "Other" && otherCategory.trim() ? otherCategory.trim() : category;
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
