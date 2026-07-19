@@ -36,6 +36,7 @@ function Shell() {
   const { state } = useApp();
   const [tab, setTab] = useState<Tab>("dashboard");
   const [quickOpen, setQuickOpen] = useState(false);
+  const [quickFlow, setQuickFlow] = useState<"menu" | "expense">("menu");
 
   if (!state.onboarded) {
     return <OnboardingWizard open={true} />;
@@ -43,14 +44,31 @@ function Shell() {
 
   return (
     <>
-      <AppLayout tab={tab} setTab={setTab} onQuickAdd={() => setQuickOpen(true)}>
+      <AppLayout
+        tab={tab}
+        setTab={setTab}
+        onQuickAdd={() => {
+          setQuickFlow("menu");
+          setQuickOpen(true);
+        }}
+        onAddExpense={() => {
+          setQuickFlow("expense");
+          setQuickOpen(true);
+        }}
+      >
         {tab === "dashboard" && <Dashboard />}
         {tab === "income" && <IncomeTimesheet />}
         {tab === "cards" && <CardsScreen onPay={() => setQuickOpen(true)} />}
         {tab === "forecast" && <Forecast />}
         {tab === "profile" && <Profile />}
       </AppLayout>
-      <QuickAddModal open={quickOpen} onClose={() => setQuickOpen(false)} setTab={setTab} />
+      <QuickAddModal
+        open={quickOpen}
+        onClose={() => setQuickOpen(false)}
+        setTab={setTab}
+        initialFlow={quickFlow}
+      />
     </>
   );
 }
+
