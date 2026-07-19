@@ -648,30 +648,92 @@ export function plannedDebtPayment(debt: Omit<Debt, "id"> | Debt, ref: Date = ne
 }
 
 
-function debtPlanItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
-  return state.debts
-    .filter((debt) => debt.status === "active")
-    .flatMap((debt) => {
-      const override = overrideFor(state, "debt_plan", debt.id, ref);
-      if (override?.action === "skip") return [];
-      const amount = override?.amount ?? plannedDebtPayment(debt, ref);
-      if (amount <= 0) return [];
+function debtIsScheduledForDate(debt: Debt, dueDate: string): boolean {
+  if (debt.balance <= 0 || debt.status === "paused" || debt.status === "paid_off") return false;
+
+  // A not-started debt is deliberately visible only once its configured start date arrives.
+  // Without a start date, there is no reliable date at which to forecast it.
+  if (debt.status === "not_started" && !debt.startDate) return false;
+  if (debt.startDate && dueDate < debt.startDate) return false;
+  return !debt.endDate || dueDate <= debt.endDate;
+}
+
+function scheduledDebtPayment(debt: Debt, remainingBalance: number, ref: Date): number {
+  if (remainingBalance <= 0) return 0;
+
+  let planned = debt.minimumPayment;
+  if (debt.payoffMode === "payments" && debt.payoffPaymentCount && debt.payoffPaymentCount > 0) {
+    // Keep the requested payment size stable rather than recalculating it from a shrinking balance.
+    planned = debt.balance / debt.payoffPaymentCount;
+  } else if (debt.payoffMode === "date" && debt.payoffTargetDate) {
+    const target = new Date(`${debt.payoffTargetDate}T00:00:00`);
+    if (!Number.isNaN(target.getTime())) {
+      const months =
+        (target.getFullYear() - ref.getFullYear()) * 12 + (target.getMonth() - ref.getMonth()) + 1;
+      planned = remainingBalance / Math.max(1, months);
+    }
+  } else if (
+    debt.payoffMode === "custom" &&
+    debt.plannedMonthlyPayment &&
+    debt.plannedMonthlyPayment > 0
+  ) {
+    planned = debt.plannedMonthlyPayment;
+  }
+
+  return Math.min(remainingBalance, Math.max(debt.minimumPayment, planned));
+}
+
+function debtPlanItemsForRange(
+  state: AppState,
+  ref: Date,
+  range: ForecastDateRange,
+): CashFlowBreakdownItem[] {
+  const scheduleStart = startOfMonth(ref);
+  const scheduleEnd = endOfMonth(fromISODate(range.end));
+  const scheduleRange = { start: toISO(scheduleStart), end: toISO(scheduleEnd) };
+  const today = toISO(ref);
+  const monthRefs = monthRefsForRange(scheduleRange);
+
+  return state.debts.flatMap((debt) => {
+    let remainingBalance = debt.balance;
+    const items: CashFlowBreakdownItem[] = [];
+
+    monthRefs.forEach((monthRef) => {
+      const override = overrideFor(state, "debt_plan", debt.id, monthRef);
       const dueDay = override?.dueDay ?? debt.dueDate;
-      const dueDate = dateForMonthDay(ref, dueDay);
-      return [
-        {
-          id: `${debt.id}:${monthKey(ref)}`,
-          label: override?.name ?? debt.name,
-          detail: `Due ${formatDisplayDate(dueDate)}`,
-          amount,
-          sourceType: "debt_plan" as const,
-          sourceId: debt.id,
-          overrideId: override?.id,
-          dueDay,
-          dueDate,
-        },
-      ];
+      const dueDate = override?.dueDate ?? dateForMonthDay(monthRef, dueDay);
+      if (!debtIsScheduledForDate(debt, dueDate)) return;
+
+      if (override?.action === "skip") return;
+      const plannedAmount = scheduledDebtPayment(debt, remainingBalance, monthRef);
+      const amount = Math.min(remainingBalance, override?.amount ?? plannedAmount);
+      if (amount <= 0) return;
+
+      // The stored balance is today's actual balance. Do not treat a past-due forecast item as
+      // paid; only future scheduled payments reduce the in-memory forecast balance.
+      if (dueDate >= today) remainingBalance = Math.max(0, remainingBalance - amount);
+      if (!itemInRange({ id: "", label: "", amount, dueDate }, range)) return;
+
+      items.push({
+        id: `${debt.id}:${monthKey(monthRef)}`,
+        label: override?.name ?? debt.name,
+        detail: `Due ${formatDisplayDate(dueDate)}`,
+        amount,
+        sourceType: "debt_plan",
+        sourceId: debt.id,
+        overrideId: override?.id,
+        dueDay,
+        dueDate,
+      });
     });
+
+    return items;
+  });
+}
+
+function debtPlanItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
+  const range = { start: toISO(startOfMonth(ref)), end: toISO(endOfMonth(ref)) };
+  return debtPlanItemsForRange(state, ref, range);
 }
 
 export function debtPlannedPayments(state: AppState, ref: Date = new Date()): number {
@@ -918,11 +980,7 @@ function expenseSectionsForRange(
   const recurringBillItems = billItems.filter((item) => item.sourceType === "recurring_bill");
   const oneTimeItems = billItems.filter((item) => item.sourceType === "one_time");
   const cardItems = cardCashFlowItemsForRange(state, ref, range);
-  const debtItems = sortByDueDate(
-    monthRefs
-      .flatMap((monthRef) => debtPlanItems(state, monthRef))
-      .filter((item) => itemInRange(item, range)),
-  );
+  const debtItems = sortByDueDate(debtPlanItemsForRange(state, ref, range));
   const sections: CashFlowBreakdownSection[] = [];
   if (recurringBillItems.length > 0) sections.push({ title: "Bills", items: recurringBillItems });
   if (oneTimeItems.length > 0)
