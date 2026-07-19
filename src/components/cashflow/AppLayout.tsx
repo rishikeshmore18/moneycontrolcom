@@ -29,11 +29,13 @@ export function AppLayout({
   tab,
   setTab,
   onQuickAdd,
+  onAddExpense,
   children,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   onQuickAdd: () => void;
+  onAddExpense?: () => void;
   children: ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -63,16 +65,31 @@ export function AppLayout({
         {children}
       </main>
       <BottomNav tab={tab} setTab={setTab} />
-      <button
-        onClick={onQuickAdd}
-        className="fixed right-5 bottom-24 md:bottom-8 md:right-8 z-30 grid place-items-center h-14 w-14 rounded-2xl brand-gradient text-primary-foreground text-3xl shadow-elegant transition hover:-translate-y-1 hover:rotate-6"
-        aria-label="Quick add"
-      >
-        <Plus size={28} strokeWidth={2.5} />
-      </button>
+      {/* Split FAB: primary Add Expense + secondary More (opens full quick add menu) */}
+      <div className="fixed right-4 bottom-24 md:bottom-8 md:right-8 z-30 flex items-center gap-2">
+        {onAddExpense && (
+          <button
+            onClick={onAddExpense}
+            className="flex items-center gap-2 h-14 pl-4 pr-5 rounded-2xl brand-gradient text-primary-foreground font-extrabold shadow-elegant transition hover:-translate-y-1"
+            aria-label="Add expense"
+          >
+            <Plus size={22} strokeWidth={2.75} />
+            <span className="text-sm tracking-tight">Add expense</span>
+          </button>
+        )}
+        <button
+          onClick={onQuickAdd}
+          className="grid place-items-center h-14 w-14 rounded-2xl border border-border bg-[color:var(--card-solid)] text-foreground shadow-elegant transition hover:-translate-y-1"
+          aria-label="More quick actions"
+          title="More quick actions"
+        >
+          <span className="text-xl font-black leading-none">···</span>
+        </button>
+      </div>
     </div>
   );
 }
+
 
 function Sidebar({
   tab,
