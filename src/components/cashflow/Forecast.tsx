@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   CalendarDays,
   Car,
+  ChartPie,
   CheckCircle2,
   ChevronRight,
   Clock3,
@@ -30,7 +31,10 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
+  Cell,
   Line,
+  Pie,
+  PieChart,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -67,6 +71,7 @@ import { Field, Input, Select } from "./Field";
 import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { Sheet } from "./Sheet";
 import { toast } from "./Toast";
+import { CategoryBudgetForecastCard } from "./MonthlyBudget";
 
 type Panel =
   | { type: "summary"; metric: SummaryMetric }
@@ -108,6 +113,25 @@ interface ChartPoint {
   events?: string[];
 }
 
+interface CategorySpendingGroup {
+  category: string;
+  amount: number;
+  transactions: Transaction[];
+}
+
+const CATEGORY_CHART_COLORS = [
+  "#22c55e",
+  "#06b6d4",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#ec4899",
+  "#3b82f6",
+  "#14b8a6",
+  "#f97316",
+  "#84cc16",
+];
+
 const SCENARIO_LABELS: Record<ForecastScenario, string> = {
   best: "Best case",
   expected: "Expected",
@@ -120,10 +144,6 @@ function isoDate(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function defaultCustomRange(ref: Date): ForecastDateRange {
-  return { start: isoDate(ref), end: isoDate(addDays(ref, 30)) };
 }
 
 function formatShortDate(value: string): string {
@@ -157,6 +177,37 @@ function transactionCashImpact(transaction: Transaction, state: AppState): numbe
     );
   }
   return 0;
+}
+
+function categorySpendingForRange(
+  state: AppState,
+  range: ForecastDateRange,
+): CategorySpendingGroup[] {
+  const grouped = new Map<string, { category: string; transactions: Transaction[] }>();
+  state.transactions.forEach((transaction) => {
+    if (
+      transaction.type !== "expense" ||
+      transaction.date < range.start ||
+      transaction.date > range.end
+    ) {
+      return;
+    }
+    const category = transaction.category.trim() || "Other";
+    const key = category.toLocaleLowerCase();
+    const existing = grouped.get(key);
+    grouped.set(key, {
+      category: existing?.category ?? category,
+      transactions: [...(existing?.transactions ?? []), transaction],
+    });
+  });
+  return [...grouped.entries()]
+    .map(([, group]) => ({
+      category: group.category,
+      transactions: [...group.transactions].sort((a, b) => b.date.localeCompare(a.date)),
+      amount: group.transactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+    }))
+    .filter((group) => group.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
 }
 
 function projectionBalanceByDate(projection: ForecastCashProjection): Map<string, number> {
@@ -255,11 +306,15 @@ function rangeTitle(period: CashFlowPeriod): string {
 }
 
 export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
-  const { state } = useApp();
+  const {
+    state,
+    cashFlowPeriod: period,
+    setCashFlowPeriod: setPeriod,
+    cashFlowCustomRange: customRange,
+    setCashFlowCustomRange: setCustomRange,
+  } = useApp();
   const now = useMemo(() => new Date(), []);
   const today = isoDate(now);
-  const [period, setPeriod] = useState<CashFlowPeriod>("this_month");
-  const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange(now));
   const [includeProjectedIncome, setIncludeProjectedIncome] = useState(true);
   const [scenario, setScenario] = useState<ForecastScenario>("expected");
   const [customScenario, setCustomScenario] = useState<CustomForecastScenario>({
@@ -268,6 +323,7 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
     variableExpenseReductionPercent: 0,
   });
   const [panel, setPanel] = useState<Panel | null>(null);
+  const [selectedSpendingCategory, setSelectedSpendingCategory] = useState<string | null>(null);
   const currency = state.profile.currency;
   const money = (amount: number) => formatMoney(amount, currency);
 
@@ -318,6 +374,14 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
       buildChartData(state, displayRange, selectedProjection, bestProjection, worstProjection, now),
     [bestProjection, displayRange, now, selectedProjection, state, worstProjection],
   );
+  const categorySpending = useMemo(
+    () => categorySpendingForRange(state, displayRange),
+    [displayRange, state],
+  );
+  const selectedSpending =
+    categorySpending.find((group) => group.category === selectedSpendingCategory) ??
+    categorySpending[0] ??
+    null;
   const rawUpcomingSections = useMemo(
     () => expensesComingBreakdown(state, now, period, customRange),
     [customRange, now, period, state],
@@ -486,6 +550,16 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
         </div>
       </section>
 
+      <CategoryBudgetForecastCard month={displayRange.start.slice(0, 7)} />
+
+      <CategorySpendingPanel
+        groups={categorySpending}
+        selected={selectedSpending}
+        state={state}
+        range={displayRange}
+        onSelect={setSelectedSpendingCategory}
+      />
+
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.7fr)] xl:items-start">
         <ForecastChart
           data={chartData}
@@ -592,6 +666,195 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
         setTab={setTab}
       />
     </div>
+  );
+}
+
+function CategorySpendingPanel({
+  groups,
+  selected,
+  state,
+  range,
+  onSelect,
+}: {
+  groups: CategorySpendingGroup[];
+  selected: CategorySpendingGroup | null;
+  state: AppState;
+  range: ForecastDateRange;
+  onSelect: (category: string) => void;
+}) {
+  const currency = state.profile.currency;
+  const total = groups.reduce((sum, group) => sum + group.amount, 0);
+  const selectedPercent = selected && total > 0 ? (selected.amount / total) * 100 : 0;
+
+  function paymentSource(transaction: Transaction): string {
+    if (transaction.cardId) {
+      return state.cards.find((card) => card.id === transaction.cardId)?.name ?? "Credit card";
+    }
+    if (transaction.sourceAccountId) {
+      return (
+        state.accounts.find((account) => account.id === transaction.sourceAccountId)?.name ??
+        "Account"
+      );
+    }
+    return "Not specified";
+  }
+
+  return (
+    <section aria-labelledby="category-spending-title">
+      <Card className="overflow-hidden !p-0">
+        <div className="border-b border-border px-4 py-4 sm:px-5">
+          <div className="flex items-center gap-2">
+            <ChartPie size={18} className="text-[color:var(--primary)]" />
+            <h2 id="category-spending-title" className="text-lg font-black">
+              Spending by category
+            </h2>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Actual expenses from {formatDisplayDate(range.start)} to {formatDisplayDate(range.end)}.
+          </p>
+        </div>
+
+        {groups.length === 0 ? (
+          <EmptyState
+            icon={ChartPie}
+            title="No category spending in this range"
+            detail="Expense transactions will appear here when they fall inside the shared date filter."
+          />
+        ) : (
+          <div className="grid min-w-0 lg:grid-cols-2">
+            <div className="min-w-0 border-b border-border p-4 lg:border-b-0 lg:border-r sm:p-5">
+              <div className="relative mx-auto h-[260px] max-w-[420px] sm:h-[310px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={groups}
+                      dataKey="amount"
+                      nameKey="category"
+                      innerRadius="55%"
+                      outerRadius="82%"
+                      paddingAngle={2}
+                      stroke="var(--card-solid)"
+                      strokeWidth={3}
+                      onClick={(entry) => onSelect(entry.category)}
+                      isAnimationActive={false}
+                    >
+                      {groups.map((group, index) => (
+                        <Cell
+                          key={group.category}
+                          fill={CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length]}
+                          opacity={!selected || selected.category === group.category ? 1 : 0.42}
+                          className="cursor-pointer outline-none"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(value) => formatMoney(Number(value), currency)}
+                      contentStyle={{
+                        background: "var(--popover)",
+                        border: "1px solid var(--border)",
+                        borderRadius: 8,
+                        color: "var(--foreground)",
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                  <div>
+                    <div className="text-xs font-bold text-muted-foreground">
+                      {selected?.category ?? "Total spent"}
+                    </div>
+                    <div className="mt-1 text-xl font-black">
+                      {formatMoney(selected?.amount ?? total, currency)}
+                    </div>
+                    {selected && (
+                      <div className="mt-0.5 text-xs text-muted-foreground">
+                        {Math.round(selectedPercent)}% of spending
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {groups.map((group, index) => (
+                  <button
+                    key={group.category}
+                    type="button"
+                    aria-pressed={selected?.category === group.category}
+                    onClick={() => onSelect(group.category)}
+                    className={`min-w-0 rounded-lg border px-3 py-2 text-left transition ${
+                      selected?.category === group.category
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:bg-muted"
+                    }`}
+                  >
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{
+                          backgroundColor:
+                            CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
+                        }}
+                      />
+                      <span className="truncate text-xs font-bold">{group.category}</span>
+                    </span>
+                    <span className="mt-1 block text-xs text-muted-foreground">
+                      {formatMoney(group.amount, currency)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex min-h-[360px] min-w-0 flex-col">
+              <div className="flex items-end justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+                <div className="min-w-0">
+                  <div className="truncate font-black">{selected?.category ?? "Transactions"}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {selected?.transactions.length ?? 0} transactions
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-xs text-muted-foreground">Category total</div>
+                  <div className="font-black">{formatMoney(selected?.amount ?? 0, currency)}</div>
+                </div>
+              </div>
+              <div className="max-h-[430px] flex-1 overflow-y-auto">
+                <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border bg-[color:var(--card-solid)] px-4 py-2 text-[10px] font-bold uppercase text-muted-foreground sm:grid-cols-[100px_minmax(0,1fr)_140px_auto] sm:px-5">
+                  <span>Date</span>
+                  <span className="hidden sm:block">Description</span>
+                  <span className="hidden sm:block">Paid with</span>
+                  <span className="text-right">Amount</span>
+                </div>
+                {selected?.transactions.map((transaction) => (
+                  <div
+                    key={transaction.id}
+                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border px-4 py-3 last:border-b-0 sm:grid-cols-[100px_minmax(0,1fr)_140px_auto] sm:px-5"
+                  >
+                    <div className="text-xs text-muted-foreground">
+                      {formatDisplayDate(transaction.date)}
+                    </div>
+                    <div className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:row-auto">
+                      <div className="truncate text-sm font-bold">
+                        {transaction.description || transaction.category}
+                      </div>
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
+                        {paymentSource(transaction)}
+                      </div>
+                    </div>
+                    <div className="hidden truncate text-xs text-muted-foreground sm:block">
+                      {paymentSource(transaction)}
+                    </div>
+                    <div className="col-start-2 row-start-1 text-right text-sm font-black text-[color:var(--bad)] sm:col-auto sm:row-auto">
+                      -{formatMoney(transaction.amount, currency)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Card>
+    </section>
   );
 }
 

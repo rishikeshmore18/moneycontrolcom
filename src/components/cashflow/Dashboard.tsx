@@ -48,7 +48,7 @@ import {
   isLikelyPendingNearStatement,
   utilization,
 } from "@/lib/cashflow/cardLogic";
-import { endOfMonth, formatDisplayDate, newId, todayISO, toISODate } from "@/lib/cashflow/dates";
+import { formatDisplayDate, newId, todayISO } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
@@ -80,24 +80,21 @@ function monthKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function defaultCustomRange(): ForecastDateRange {
-  const today = new Date();
-  return {
-    start: todayISO(),
-    end: toISODate(endOfMonth(today)),
-  };
-}
-
 export function Dashboard() {
-  const { state, dispatch } = useApp();
+  const {
+    state,
+    dispatch,
+    cashFlowPeriod,
+    setCashFlowPeriod,
+    cashFlowCustomRange: customRange,
+    setCashFlowCustomRange: setCustomRange,
+  } = useApp();
   const cur = state.profile.currency;
   const m = (n: number) => formatMoney(n, cur);
   const [activeBreakdown, setActiveBreakdown] = useState<BreakdownKey | null>(null);
   const [expenseAction, setExpenseAction] = useState<ExpenseAction | null>(null);
   const [incomeAction, setIncomeAction] = useState<IncomeAction | null>(null);
   const [spendableAction, setSpendableAction] = useState<SpendableAction | null>(null);
-  const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
-  const [customRange, setCustomRange] = useState<ForecastDateRange>(() => defaultCustomRange());
   const [activityOpen, setActivityOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);

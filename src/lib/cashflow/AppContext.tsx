@@ -12,12 +12,20 @@ import { supabase } from "@/integrations/supabase/client";
 import { reducer, type Action } from "./reducer";
 import { loadUserState, saveUserState } from "./storage";
 import { emptyState, type AppState } from "./types";
+import type { CashFlowPeriod, ForecastDateRange } from "./forecast";
+import { endOfMonth, todayISO, toISODate } from "./dates";
 
 interface Ctx {
   state: AppState;
   dispatch: (a: Action) => void;
   userEmail: string | null;
   signOut: () => Promise<void>;
+  cashFlowPeriod: CashFlowPeriod;
+  setCashFlowPeriod: (period: CashFlowPeriod) => void;
+  cashFlowCustomRange: ForecastDateRange;
+  setCashFlowCustomRange: (
+    range: ForecastDateRange | ((current: ForecastDateRange) => ForecastDateRange),
+  ) => void;
 }
 
 const AppCtx = createContext<Ctx | null>(null);
@@ -27,6 +35,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [cashFlowPeriod, setCashFlowPeriod] = useState<CashFlowPeriod>("this_month");
+  const [cashFlowCustomRange, setCashFlowCustomRange] = useState<ForecastDateRange>(() => {
+    const now = new Date();
+    return { start: todayISO(), end: toISODate(endOfMonth(now)) };
+  });
   const navigate = useNavigate();
   const hydratedFor = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -117,7 +130,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AppCtx.Provider value={{ state, dispatch, userEmail, signOut }}>
+    <AppCtx.Provider
+      value={{
+        state,
+        dispatch,
+        userEmail,
+        signOut,
+        cashFlowPeriod,
+        setCashFlowPeriod,
+        cashFlowCustomRange,
+        setCashFlowCustomRange,
+      }}
+    >
       {children}
     </AppCtx.Provider>
   );

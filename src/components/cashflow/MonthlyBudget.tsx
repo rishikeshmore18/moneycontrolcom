@@ -129,6 +129,72 @@ function BudgetBar({
   );
 }
 
+function BudgetUtilizationBar({
+  progress,
+  currency,
+}: {
+  progress: CategoryBudgetProgress;
+  currency: string;
+}) {
+  const allocated = progress.spent + progress.committed;
+  const spentWidth =
+    progress.limit > 0 ? Math.min(100, (progress.spent / progress.limit) * 100) : 100;
+  const committedWidth =
+    progress.limit > 0
+      ? Math.min(100 - spentWidth, (progress.committed / progress.limit) * 100)
+      : 0;
+  const money = (amount: number) => formatMoney(amount, currency);
+  return (
+    <div>
+      <div
+        className="relative h-10 overflow-hidden rounded-lg border border-border bg-muted"
+        role="progressbar"
+        aria-label={`${progress.budget.category}: ${money(allocated)} used of ${money(progress.limit)}`}
+        aria-valuemin={0}
+        aria-valuemax={Math.max(1, progress.limit)}
+        aria-valuenow={Math.min(progress.limit, allocated)}
+      >
+        <div className="absolute inset-0 flex">
+          <div
+            className={progress.overBy > 0 ? "bg-[color:var(--bad)]" : "bg-[color:var(--primary)]"}
+            style={{ width: `${spentWidth}%` }}
+          />
+          <div
+            className={progress.overBy > 0 ? "bg-[color:var(--bad)]/75" : "bg-[color:var(--warn)]"}
+            style={{ width: `${committedWidth}%` }}
+          />
+        </div>
+        <div className="absolute inset-0 z-10 flex items-center justify-between gap-3 px-3 text-[11px] font-black sm:text-xs">
+          <span className="truncate rounded bg-[color:var(--card-solid)]/90 px-1.5 py-0.5">
+            {money(allocated)} used
+          </span>
+          <span className="shrink-0 rounded bg-[color:var(--card-solid)]/90 px-1.5 py-0.5">
+            {money(progress.baseLimit)}/month
+          </span>
+        </div>
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>
+          {money(progress.spent)} spent
+          {progress.committed > 0 ? ` + ${money(progress.committed)} upcoming` : ""}
+          {progress.rolloverAmount > 0 ? ` · ${money(progress.limit)} available with rollover` : ""}
+        </span>
+        <span
+          className={
+            progress.overBy > 0
+              ? "shrink-0 font-black text-[color:var(--bad)]"
+              : "shrink-0 font-bold"
+          }
+        >
+          {progress.overBy > 0
+            ? `${money(progress.overBy)} over`
+            : `${Math.round(progress.allocatedPercent)}% used`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export function MonthlyBudgetCard({ className = "" }: { className?: string }) {
   const { state } = useApp();
   const [open, setOpen] = useState(false);
@@ -307,7 +373,7 @@ export function CategoryBudgetsProfileCard() {
                     {monthLabel(currentMonth)} progress
                   </div>
                   <div className="mt-1 text-xl font-black">
-                    {money(summary.totalSpent)}{" "}
+                    {money(summary.totalSpent + summary.totalCommitted)}{" "}
                     <span className="text-sm font-semibold text-muted-foreground">
                       of {money(summary.totalLimit)}
                     </span>
@@ -318,7 +384,7 @@ export function CategoryBudgetsProfileCard() {
                     summary.totalOverBy > 0 ? "text-[color:var(--bad)]" : "text-[color:var(--good)]"
                   }`}
                 >
-                  {Math.round(summary.spentPercent)}%
+                  {Math.round(summary.allocatedPercent)}%
                 </div>
               </div>
               <div className="mt-3">
@@ -341,7 +407,7 @@ export function CategoryBudgetsProfileCard() {
                 const monthlyLimit = config?.amount ?? budget.amount;
                 const Icon = categoryIcon(budget.category);
                 return (
-                  <div key={budget.id} className="flex items-center gap-3 py-3">
+                  <div key={budget.id} className="flex flex-wrap items-center gap-3 py-3">
                     <button
                       type="button"
                       onClick={() => setEditing(budget)}
@@ -358,10 +424,12 @@ export function CategoryBudgetsProfileCard() {
                             : `Starts ${monthLabel(budget.startMonth)}`}
                         </span>
                       </span>
-                      <span className="shrink-0 text-right">
-                        <span className="block font-black">{money(monthlyLimit)}</span>
-                        <span className="block text-xs text-muted-foreground">per month</span>
-                      </span>
+                      {!progress && (
+                        <span className="shrink-0 text-right">
+                          <span className="block font-black">{money(monthlyLimit)}</span>
+                          <span className="block text-xs text-muted-foreground">per month</span>
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
@@ -386,6 +454,14 @@ export function CategoryBudgetsProfileCard() {
                     >
                       <Trash2 size={16} />
                     </button>
+                    {progress && (
+                      <div className="basis-full pl-[52px] pr-16">
+                        <BudgetUtilizationBar
+                          progress={progress}
+                          currency={state.profile.currency}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -405,6 +481,59 @@ export function CategoryBudgetsProfileCard() {
         />
       )}
     </>
+  );
+}
+
+export function CategoryBudgetForecastCard({ month }: { month?: string }) {
+  const { state } = useApp();
+  const currentMonth = month ?? monthKey(new Date());
+  const committed = useMemo(
+    () => committedItemsForMonth(state, currentMonth),
+    [currentMonth, state],
+  );
+  const summary = useMemo(
+    () => monthlyBudgetSummary(state, currentMonth, committed),
+    [committed, currentMonth, state],
+  );
+
+  if (summary.categories.length === 0) return null;
+
+  return (
+    <Card>
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <CalendarRange size={18} className="text-[color:var(--primary)]" />
+            <h2 className="text-lg font-black">Category budget progress</h2>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {monthLabel(currentMonth)} spending against your ongoing monthly limits.
+          </p>
+        </div>
+        <div className="text-sm font-black">
+          {formatMoney(summary.totalSpent + summary.totalCommitted, state.profile.currency)}{" "}
+          <span className="font-semibold text-muted-foreground">
+            of {formatMoney(summary.totalLimit, state.profile.currency)}
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        {summary.categories.map((progress) => {
+          const Icon = categoryIcon(progress.budget.category);
+          return (
+            <div key={progress.budget.id} className="rounded-xl border border-border p-3">
+              <div className="mb-2 flex items-center gap-2">
+                <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-[color:var(--primary)]">
+                  <Icon size={16} />
+                </span>
+                <span className="min-w-0 truncate font-black">{progress.budget.category}</span>
+              </div>
+              <BudgetUtilizationBar progress={progress} currency={state.profile.currency} />
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
