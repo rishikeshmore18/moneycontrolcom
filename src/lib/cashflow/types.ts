@@ -72,11 +72,10 @@ export interface Debt {
   payoffPaymentCount?: number;
   plannedMonthlyPayment?: number;
   startDate?: string; // ISO date — when this debt becomes active (esp. for "not_started")
-  endDate?: string;   // ISO date — optional cutoff after which no more planned payments
+  endDate?: string; // ISO date — optional cutoff after which no more planned payments
   defaultPaymentAccountId?: string;
   notes?: string;
 }
-
 
 export type JobType = "full_time" | "part_time" | "custom";
 export type PayFrequency = "weekly" | "biweekly" | "semimonthly" | "monthly";
@@ -121,12 +120,7 @@ export interface TimesheetEntry {
 }
 
 export type TransactionType =
-  | "expense"
-  | "income"
-  | "card_payment"
-  | "debt_payment"
-  | "transfer"
-  | "adjustment";
+  "expense" | "income" | "card_payment" | "debt_payment" | "transfer" | "adjustment";
 
 export interface Transaction {
   id: string;
@@ -196,6 +190,29 @@ export interface PlannedIncomeOverride {
   notes?: string;
 }
 
+export type BudgetRolloverPolicy = "reset" | "carry_remaining";
+export type CategoryBudgetOverrideScope = "month" | "from_month";
+
+export interface CategoryBudget {
+  id: string;
+  category: string;
+  amount: number;
+  startMonth: string; // YYYY-MM
+  protectInSpendableToday: boolean;
+  rolloverPolicy: BudgetRolloverPolicy;
+  active: boolean;
+}
+
+export interface CategoryBudgetOverride {
+  id: string;
+  budgetId: string;
+  month: string; // YYYY-MM
+  scope: CategoryBudgetOverrideScope;
+  amount: number;
+  protectInSpendableToday: boolean;
+  rolloverPolicy: BudgetRolloverPolicy;
+}
+
 export interface AppState {
   schemaVersion: number;
   onboarded: boolean;
@@ -210,6 +227,8 @@ export interface AppState {
   categories: string[];
   plannedExpenseOverrides: PlannedExpenseOverride[];
   plannedIncomeOverrides: PlannedIncomeOverride[];
+  categoryBudgets: CategoryBudget[];
+  categoryBudgetOverrides: CategoryBudgetOverride[];
 }
 
 export const SCHEMA_VERSION = 1;
@@ -235,4 +254,6 @@ export const emptyState: AppState = {
   categories: DEFAULT_CATEGORIES,
   plannedExpenseOverrides: [],
   plannedIncomeOverrides: [],
+  categoryBudgets: [],
+  categoryBudgetOverrides: [],
 };

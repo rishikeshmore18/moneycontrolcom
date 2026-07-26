@@ -25,6 +25,7 @@ import {
 } from "./dates";
 import { formatMoney } from "./money";
 import { forecastIncomeEntriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
+import { monthlyBudgetSummary } from "./budget";
 
 export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months" | "custom";
 
@@ -1153,6 +1154,66 @@ function safetyExpenseSectionsForRange(
   if (cardItems.length > 0) {
     directSections.push({ title: "Upcoming card bills", items: sortByDueDate(cardItems) });
   }
+
+  const rangeEndMonth = range.end.slice(0, 7);
+  const budgetReserveItems = monthRefsForRange(range).flatMap((monthRef) => {
+    const budgetMonth = monthKey(monthRef);
+    const representedCommittedItems = allSections
+      .flatMap((section) => section.items)
+      .filter(
+        (item) =>
+          (item.sourceType === "recurring_bill" || item.sourceType === "one_time") &&
+          (item.periodDate ?? item.dueDate ?? "").slice(0, 7) === budgetMonth,
+      )
+      .filter((item) => {
+        if (item.paymentMethod !== "card" || !item.cardId || !item.dueDate) return true;
+        const card = state.cards.find((candidate) => candidate.id === item.cardId);
+        if (!card) return true;
+        let cycle = currentOpenCycle(card, item.dueDate);
+        if (isLikelyPendingNearStatement(item.dueDate, cycle)) {
+          cycle = currentOpenCycle(card, addDays(fromISODate(cycle.cycleEnd), 1));
+        }
+        return cycle.cycleEnd <= range.end;
+      });
+    const summary = monthlyBudgetSummary(state, budgetMonth, representedCommittedItems);
+    const monthEnd = endOfMonth(monthRef);
+    const coveredDays =
+      budgetMonth === rangeEndMonth
+        ? Math.min(monthEnd.getDate(), fromISODate(range.end).getDate())
+        : monthEnd.getDate();
+    const coverageRatio =
+      budgetMonth === rangeEndMonth && range.end < toISO(monthEnd)
+        ? coveredDays / monthEnd.getDate()
+        : 1;
+    const reserveDate = budgetMonth === today.slice(0, 7) ? today : `${budgetMonth}-01`;
+
+    return summary.categories
+      .filter((category) => category.protectInSpendableToday)
+      .map((category) => {
+        const proratedLimit = category.limit * coverageRatio;
+        const amount = Math.max(0, proratedLimit - category.spent - category.committed);
+        return {
+          id: `budget-reserve:${category.budget.id}:${budgetMonth}`,
+          label: `${category.budget.category} budget reserve`,
+          detail: `${formatMoney(
+            amount,
+            state.profile.currency,
+          )} of unspent ${category.budget.category} budget protected for ${budgetMonth}`,
+          amount,
+          dueDate: reserveDate,
+          periodDate: reserveDate,
+          category: category.budget.category,
+        } satisfies CashFlowBreakdownItem;
+      })
+      .filter((item) => item.amount > 0.005);
+  });
+
+  if (budgetReserveItems.length > 0) {
+    directSections.push({
+      title: "Protected category budgets",
+      items: sortByDueDate(budgetReserveItems),
+    });
+  }
   return directSections;
 }
 
@@ -1469,6 +1530,9 @@ export function spendableTodayBreakdown(
   const cardEvents = projection.events
     .filter((event) => event.detail.startsWith("Upcoming card bills"))
     .slice(0, 12);
+  const budgetEvents = projection.events
+    .filter((event) => event.detail.startsWith("Protected category budgets"))
+    .slice(0, 20);
   const upcomingEvents = projection.events;
 
   const sections: CashFlowBreakdownSection[] = [
@@ -1534,6 +1598,21 @@ export function spendableTodayBreakdown(
           cycleEnd: sourceItem?.cycleEnd,
         };
       }),
+    });
+  }
+
+  if (budgetEvents.length > 0) {
+    sections.push({
+      title: "Category budgets protected",
+      items: budgetEvents.map((event) => ({
+        id: event.sourceItem?.id ?? event.id,
+        label: event.label,
+        detail: `${formatDisplayDate(event.date)} - balance after ${formatMoney(
+          event.balanceAfter,
+          state.profile.currency,
+        )}`,
+        amount: event.amount,
+      })),
     });
   }
 

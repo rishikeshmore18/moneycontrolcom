@@ -51,13 +51,10 @@ import {
 import { endOfMonth, formatDisplayDate, newId, todayISO, toISODate } from "@/lib/cashflow/dates";
 import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
+import { MonthlyBudgetCard } from "./MonthlyBudget";
 
 type BreakdownKey =
-  | "have_now"
-  | "income_coming"
-  | "expenses_coming"
-  | "left_to_spend"
-  | "spendable_today";
+  "have_now" | "income_coming" | "expenses_coming" | "left_to_spend" | "spendable_today";
 
 type ExpenseAction =
   | { type: "add_one_time" }
@@ -230,6 +227,8 @@ export function Dashboard() {
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
+
+      <MonthlyBudgetCard />
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <KPI

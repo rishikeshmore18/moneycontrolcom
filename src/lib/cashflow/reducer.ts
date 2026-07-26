@@ -1,6 +1,8 @@
 import {
   Account,
   AppState,
+  CategoryBudget,
+  CategoryBudgetOverride,
   Card,
   DEFAULT_CATEGORIES,
   Debt,
@@ -44,6 +46,14 @@ export type Action =
   | { type: "ADD_PLANNED_INCOME_OVERRIDE"; payload: Omit<PlannedIncomeOverride, "id"> }
   | { type: "UPDATE_PLANNED_INCOME_OVERRIDE"; payload: PlannedIncomeOverride }
   | { type: "DELETE_PLANNED_INCOME_OVERRIDE"; id: string }
+  | { type: "ADD_CATEGORY_BUDGET"; payload: Omit<CategoryBudget, "id"> }
+  | { type: "UPDATE_CATEGORY_BUDGET"; payload: CategoryBudget }
+  | { type: "DELETE_CATEGORY_BUDGET"; id: string }
+  | {
+      type: "SET_CATEGORY_BUDGET_OVERRIDE";
+      payload: Omit<CategoryBudgetOverride, "id">;
+    }
+  | { type: "DELETE_CATEGORY_BUDGET_OVERRIDE"; id: string }
   | {
       type: "UPDATE_TRANSACTION";
       payload: {
@@ -178,6 +188,8 @@ function normalizeState(state: AppState): AppState {
     ),
     plannedExpenseOverrides: state.plannedExpenseOverrides ?? [],
     plannedIncomeOverrides: state.plannedIncomeOverrides ?? [],
+    categoryBudgets: state.categoryBudgets ?? [],
+    categoryBudgetOverrides: state.categoryBudgetOverrides ?? [],
   };
 }
 
@@ -309,6 +321,78 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter(
+          (override) => override.id !== action.id,
+        ),
+      };
+
+    case "ADD_CATEGORY_BUDGET": {
+      const category = cleanCategory(action.payload.category);
+      if (!category || action.payload.amount < 0) return state;
+      const duplicate = (state.categoryBudgets ?? []).some(
+        (budget) => budget.category.toLowerCase() === category.toLowerCase(),
+      );
+      if (duplicate) return state;
+      const budget: CategoryBudget = {
+        ...action.payload,
+        category,
+        amount: Math.max(0, action.payload.amount),
+        id: newId(),
+      };
+      return normalizeState({
+        ...state,
+        categories: mergeCategories(state.categories, [category]),
+        categoryBudgets: [...(state.categoryBudgets ?? []), budget],
+      });
+    }
+
+    case "UPDATE_CATEGORY_BUDGET": {
+      const category = cleanCategory(action.payload.category);
+      if (!category || action.payload.amount < 0) return state;
+      return normalizeState({
+        ...state,
+        categories: mergeCategories(state.categories, [category]),
+        categoryBudgets: (state.categoryBudgets ?? []).map((budget) =>
+          budget.id === action.payload.id
+            ? { ...action.payload, category, amount: Math.max(0, action.payload.amount) }
+            : budget,
+        ),
+      });
+    }
+
+    case "DELETE_CATEGORY_BUDGET":
+      return {
+        ...state,
+        categoryBudgets: (state.categoryBudgets ?? []).filter((budget) => budget.id !== action.id),
+        categoryBudgetOverrides: (state.categoryBudgetOverrides ?? []).filter(
+          (override) => override.budgetId !== action.id,
+        ),
+      };
+
+    case "SET_CATEGORY_BUDGET_OVERRIDE": {
+      const payload = {
+        ...action.payload,
+        amount: Math.max(0, action.payload.amount),
+      };
+      const overrides = [...(state.categoryBudgetOverrides ?? [])];
+      const existingIndex = overrides.findIndex(
+        (override) =>
+          override.budgetId === payload.budgetId &&
+          override.month === payload.month &&
+          override.scope === payload.scope,
+      );
+      const override: CategoryBudgetOverride = {
+        ...payload,
+        id: existingIndex >= 0 ? overrides[existingIndex].id : newId(),
+      };
+      if (existingIndex >= 0) overrides[existingIndex] = override;
+      else overrides.push(override);
+      return { ...state, categoryBudgetOverrides: overrides };
+    }
+
+    case "DELETE_CATEGORY_BUDGET_OVERRIDE":
+      return {
+        ...state,
+        categoryBudgetOverrides: (state.categoryBudgetOverrides ?? []).filter(
           (override) => override.id !== action.id,
         ),
       };
