@@ -695,7 +695,6 @@ export function plannedDebtPayment(debt: Omit<Debt, "id"> | Debt, ref: Date = ne
   return Math.min(debt.balance, Math.max(debt.minimumPayment, planned));
 }
 
-
 function debtIsScheduledForDate(debt: Debt, dueDate: string): boolean {
   if (debt.balance <= 0 || debt.status === "paused" || debt.status === "paid_off") return false;
 
@@ -1213,7 +1212,7 @@ function protectedExpenseSections(
   return { nextIncomeDate, sections, total };
 }
 
-interface CashFlowTimelineEvent {
+export interface CashFlowTimelineEvent {
   id: string;
   label: string;
   detail: string;
@@ -1226,12 +1225,34 @@ interface CashFlowTimelineEvent {
   sourceItem?: CashFlowBreakdownItem;
 }
 
-interface AccountFundingWarning {
+export interface AccountFundingWarning {
   accountId: string;
   accountName: string;
   date: string;
   balanceAfter: number;
   eventLabel: string;
+}
+
+export interface ForecastProjectionOptions {
+  includeProjectedIncome?: boolean;
+  variableExpenseMultiplier?: number;
+  unexpectedExpenseAmount?: number;
+  unexpectedExpenseDate?: string;
+}
+
+export interface ForecastCashProjection {
+  range: ForecastDateRange;
+  startingCash: number;
+  endingBalance: number;
+  lowestBalance: number;
+  safeSurplus: number;
+  events: CashFlowTimelineEvent[];
+  projectedIncome: number;
+  projectedPartTimeIncome: number;
+  totalExpenses: number;
+  runwayDate?: string;
+  runwayDays?: number;
+  accountFundingWarnings: AccountFundingWarning[];
 }
 
 function spendableTodayProjection(
@@ -1240,16 +1261,8 @@ function spendableTodayProjection(
   period: CashFlowPeriod = "this_month",
   customRange?: ForecastDateRange,
   useFixedSafetyHorizon = true,
-): {
-  range: ForecastDateRange;
-  startingCash: number;
-  lowestBalance: number;
-  safeSurplus: number;
-  events: CashFlowTimelineEvent[];
-  projectedIncome: number;
-  projectedPartTimeIncome: number;
-  accountFundingWarnings: AccountFundingWarning[];
-} {
+  options: ForecastProjectionOptions = {},
+): ForecastCashProjection {
   const today = toISO(ref);
   const selectedRange = cashFlowPeriodRange(period, ref, customRange);
   const range = useFixedSafetyHorizon
@@ -1274,20 +1287,47 @@ function spendableTodayProjection(
     .filter((event) => event.incomeConfidence === "projected")
     .reduce((sum, event) => sum + event.amount, 0);
   const incomeEvents = forecastIncomeEvents.filter(
-    (event) => event.incomeConfidence !== "projected",
+    (event) => options.includeProjectedIncome || event.incomeConfidence !== "projected",
   );
+  const variableExpenseMultiplier = Math.max(0, options.variableExpenseMultiplier ?? 1);
   const expenseEvents = safetyExpenseSectionsForRange(state, ref, range).flatMap((section) =>
-    section.items.map((item) => ({
-      id: `expense-${section.title}-${item.id}`,
-      label: item.label,
-      detail: item.detail ? `${section.title} - ${item.detail}` : section.title,
-      date: item.dueDate ?? item.periodDate ?? today,
-      amount: -item.amount,
-      accountId: item.accountId,
-      sourceItem: item,
-    })),
+    section.items.map((item) => {
+      const multiplier = item.sourceType === "one_time" ? variableExpenseMultiplier : 1;
+      return {
+        id: `expense-${section.title}-${item.id}`,
+        label: item.label,
+        detail: item.detail ? `${section.title} - ${item.detail}` : section.title,
+        date: item.dueDate ?? item.periodDate ?? today,
+        amount: -Math.round(item.amount * multiplier * 100) / 100,
+        accountId: item.accountId,
+        sourceItem: item,
+      };
+    }),
   );
-  const orderedEvents = [...incomeEvents, ...expenseEvents].sort((a, b) => {
+  const unexpectedExpenseAmount = Math.max(0, options.unexpectedExpenseAmount ?? 0);
+  const requestedUnexpectedDate = options.unexpectedExpenseDate ?? today;
+  const unexpectedExpenseDate =
+    requestedUnexpectedDate < range.start
+      ? range.start
+      : requestedUnexpectedDate > range.end
+        ? range.end
+        : requestedUnexpectedDate;
+  const unexpectedEvents =
+    unexpectedExpenseAmount > 0
+      ? [
+          {
+            id: `expense-scenario-unexpected-${unexpectedExpenseDate}`,
+            label: "Scenario expense",
+            detail: "Temporary forecast assumption",
+            date: unexpectedExpenseDate,
+            amount: -unexpectedExpenseAmount,
+            accountId: undefined,
+            incomeConfidence: undefined,
+            sourceItem: undefined,
+          },
+        ]
+      : [];
+  const orderedEvents = [...incomeEvents, ...expenseEvents, ...unexpectedEvents].sort((a, b) => {
     const dateOrder = a.date.localeCompare(b.date);
     if (dateOrder !== 0) return dateOrder;
     return a.amount - b.amount;
@@ -1314,8 +1354,7 @@ function spendableTodayProjection(
           event.amount < 0 &&
           accountBalance.balance < 0 &&
           !accountFundingWarnings.some(
-            (warning) =>
-              warning.accountId === event.accountId && warning.date === event.date,
+            (warning) => warning.accountId === event.accountId && warning.date === event.date,
           )
         ) {
           accountFundingWarnings.push({
@@ -1331,17 +1370,44 @@ function spendableTodayProjection(
     return { ...event, balanceBefore, balanceAfter: runningBalance };
   });
   const projectedIncome = incomeEvents.reduce((sum, event) => sum + event.amount, 0);
+  const totalExpenses = events
+    .filter((event) => event.amount < 0)
+    .reduce((sum, event) => sum + Math.abs(event.amount), 0);
+  const runwayEvent = events.find((event) => event.balanceAfter < state.profile.safeToSpendFloor);
+  const runwayDays = runwayEvent
+    ? Math.max(
+        0,
+        Math.ceil(
+          (fromISODate(runwayEvent.date).getTime() - fromISODate(today).getTime()) / 86400000,
+        ),
+      )
+    : undefined;
 
   return {
     range,
     startingCash,
+    endingBalance: runningBalance,
     lowestBalance,
     safeSurplus: lowestBalance - state.profile.safeToSpendFloor,
     events,
     projectedIncome,
     projectedPartTimeIncome,
+    totalExpenses,
+    runwayDate: runwayEvent?.date,
+    runwayDays,
     accountFundingWarnings,
   };
+}
+
+export function forecastCashProjection(
+  state: AppState,
+  ref: Date = new Date(),
+  period: CashFlowPeriod = "this_month",
+  customRange?: ForecastDateRange,
+  options: ForecastProjectionOptions = {},
+  useFixedSafetyHorizon = false,
+): ForecastCashProjection {
+  return spendableTodayProjection(state, ref, period, customRange, useFixedSafetyHorizon, options);
 }
 
 export function expenseAffordabilityById(

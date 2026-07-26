@@ -1,23 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { AppProvider, useApp } from "@/lib/cashflow/AppContext";
 import { AppLayout, type Tab } from "@/components/cashflow/AppLayout";
 import { Dashboard } from "@/components/cashflow/Dashboard";
 import { IncomeTimesheet } from "@/components/cashflow/IncomeTimesheet";
 import { CardsScreen } from "@/components/cashflow/CardsScreen";
-import { Forecast } from "@/components/cashflow/Forecast";
 import { Profile } from "@/components/cashflow/Profile";
 import { QuickAddModal } from "@/components/cashflow/QuickAddModal";
 import { OnboardingWizard } from "@/components/cashflow/OnboardingWizard";
 import { ToastViewport } from "@/components/cashflow/Toast";
 
+const Forecast = lazy(() =>
+  import("@/components/cashflow/Forecast").then((module) => ({ default: module.Forecast })),
+);
+
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "CashFlow Control — Personal cash, debt & income tracker" },
-      { name: "description", content: "Track cash, credit cards, debts, paychecks and timesheets. Know exactly what's safe to spend." },
+      {
+        name: "description",
+        content:
+          "Track cash, credit cards, debts, paychecks and timesheets. Know exactly what's safe to spend.",
+      },
       { property: "og:title", content: "CashFlow Control" },
-      { property: "og:description", content: "Personal cash, debt and income tracker with timesheets and forecast." },
+      {
+        property: "og:description",
+        content: "Personal cash, debt and income tracker with timesheets and forecast.",
+      },
     ],
   }),
   component: Page,
@@ -43,13 +53,11 @@ function Shell() {
     if (!state.onboarded) return;
     setQuickFlow("expense");
     setQuickOpen(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.onboarded]);
 
   if (!state.onboarded) {
     return <OnboardingWizard open={true} />;
   }
-
 
   return (
     <>
@@ -68,7 +76,17 @@ function Shell() {
         {tab === "dashboard" && <Dashboard />}
         {tab === "income" && <IncomeTimesheet />}
         {tab === "cards" && <CardsScreen onPay={() => setQuickOpen(true)} />}
-        {tab === "forecast" && <Forecast />}
+        {tab === "forecast" && (
+          <Suspense
+            fallback={
+              <div className="grid min-h-[320px] place-items-center text-sm text-muted-foreground">
+                Loading forecast...
+              </div>
+            }
+          >
+            <Forecast setTab={setTab} />
+          </Suspense>
+        )}
         {tab === "profile" && <Profile />}
       </AppLayout>
       <QuickAddModal
@@ -80,4 +98,3 @@ function Shell() {
     </>
   );
 }
-
