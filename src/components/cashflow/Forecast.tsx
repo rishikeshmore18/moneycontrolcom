@@ -5,6 +5,7 @@ import {
   Car,
   ChartPie,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Clock3,
   CreditCard,
@@ -378,10 +379,9 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
     () => categorySpendingForRange(state, displayRange),
     [displayRange, state],
   );
-  const selectedSpending =
-    categorySpending.find((group) => group.category === selectedSpendingCategory) ??
-    categorySpending[0] ??
-    null;
+  const selectedSpending = selectedSpendingCategory
+    ? (categorySpending.find((group) => group.category === selectedSpendingCategory) ?? null)
+    : null;
   const rawUpcomingSections = useMemo(
     () => expensesComingBreakdown(state, now, period, customRange),
     [customRange, now, period, state],
@@ -557,7 +557,9 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
         selected={selectedSpending}
         state={state}
         range={displayRange}
-        onSelect={setSelectedSpendingCategory}
+        onToggle={(category) =>
+          setSelectedSpendingCategory((current) => (current === category ? null : category))
+        }
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.7fr)] xl:items-start">
@@ -674,13 +676,13 @@ function CategorySpendingPanel({
   selected,
   state,
   range,
-  onSelect,
+  onToggle,
 }: {
   groups: CategorySpendingGroup[];
   selected: CategorySpendingGroup | null;
   state: AppState;
   range: ForecastDateRange;
-  onSelect: (category: string) => void;
+  onToggle: (category: string) => void;
 }) {
   const currency = state.profile.currency;
   const total = groups.reduce((sum, group) => sum + group.amount, 0);
@@ -722,8 +724,8 @@ function CategorySpendingPanel({
           />
         ) : (
           <div className="grid min-w-0 lg:grid-cols-2">
-            <div className="min-w-0 border-b border-border p-4 lg:border-b-0 lg:border-r sm:p-5">
-              <div className="relative mx-auto h-[260px] max-w-[420px] sm:h-[310px]">
+            <div className="grid min-w-0 place-items-center border-b border-border p-4 lg:border-b-0 lg:border-r sm:p-6">
+              <div className="relative h-[300px] w-full max-w-[480px] sm:h-[390px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -735,32 +737,30 @@ function CategorySpendingPanel({
                       paddingAngle={2}
                       stroke="var(--card-solid)"
                       strokeWidth={3}
-                      onClick={(entry) => onSelect(entry.category)}
+                      onClick={(entry) => onToggle(entry.category)}
                       isAnimationActive={false}
                     >
                       {groups.map((group, index) => (
                         <Cell
                           key={group.category}
                           fill={CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length]}
-                          opacity={!selected || selected.category === group.category ? 1 : 0.42}
-                          className="cursor-pointer outline-none"
+                          opacity={!selected || selected.category === group.category ? 1 : 0.28}
+                          stroke={
+                            selected?.category === group.category
+                              ? "var(--foreground)"
+                              : "var(--card-solid)"
+                          }
+                          strokeWidth={selected?.category === group.category ? 3 : 2}
+                          className="cursor-pointer outline-none transition-opacity duration-300"
                         />
                       ))}
                     </Pie>
-                    <Tooltip
-                      formatter={(value) => formatMoney(Number(value), currency)}
-                      contentStyle={{
-                        background: "var(--popover)",
-                        border: "1px solid var(--border)",
-                        borderRadius: 8,
-                        color: "var(--foreground)",
-                      }}
-                    />
+                    <Tooltip content={<CategoryPieTooltip currency={currency} />} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
                   <div>
-                    <div className="text-xs font-bold text-muted-foreground">
+                    <div className="mx-auto max-w-[130px] break-words text-xs font-bold text-muted-foreground">
                       {selected?.category ?? "Total spent"}
                     </div>
                     <div className="mt-1 text-xl font-black">
@@ -774,87 +774,137 @@ function CategorySpendingPanel({
                   </div>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                {groups.map((group, index) => (
-                  <button
-                    key={group.category}
-                    type="button"
-                    aria-pressed={selected?.category === group.category}
-                    onClick={() => onSelect(group.category)}
-                    className={`min-w-0 rounded-lg border px-3 py-2 text-left transition ${
-                      selected?.category === group.category
-                        ? "border-primary bg-primary/10"
-                        : "border-border hover:bg-muted"
-                    }`}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{
-                          backgroundColor:
-                            CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
-                        }}
-                      />
-                      <span className="truncate text-xs font-bold">{group.category}</span>
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {formatMoney(group.amount, currency)}
-                    </span>
-                  </button>
-                ))}
-              </div>
             </div>
 
-            <div className="flex min-h-[360px] min-w-0 flex-col">
-              <div className="flex items-end justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
-                <div className="min-w-0">
-                  <div className="truncate font-black">{selected?.category ?? "Transactions"}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">
-                    {selected?.transactions.length ?? 0} transactions
-                  </div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-xs text-muted-foreground">Category total</div>
-                  <div className="font-black">{formatMoney(selected?.amount ?? 0, currency)}</div>
-                </div>
+            <div className="min-w-0 bg-[color:var(--card-solid)] p-3 sm:p-4">
+              <div className="mb-3 px-1">
+                <h3 className="font-black text-foreground">Categories</h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Select a category to highlight it and view its transactions.
+                </p>
               </div>
-              <div className="max-h-[430px] flex-1 overflow-y-auto">
-                <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border bg-[color:var(--card-solid)] px-4 py-2 text-[10px] font-bold uppercase text-muted-foreground sm:grid-cols-[100px_minmax(0,1fr)_140px_auto] sm:px-5">
-                  <span>Date</span>
-                  <span className="hidden sm:block">Description</span>
-                  <span className="hidden sm:block">Paid with</span>
-                  <span className="text-right">Amount</span>
-                </div>
-                {selected?.transactions.map((transaction) => (
-                  <div
-                    key={transaction.id}
-                    className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border px-4 py-3 last:border-b-0 sm:grid-cols-[100px_minmax(0,1fr)_140px_auto] sm:px-5"
-                  >
-                    <div className="text-xs text-muted-foreground">
-                      {formatDisplayDate(transaction.date)}
-                    </div>
-                    <div className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:row-auto">
-                      <div className="truncate text-sm font-bold">
-                        {transaction.description || transaction.category}
+              <div className="max-h-[560px] space-y-2 overflow-y-auto pr-1">
+                {groups.map((group, index) => {
+                  const expanded = selected?.category === group.category;
+                  const percent = total > 0 ? (group.amount / total) * 100 : 0;
+                  return (
+                    <div
+                      key={group.category}
+                      className={`overflow-hidden rounded-xl border bg-[color:var(--card-solid)] transition-[border-color,background-color,box-shadow] duration-300 ${
+                        expanded
+                          ? "border-primary bg-primary/5 shadow-soft"
+                          : "border-border hover:border-primary/45"
+                      }`}
+                    >
+                      <button
+                        type="button"
+                        aria-expanded={expanded}
+                        onClick={() => onToggle(group.category)}
+                        className="flex min-h-16 w-full items-center gap-3 px-3 py-3 text-left text-foreground focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-primary/20 sm:px-4"
+                      >
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full ring-4 ring-foreground/5"
+                          style={{
+                            backgroundColor:
+                              CATEGORY_CHART_COLORS[index % CATEGORY_CHART_COLORS.length],
+                          }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block break-words text-sm font-black text-foreground">
+                            {group.category}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {group.transactions.length}{" "}
+                            {group.transactions.length === 1 ? "transaction" : "transactions"} ·{" "}
+                            {Math.round(percent)}%
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-sm font-black text-foreground">
+                            {formatMoney(group.amount, currency)}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] font-bold uppercase text-muted-foreground">
+                            Total
+                          </span>
+                        </span>
+                        <ChevronDown
+                          size={18}
+                          className={`shrink-0 text-muted-foreground transition-transform duration-300 ease-out ${
+                            expanded ? "rotate-180 text-foreground" : ""
+                          }`}
+                        />
+                      </button>
+
+                      <div
+                        className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                        }`}
+                      >
+                        <div className="min-h-0 overflow-hidden">
+                          <div className="max-h-72 overflow-y-auto border-t border-border bg-muted/15">
+                            <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border bg-[color:var(--card-solid)] px-3 py-2 text-[10px] font-bold uppercase text-muted-foreground sm:grid-cols-[96px_minmax(0,1fr)_120px_auto] sm:px-4">
+                              <span>Date</span>
+                              <span className="hidden sm:block">Description</span>
+                              <span className="hidden sm:block">Paid with</span>
+                              <span className="text-right">Amount</span>
+                            </div>
+                            {group.transactions.map((transaction) => (
+                              <div
+                                key={transaction.id}
+                                className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border px-3 py-3 last:border-b-0 sm:grid-cols-[96px_minmax(0,1fr)_120px_auto] sm:px-4"
+                              >
+                                <div className="text-xs text-muted-foreground">
+                                  {formatDisplayDate(transaction.date)}
+                                </div>
+                                <div className="col-span-2 row-start-2 min-w-0 sm:col-span-1 sm:row-auto">
+                                  <div className="break-words text-sm font-bold text-foreground">
+                                    {transaction.description || transaction.category}
+                                  </div>
+                                  <div className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
+                                    {paymentSource(transaction)}
+                                  </div>
+                                </div>
+                                <div className="hidden break-words text-xs text-muted-foreground sm:block">
+                                  {paymentSource(transaction)}
+                                </div>
+                                <div className="col-start-2 row-start-1 text-right text-sm font-black text-[color:var(--bad)] sm:col-auto sm:row-auto">
+                                  -{formatMoney(transaction.amount, currency)}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       </div>
-                      <div className="mt-0.5 truncate text-xs text-muted-foreground sm:hidden">
-                        {paymentSource(transaction)}
-                      </div>
                     </div>
-                    <div className="hidden truncate text-xs text-muted-foreground sm:block">
-                      {paymentSource(transaction)}
-                    </div>
-                    <div className="col-start-2 row-start-1 text-right text-sm font-black text-[color:var(--bad)] sm:col-auto sm:row-auto">
-                      -{formatMoney(transaction.amount, currency)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </div>
         )}
       </Card>
     </section>
+  );
+}
+
+function CategoryPieTooltip({
+  active,
+  payload,
+  currency,
+}: {
+  active?: boolean;
+  payload?: Array<{ name?: string; value?: number }>;
+  currency: string;
+}) {
+  const item = payload?.[0];
+  if (!active || !item) return null;
+  return (
+    <div className="rounded-lg border border-border bg-[color:var(--card-solid)] px-3 py-2 text-foreground shadow-elegant">
+      <div className="text-xs font-black">{item.name}</div>
+      <div className="mt-1 text-sm font-black">
+        {formatMoney(Number(item.value ?? 0), currency)}
+      </div>
+    </div>
   );
 }
 
