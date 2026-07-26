@@ -54,6 +54,7 @@ export interface Card {
   zeroAprEndDate?: string;
   targetUtilizationPercent: number;
   preferredCategories: string[];
+  defaultPaymentAccountId?: string;
 }
 
 export type DebtStatus = "active" | "not_started" | "paused" | "paid_off";
@@ -72,6 +73,7 @@ export interface Debt {
   plannedMonthlyPayment?: number;
   startDate?: string; // ISO date — when this debt becomes active (esp. for "not_started")
   endDate?: string;   // ISO date — optional cutoff after which no more planned payments
+  defaultPaymentAccountId?: string;
   notes?: string;
 }
 

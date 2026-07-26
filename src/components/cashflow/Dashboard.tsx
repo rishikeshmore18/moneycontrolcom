@@ -35,6 +35,7 @@ import {
   isSpendableAccount,
   spendableToday,
   spendableTodayBreakdown,
+  SPENDABLE_TODAY_HORIZON_DAYS,
   spendableCash,
   spendableCashBreakdown,
   totalCardDebt,
@@ -110,7 +111,7 @@ export function Dashboard() {
   const incomeComing = pendingIncome(state, new Date(), cashFlowPeriod, customRange);
   const expensesComing = expensesComingTotal(state, new Date(), cashFlowPeriod, customRange);
   const leftToSpend = haveNow + incomeComing - expensesComing;
-  const spendableNow = spendableToday(state, new Date(), cashFlowPeriod, customRange);
+  const spendableNow = spendableToday(state, new Date());
   const affordabilityById = useMemo(
     () => expenseAffordabilityById(state, new Date(), cashFlowPeriod, customRange),
     [cashFlowPeriod, customRange, state],
@@ -155,13 +156,10 @@ export function Dashboard() {
       },
       spendable_today: {
         title: "Spendable today",
-        helper:
-          cashFlowPeriod === "this_month"
-            ? "Safe surplus through this month"
-            : `Safe surplus through ${formatDisplayDate(selectedRange.end)}`,
+        helper: `Safe surplus protected for the next ${SPENDABLE_TODAY_HORIZON_DAYS} days`,
         total: spendableNow,
         tone: spendableNow < 0 ? ("red" as const) : ("green" as const),
-        sections: spendableTodayBreakdown(state, new Date(), cashFlowPeriod, customRange),
+        sections: spendableTodayBreakdown(state, new Date()),
       },
     }),
     [
@@ -617,8 +615,8 @@ function CashFlowFormulaCard({
           tone={spendableToday < 0 ? "red" : "green"}
           label="Spendable today"
           value={formatMoney(spendableToday)}
-          helper="Safe surplus"
-          badge="Today check"
+          helper={`Protected ${SPENDABLE_TODAY_HORIZON_DAYS} days`}
+          badge="Safe now"
           icon={Wallet}
           className="col-span-2 xl:col-span-1"
           onClick={() => onOpenBreakdown("spendable_today")}

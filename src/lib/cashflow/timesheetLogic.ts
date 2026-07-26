@@ -162,8 +162,9 @@ export function entriesForMonth(
   monthDate: Date,
 ): TimesheetEntry[] {
   const inMonth = entriesInMonth(all, monthDate);
-  const fullTime = jobs.find((j) => j.type === "full_time");
-  const synth = syntheticSalaryEntries(fullTime, monthDate, all);
+  const synth = jobs
+    .filter((job) => job.type === "full_time")
+    .flatMap((job) => syntheticSalaryEntries(job, monthDate, all));
   return [...inMonth, ...synth];
 }
 

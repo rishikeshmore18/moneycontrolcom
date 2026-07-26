@@ -8,6 +8,7 @@ import {
   TimesheetEntry,
 } from "./types";
 import {
+  cycleForDate,
   currentOpenCycle,
   expensesInCycle,
   isLikelyPendingNearStatement,
@@ -60,6 +61,7 @@ export interface CashFlowBreakdownItem {
   jobId?: string;
   payDate?: string;
   incomeSourceType?: "salary_paycheck" | "work_paycheck";
+  incomeConfidence?: "confirmed" | "projected";
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
 }
@@ -492,18 +494,42 @@ function cardCashFlowItemsForRange(
 
   state.cards.forEach((card) => {
     if (card.currentBalance <= 0) return;
+    const paymentAccountId = card.defaultPaymentAccountId;
 
     if (!isZeroAprCard(card)) {
+      const generatedStatementAmount = Math.min(
+        card.currentBalance,
+        Math.max(0, card.statementBalance),
+      );
+      if (generatedStatementAmount > 0) {
+        const generatedCycle = cycleForDate(card, ref);
+        pushCardItem({
+          id: `${card.id}:generated-statement:${generatedCycle.cycleEnd}`,
+          label: `${card.name} statement`,
+          detail: `Generated statement - due ${formatDisplayDate(generatedCycle.dueDate)}`,
+          amount: generatedStatementAmount,
+          sourceType: "card_due",
+          sourceId: card.id,
+          dueDate: today,
+          accountId: paymentAccountId,
+          cycleStart: generatedCycle.cycleStart,
+          cycleEnd: generatedCycle.cycleEnd,
+          periodDate: today,
+        });
+      }
       const cycle = currentOpenCycle(card, ref);
       const rawDueDate = cycle.cycleEnd >= today ? cycle.cycleEnd : today;
+      const openCycleBalance = Math.max(0, card.currentBalance - generatedStatementAmount);
+      if (openCycleBalance <= 0) return;
       pushCardItem({
         id: `${card.id}:cash-payoff:${rawDueDate}`,
         label: card.name,
         detail: `Statement closes ${formatDisplayDate(cycle.cycleEnd)} - planned for payment when generated`,
-        amount: card.currentBalance,
+        amount: openCycleBalance,
         sourceType: "card_due",
         sourceId: card.id,
         dueDate: rawDueDate,
+        accountId: paymentAccountId,
         cycleStart: cycle.cycleStart,
         cycleEnd: cycle.cycleEnd,
         periodDate: rawDueDate,
@@ -513,7 +539,26 @@ function cardCashFlowItemsForRange(
 
     let remainingBalance = card.currentBalance;
     let cycle = currentOpenCycle(card, ref);
-    const currentTargetPaydown = paydownToTarget(card);
+    const generatedMinimum = Math.min(card.minimumDue, remainingBalance);
+    if (generatedMinimum > 0 && card.statementBalance > 0) {
+      const generatedCycle = cycleForDate(card, ref);
+      pushCardItem({
+        id: `${card.id}:generated-minimum:${generatedCycle.cycleEnd}`,
+        label: `${card.name} minimum`,
+        detail: `Generated minimum payment - due ${formatDisplayDate(generatedCycle.dueDate)}`,
+        amount: generatedMinimum,
+        sourceType: "card_due",
+        sourceId: card.id,
+        dueDate: today,
+        accountId: paymentAccountId,
+        cycleStart: generatedCycle.cycleStart,
+        cycleEnd: generatedCycle.cycleEnd,
+        periodDate: today,
+      });
+      remainingBalance = Math.max(0, remainingBalance - generatedMinimum);
+    }
+    const targetBalance = (card.targetUtilizationPercent / 100) * card.limit;
+    const currentTargetPaydown = Math.max(0, remainingBalance - targetBalance);
 
     if (card.zeroAprEndDate && cycle.cycleEnd >= card.zeroAprEndDate) {
       pushCardItem({
@@ -524,6 +569,7 @@ function cardCashFlowItemsForRange(
         sourceType: "card_due",
         sourceId: card.id,
         dueDate: cycle.cycleEnd,
+        accountId: paymentAccountId,
         cycleStart: cycle.cycleStart,
         cycleEnd: cycle.cycleEnd,
         periodDate: cycle.cycleEnd,
@@ -540,6 +586,7 @@ function cardCashFlowItemsForRange(
         sourceType: "card_due",
         sourceId: card.id,
         dueDate: cycle.cycleEnd,
+        accountId: paymentAccountId,
         cycleStart: cycle.cycleStart,
         cycleEnd: cycle.cycleEnd,
         periodDate: cycle.cycleEnd,
@@ -565,6 +612,7 @@ function cardCashFlowItemsForRange(
           sourceType: "card_due",
           sourceId: card.id,
           dueDate: rawDueDate,
+          accountId: paymentAccountId,
           cycleStart: cycle.cycleStart,
           cycleEnd: cycle.cycleEnd,
           periodDate: rawDueDate,
@@ -691,7 +739,6 @@ function debtPlanItemsForRange(
   const scheduleStart = startOfMonth(ref);
   const scheduleEnd = endOfMonth(fromISODate(range.end));
   const scheduleRange = { start: toISO(scheduleStart), end: toISO(scheduleEnd) };
-  const today = toISO(ref);
   const monthRefs = monthRefsForRange(scheduleRange);
 
   return state.debts.flatMap((debt) => {
@@ -709,9 +756,9 @@ function debtPlanItemsForRange(
       const amount = Math.min(remainingBalance, override?.amount ?? plannedAmount);
       if (amount <= 0) return;
 
-      // The stored balance is today's actual balance. Do not treat a past-due forecast item as
-      // paid; only future scheduled payments reduce the in-memory forecast balance.
-      if (dueDate >= today) remainingBalance = Math.max(0, remainingBalance - amount);
+      // The stored balance is today's unpaid balance. A past-due item carried into the safety
+      // timeline still consumes that balance, so later months cannot schedule it a second time.
+      remainingBalance = Math.max(0, remainingBalance - amount);
       if (!itemInRange({ id: "", label: "", amount, dueDate }, range)) return;
 
       items.push({
@@ -724,6 +771,7 @@ function debtPlanItemsForRange(
         overrideId: override?.id,
         dueDay,
         dueDate,
+        accountId: debt.defaultPaymentAccountId,
       });
     });
 
@@ -873,6 +921,8 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
       jobId: entry.jobId,
       payDate: entry.date,
       incomeSourceType: "salary_paycheck" as const,
+      incomeConfidence: "confirmed" as const,
+      accountId: jobsById.get(entry.jobId)?.defaultDepositAccountId,
       incomeEntryIds: [entry.id],
       incomeEntries: [entry],
     }));
@@ -907,6 +957,10 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
     jobId: group.entries[0]?.jobId,
     payDate: group.payDate,
     incomeSourceType: "work_paycheck" as const,
+    incomeConfidence: group.entries.every((entry) => entry.auto)
+      ? ("projected" as const)
+      : ("confirmed" as const),
+    accountId: jobsById.get(group.entries[0]?.jobId ?? "")?.defaultDepositAccountId,
     incomeEntryIds: group.entries.map((entry) => entry.id),
     incomeEntries: group.entries,
   }));
@@ -990,6 +1044,119 @@ function expenseSectionsForRange(
   return sections;
 }
 
+export const SPENDABLE_TODAY_HORIZON_DAYS = 90;
+
+function safetyExpenseSectionsForRange(
+  state: AppState,
+  ref: Date,
+  range: ForecastDateRange,
+): CashFlowBreakdownSection[] {
+  const today = toISO(ref);
+  const collectionRange = {
+    start: toISO(startOfMonth(ref)),
+    end: range.end,
+  };
+  const allSections = expenseSectionsForRange(state, ref, collectionRange);
+  const directSections = allSections
+    .filter((section) => section.title !== "Upcoming card bills")
+    .map((section) => ({
+      ...section,
+      items: section.items
+        .filter((item) => item.paymentMethod !== "card")
+        .map((item) => {
+          const originalDate = item.dueDate ?? item.periodDate ?? today;
+          if (originalDate >= today) return item;
+          return {
+            ...item,
+            dueDate: today,
+            periodDate: today,
+            detail: `${item.detail ?? "Unpaid obligation"} - past due, protected today`,
+          };
+        }),
+    }))
+    .filter((section) => section.items.length > 0);
+
+  const cardItems = cardCashFlowItemsForRange(state, ref, range);
+  const cardFundedItems = allSections
+    .filter((section) => section.title !== "Upcoming card bills")
+    .flatMap((section) => section.items)
+    .filter(
+      (item) =>
+        item.paymentMethod === "card" &&
+        !!item.cardId &&
+        !!item.dueDate &&
+        item.dueDate >= today &&
+        item.dueDate <= range.end,
+    );
+
+  const plannedCharges = new Map<
+    string,
+    {
+      cardId: string;
+      date: string;
+      cycleStart: string;
+      cycleEnd: string;
+      amount: number;
+      labels: string[];
+    }
+  >();
+  cardFundedItems.forEach((item) => {
+    const card = state.cards.find((candidate) => candidate.id === item.cardId);
+    if (!card || !item.dueDate) return;
+    let cycle = currentOpenCycle(card, item.dueDate);
+    if (isLikelyPendingNearStatement(item.dueDate, cycle)) {
+      cycle = currentOpenCycle(card, addDays(fromISODate(cycle.cycleEnd), 1));
+    }
+    if (cycle.cycleEnd > range.end) return;
+    const key = `${card.id}:${cycle.cycleEnd}`;
+    const existing = plannedCharges.get(key) ?? {
+      cardId: card.id,
+      date: cycle.cycleEnd,
+      cycleStart: cycle.cycleStart,
+      cycleEnd: cycle.cycleEnd,
+      amount: 0,
+      labels: [],
+    };
+    existing.amount += item.amount;
+    existing.labels.push(item.label);
+    plannedCharges.set(key, existing);
+  });
+
+  plannedCharges.forEach((charge) => {
+    const card = state.cards.find((candidate) => candidate.id === charge.cardId);
+    if (!card || charge.amount <= 0) return;
+    const existing = cardItems.find(
+      (item) => item.sourceId === card.id && item.dueDate === charge.date,
+    );
+    if (existing) {
+      existing.amount += charge.amount;
+      existing.detail = `${existing.detail} - includes ${formatMoney(
+        charge.amount,
+        state.profile.currency,
+      )} planned card charge${charge.labels.length === 1 ? "" : "s"}`;
+      return;
+    }
+    cardItems.push({
+      id: `${card.id}:planned-charges:${charge.date}`,
+      label: `${card.name} planned charges`,
+      detail: `${charge.labels.join(", ")} - protected when the statement is generated`,
+      amount: charge.amount,
+      sourceType: "card_due",
+      sourceId: card.id,
+      dueDate: charge.date,
+      periodDate: charge.date,
+      accountId: card.defaultPaymentAccountId,
+      cycleStart: charge.cycleStart,
+      cycleEnd: charge.cycleEnd,
+    });
+  });
+
+  if (cardItems.length > 0) {
+    directSections.push({ title: "Upcoming card bills", items: sortByDueDate(cardItems) });
+  }
+  return directSections;
+}
+
 export function expensesComingBreakdown(
   state: AppState,
   ref: Date = new Date(),
@@ -1054,7 +1221,17 @@ interface CashFlowTimelineEvent {
   amount: number;
   balanceBefore: number;
   balanceAfter: number;
+  accountId?: string;
+  incomeConfidence?: "confirmed" | "projected";
   sourceItem?: CashFlowBreakdownItem;
+}
+
+interface AccountFundingWarning {
+  accountId: string;
+  accountName: string;
+  date: string;
+  balanceAfter: number;
+  eventLabel: string;
 }
 
 function spendableTodayProjection(
@@ -1062,48 +1239,54 @@ function spendableTodayProjection(
   ref: Date = new Date(),
   period: CashFlowPeriod = "this_month",
   customRange?: ForecastDateRange,
+  useFixedSafetyHorizon = true,
 ): {
   range: ForecastDateRange;
   startingCash: number;
   lowestBalance: number;
   safeSurplus: number;
   events: CashFlowTimelineEvent[];
+  projectedIncome: number;
+  projectedPartTimeIncome: number;
+  accountFundingWarnings: AccountFundingWarning[];
 } {
   const today = toISO(ref);
   const selectedRange = cashFlowPeriodRange(period, ref, customRange);
-  const range = {
-    start: selectedRange.start < today ? today : selectedRange.start,
-    end: selectedRange.end < today ? today : selectedRange.end,
-  };
-  const incomeEvents = incomeItemsForRange(state, range).map((item) => ({
+  const range = useFixedSafetyHorizon
+    ? {
+        start: today,
+        end: toISO(addDays(ref, SPENDABLE_TODAY_HORIZON_DAYS)),
+      }
+    : {
+        start: selectedRange.start < today ? today : selectedRange.start,
+        end: selectedRange.end < today ? today : selectedRange.end,
+      };
+  const forecastIncomeEvents = incomeItemsForRange(state, range).map((item) => ({
     id: `income-${item.id}`,
     label: item.label,
     detail: item.detail ? `Income - ${item.detail}` : "Income",
     date: item.periodDate ?? item.payDate ?? today,
     amount: item.amount,
+    accountId: item.accountId,
+    incomeConfidence: item.incomeConfidence,
   }));
-  const expenseEvents = [
-    ...expenseSectionsForRange(state, ref, range)
-      .filter((section) => section.title !== "Upcoming card bills")
-      .flatMap((section) =>
-        section.items.map((item) => ({
-          id: `expense-${section.title}-${item.id}`,
-          label: item.label,
-          detail: item.detail ? `${section.title} - ${item.detail}` : section.title,
-          date: item.dueDate ?? item.periodDate ?? today,
-          amount: -item.amount,
-          sourceItem: item,
-        })),
-      ),
-    ...cardCashFlowItemsForRange(state, ref, range).map((item) => ({
-      id: `expense-Upcoming card bills-${item.id}`,
+  const projectedPartTimeIncome = forecastIncomeEvents
+    .filter((event) => event.incomeConfidence === "projected")
+    .reduce((sum, event) => sum + event.amount, 0);
+  const incomeEvents = forecastIncomeEvents.filter(
+    (event) => event.incomeConfidence !== "projected",
+  );
+  const expenseEvents = safetyExpenseSectionsForRange(state, ref, range).flatMap((section) =>
+    section.items.map((item) => ({
+      id: `expense-${section.title}-${item.id}`,
       label: item.label,
-      detail: item.detail ? `Upcoming card bills - ${item.detail}` : "Upcoming card bills",
+      detail: item.detail ? `${section.title} - ${item.detail}` : section.title,
       date: item.dueDate ?? item.periodDate ?? today,
       amount: -item.amount,
+      accountId: item.accountId,
       sourceItem: item,
     })),
-  ];
+  );
   const orderedEvents = [...incomeEvents, ...expenseEvents].sort((a, b) => {
     const dateOrder = a.date.localeCompare(b.date);
     if (dateOrder !== 0) return dateOrder;
@@ -1113,12 +1296,41 @@ function spendableTodayProjection(
   const startingCash = spendableCash(state);
   let runningBalance = startingCash;
   let lowestBalance = startingCash;
+  const accountBalances = new Map(
+    state.accounts
+      .filter(isSpendableAccount)
+      .map((account) => [account.id, { account, balance: account.balance }]),
+  );
+  const accountFundingWarnings: AccountFundingWarning[] = [];
   const events = orderedEvents.map((event) => {
     const balanceBefore = runningBalance;
     runningBalance += event.amount;
     lowestBalance = Math.min(lowestBalance, runningBalance);
+    if (event.accountId) {
+      const accountBalance = accountBalances.get(event.accountId);
+      if (accountBalance) {
+        accountBalance.balance += event.amount;
+        if (
+          event.amount < 0 &&
+          accountBalance.balance < 0 &&
+          !accountFundingWarnings.some(
+            (warning) =>
+              warning.accountId === event.accountId && warning.date === event.date,
+          )
+        ) {
+          accountFundingWarnings.push({
+            accountId: event.accountId,
+            accountName: accountBalance.account.name,
+            date: event.date,
+            balanceAfter: accountBalance.balance,
+            eventLabel: event.label,
+          });
+        }
+      }
+    }
     return { ...event, balanceBefore, balanceAfter: runningBalance };
   });
+  const projectedIncome = incomeEvents.reduce((sum, event) => sum + event.amount, 0);
 
   return {
     range,
@@ -1126,6 +1338,9 @@ function spendableTodayProjection(
     lowestBalance,
     safeSurplus: lowestBalance - state.profile.safeToSpendFloor,
     events,
+    projectedIncome,
+    projectedPartTimeIncome,
+    accountFundingWarnings,
   };
 }
 
@@ -1135,7 +1350,7 @@ export function expenseAffordabilityById(
   period: CashFlowPeriod = "this_month",
   customRange?: ForecastDateRange,
 ): Record<string, CashFlowAffordability> {
-  const projection = spendableTodayProjection(state, ref, period, customRange);
+  const projection = spendableTodayProjection(state, ref, period, customRange, false);
   const expenseEvents = projection.events.filter((event) => event.amount < 0);
   const affordability: Record<string, CashFlowAffordability> = {};
 
@@ -1187,8 +1402,8 @@ export function spendableTodayBreakdown(
     .slice(0, 5);
   const cardEvents = projection.events
     .filter((event) => event.detail.startsWith("Upcoming card bills"))
-    .slice(0, 8);
-  const upcomingEvents = projection.events.slice(0, 15);
+    .slice(0, 12);
+  const upcomingEvents = projection.events;
 
   const sections: CashFlowBreakdownSection[] = [
     {
@@ -1267,6 +1482,46 @@ export function spendableTodayBreakdown(
           state.profile.currency,
         )}`,
         amount: event.amount,
+      })),
+    });
+  }
+
+  sections.push({
+    title: "Forecast assumptions",
+    items: [
+      {
+        id: "spendable-today-protection-window",
+        label: "Protection window",
+        detail: `${SPENDABLE_TODAY_HORIZON_DAYS} days through ${formatDisplayDate(
+          projection.range.end,
+        )}. Dashboard filters do not change this safety window.`,
+        amount: 0,
+      },
+      {
+        id: "spendable-today-forecast-income",
+        label: "Income included",
+        detail:
+          projection.projectedPartTimeIncome > 0
+            ? `${formatMoney(
+                projection.projectedPartTimeIncome,
+                state.profile.currency,
+              )} of auto-planned part-time income is excluded until the work is entered.`
+            : "Only scheduled salary and entered work are counted as protected income.",
+        amount: projection.projectedIncome,
+      },
+    ],
+  });
+
+  if (projection.accountFundingWarnings.length > 0) {
+    sections.push({
+      title: "Account funding warnings",
+      items: projection.accountFundingWarnings.map((warning) => ({
+        id: `account-warning-${warning.accountId}-${warning.date}`,
+        label: warning.accountName,
+        detail: `${warning.eventLabel} on ${formatDisplayDate(
+          warning.date,
+        )} would leave this account short. Move money before this payment.`,
+        amount: warning.balanceAfter,
       })),
     });
   }

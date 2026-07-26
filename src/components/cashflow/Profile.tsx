@@ -407,7 +407,7 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
 }
 
 export function CardSheet({ onClose, initial }: { onClose: () => void; initial?: CardT }) {
-  const { dispatch } = useApp();
+  const { state, dispatch } = useApp();
   const [c, setC] = useState<Omit<CardT, "id">>(
     initial ?? {
       name: "",
@@ -421,6 +421,9 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
       apr: 22,
       targetUtilizationPercent: 30,
       preferredCategories: [],
+      defaultPaymentAccountId: state.accounts.find(
+        (account) => account.availableForSpending !== false,
+      )?.id,
     },
   );
   function up<K extends keyof Omit<CardT, "id">>(k: K, v: Omit<CardT, "id">[K]) {
@@ -541,6 +544,24 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
               )
             }
           />
+        </Field>
+        <Field
+          label="Default payment account (optional)"
+          hint="Used to check whether this account can cover forecast card payments."
+        >
+          <Select
+            value={c.defaultPaymentAccountId ?? ""}
+            onChange={(e) => up("defaultPaymentAccountId", e.target.value || undefined)}
+          >
+            <option value="">Use total spendable cash</option>
+            {state.accounts
+              .filter((account) => account.availableForSpending !== false)
+              .map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+          </Select>
         </Field>
       </div>
     </Sheet>
@@ -739,6 +760,9 @@ export function DebtSheet({ onClose, initial }: { onClose: () => void; initial?:
       dueDate: 1,
       status: "active",
       payoffMode: "minimum",
+      defaultPaymentAccountId: state.accounts.find(
+        (account) => account.availableForSpending !== false,
+      )?.id,
     },
   );
   function up<K extends keyof Omit<Debt, "id">>(k: K, v: Omit<Debt, "id">[K]) {
@@ -866,6 +890,24 @@ export function DebtSheet({ onClose, initial }: { onClose: () => void; initial?:
             value={d.endDate ?? ""}
             onChange={(e) => up("endDate", e.target.value || undefined)}
           />
+        </Field>
+        <Field
+          label="Default payment account (optional)"
+          hint="Used to check whether this account can cover forecast debt payments."
+        >
+          <Select
+            value={d.defaultPaymentAccountId ?? ""}
+            onChange={(e) => up("defaultPaymentAccountId", e.target.value || undefined)}
+          >
+            <option value="">Use total spendable cash</option>
+            {state.accounts
+              .filter((account) => account.availableForSpending !== false)
+              .map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+          </Select>
         </Field>
       </div>
     </Sheet>
