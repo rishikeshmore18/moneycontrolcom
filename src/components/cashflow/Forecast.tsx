@@ -87,7 +87,8 @@ type Panel =
   | { type: "all-alerts" }
   | { type: "custom-scenario" }
   | { type: "edit-bill"; item: CashFlowBreakdownItem }
-  | { type: "edit-card"; card: CardType };
+  | { type: "edit-card"; card: CardType }
+  | { type: "transaction"; transaction: Transaction };
 
 type SummaryMetric = "safe" | "projected" | "runway" | "reserved";
 type AlertSeverity = "success" | "information" | "warning" | "critical";
@@ -560,6 +561,7 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
         onToggle={(category) =>
           setSelectedSpendingCategory((current) => (current === category ? null : category))
         }
+        onTransaction={(transaction) => setPanel({ type: "transaction", transaction })}
       />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.7fr)] xl:items-start">
@@ -677,12 +679,14 @@ function CategorySpendingPanel({
   state,
   range,
   onToggle,
+  onTransaction,
 }: {
   groups: CategorySpendingGroup[];
   selected: CategorySpendingGroup | null;
   state: AppState;
   range: ForecastDateRange;
   onToggle: (category: string) => void;
+  onTransaction: (transaction: Transaction) => void;
 }) {
   const currency = state.profile.currency;
   const total = groups.reduce((sum, group) => sum + group.amount, 0);
@@ -849,9 +853,12 @@ function CategorySpendingPanel({
                               <span className="text-right">Amount</span>
                             </div>
                             {group.transactions.map((transaction) => (
-                              <div
+                              <button
                                 key={transaction.id}
-                                className="grid grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border px-3 py-3 last:border-b-0 sm:grid-cols-[96px_minmax(0,1fr)_120px_auto] sm:px-4"
+                                type="button"
+                                onClick={() => onTransaction(transaction)}
+                                aria-label={`View details for ${transaction.description || transaction.category} on ${formatDisplayDate(transaction.date)}`}
+                                className="grid w-full grid-cols-[minmax(0,1fr)_auto] gap-3 border-b border-border px-3 py-3 text-left transition-colors hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 last:border-b-0 sm:grid-cols-[96px_minmax(0,1fr)_120px_auto] sm:px-4"
                               >
                                 <div className="text-xs text-muted-foreground">
                                   {formatDisplayDate(transaction.date)}
@@ -870,7 +877,7 @@ function CategorySpendingPanel({
                                 <div className="col-start-2 row-start-1 text-right text-sm font-black text-[color:var(--bad)] sm:col-auto sm:row-auto">
                                   -{formatMoney(transaction.amount, currency)}
                                 </div>
-                              </div>
+                              </button>
                             ))}
                           </div>
                         </div>
@@ -1634,6 +1641,74 @@ function buildAlerts(
   return alerts;
 }
 
+function ForecastTransactionDetailsSheet({
+  transaction,
+  state,
+  onClose,
+}: {
+  transaction: Transaction;
+  state: AppState;
+  onClose: () => void;
+}) {
+  const currency = state.profile.currency;
+  const account = state.accounts.find((item) => item.id === transaction.sourceAccountId);
+  const card = state.cards.find((item) => item.id === transaction.cardId);
+  const debt = state.debts.find((item) => item.id === transaction.debtId);
+  const source = card
+    ? `Credit card - ${card.name}`
+    : account
+      ? `${account.bankName} - ${account.name}`
+      : "Not specified";
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={transaction.description || transaction.category || "Transaction details"}
+    >
+      <div className="space-y-4">
+        <div className="py-2 text-center">
+          <div className="text-4xl font-black tracking-tight text-[color:var(--bad)]">
+            -{formatMoney(transaction.amount, currency)}
+          </div>
+          <div className="mt-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Expense
+          </div>
+        </div>
+
+        <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-[color:var(--card-solid)]">
+          <TransactionDetailRow label="Date" value={formatDisplayDate(transaction.date)} />
+          <TransactionDetailRow label="Category" value={transaction.category || "Other"} />
+          <TransactionDetailRow label="Paid with" value={source} />
+          {debt && <TransactionDetailRow label="Debt" value={debt.name} />}
+          {transaction.cycleStart && transaction.cycleEnd && (
+            <TransactionDetailRow
+              label="Billing cycle"
+              value={`${formatDisplayDate(transaction.cycleStart)} - ${formatDisplayDate(transaction.cycleEnd)}`}
+            />
+          )}
+        </div>
+
+        <div className="rounded-2xl border border-border bg-[color:var(--card-solid)] p-4">
+          <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Note</div>
+          <div className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+            {transaction.notes?.trim() || "No note"}
+          </div>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function TransactionDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-4 px-4 py-3">
+      <span className="shrink-0 text-sm text-muted-foreground">{label}</span>
+      <span className="break-words text-right text-sm font-bold text-foreground">{value}</span>
+    </div>
+  );
+}
+
 function ForecastPanels({
   panel,
   onClose,
@@ -1683,6 +1758,10 @@ function ForecastPanels({
 }) {
   const currency = state.profile.currency;
   if (!panel) return null;
+
+  if (panel.type === "transaction") {
+    return <ForecastTransactionDetailsSheet transaction={panel.transaction} state={state} onClose={onClose} />;
+  }
 
   if (panel.type === "edit-bill") {
     if (panel.item.sourceType === "recurring_bill") {
