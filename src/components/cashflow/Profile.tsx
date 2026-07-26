@@ -25,6 +25,7 @@ import type {
 } from "@/lib/cashflow/types";
 
 import { toast } from "./Toast";
+import { CategoryBudgetsProfileCard } from "./MonthlyBudget";
 
 export function Profile() {
   const { state, dispatch, userEmail, signOut } = useApp();
@@ -35,7 +36,7 @@ export function Profile() {
       <div>
         <h1 className="text-3xl font-black tracking-tight">Profile</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your accounts, cards, jobs, debts and bills.
+          Manage your accounts, cards, jobs, debts, bills and monthly budgets.
         </p>
       </div>
 
@@ -162,6 +163,8 @@ export function Profile() {
         Form={DebtSheet}
         onDelete={(id) => dispatch({ type: "DELETE_DEBT", id })}
       />
+
+      <CategoryBudgetsProfileCard />
 
       <ListCard
         title="Recurring bills"

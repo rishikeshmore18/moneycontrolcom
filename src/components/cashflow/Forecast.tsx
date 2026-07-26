@@ -67,7 +67,6 @@ import { Field, Input, Select } from "./Field";
 import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { Sheet } from "./Sheet";
 import { toast } from "./Toast";
-import { MonthlyBudgetCard } from "./MonthlyBudget";
 
 type Panel =
   | { type: "summary"; metric: SummaryMetric }
@@ -486,8 +485,6 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
           />
         </div>
       </section>
-
-      <MonthlyBudgetCard />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,0.7fr)] xl:items-start">
         <ForecastChart

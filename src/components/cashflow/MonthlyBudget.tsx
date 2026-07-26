@@ -20,7 +20,11 @@ import {
   UtensilsCrossed,
 } from "lucide-react";
 import { useApp } from "@/lib/cashflow/AppContext";
-import { monthlyBudgetSummary, type CategoryBudgetProgress } from "@/lib/cashflow/budget";
+import {
+  monthlyBudgetSummary,
+  resolveBudgetConfig,
+  type CategoryBudgetProgress,
+} from "@/lib/cashflow/budget";
 import { expensesComingBreakdown } from "@/lib/cashflow/forecast";
 import {
   addMonths,
@@ -240,6 +244,323 @@ export function MonthlyBudgetCard({ className = "" }: { className?: string }) {
       </Card>
       <MonthlyBudgetSheet open={open} onClose={() => setOpen(false)} initialMonth={currentMonth} />
     </>
+  );
+}
+
+export function CategoryBudgetsProfileCard() {
+  const { state, dispatch } = useApp();
+  const currentMonth = monthKey(new Date());
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<CategoryBudget | null>(null);
+  const committed = useMemo(
+    () => committedItemsForMonth(state, currentMonth),
+    [currentMonth, state],
+  );
+  const summary = useMemo(
+    () => monthlyBudgetSummary(state, currentMonth, committed),
+    [committed, currentMonth, state],
+  );
+  const money = (amount: number) => formatMoney(amount, state.profile.currency);
+  const budgets = state.categoryBudgets ?? [];
+
+  return (
+    <>
+      <Card>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <CalendarRange size={18} className="shrink-0 text-[color:var(--primary)]" />
+              <h3 className="text-lg font-extrabold">Category budgets</h3>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Set once and use every month until you change or remove it.
+            </p>
+          </div>
+          <Button variant="ghost" onClick={() => setAdding(true)} className="shrink-0">
+            <Plus size={14} />
+            Add
+          </Button>
+        </div>
+
+        {budgets.length === 0 ? (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="flex min-h-24 w-full items-center gap-3 rounded-lg px-1 py-4 text-left transition hover:bg-foreground/5"
+          >
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-[color:var(--primary)]">
+              <CircleDollarSign size={20} />
+            </span>
+            <span>
+              <span className="block font-bold">No category budgets</span>
+              <span className="mt-1 block text-sm text-muted-foreground">
+                Add an ongoing monthly limit for groceries, dining, cab, or any category.
+              </span>
+            </span>
+          </button>
+        ) : (
+          <>
+            <div className="my-4 rounded-xl border border-border bg-muted/20 p-4">
+              <div className="flex items-end justify-between gap-3">
+                <div>
+                  <div className="text-xs font-bold text-muted-foreground">
+                    {monthLabel(currentMonth)} progress
+                  </div>
+                  <div className="mt-1 text-xl font-black">
+                    {money(summary.totalSpent)}{" "}
+                    <span className="text-sm font-semibold text-muted-foreground">
+                      of {money(summary.totalLimit)}
+                    </span>
+                  </div>
+                </div>
+                <div
+                  className={`text-sm font-black ${
+                    summary.totalOverBy > 0 ? "text-[color:var(--bad)]" : "text-[color:var(--good)]"
+                  }`}
+                >
+                  {Math.round(summary.spentPercent)}%
+                </div>
+              </div>
+              <div className="mt-3">
+                <BudgetBar
+                  spent={summary.totalSpent}
+                  committed={summary.totalCommitted}
+                  limit={summary.totalLimit}
+                  overBy={summary.totalOverBy}
+                  label={`${monthLabel(currentMonth)} budget progress`}
+                />
+              </div>
+            </div>
+
+            <div className="divide-y divide-border">
+              {budgets.map((budget) => {
+                const progress = summary.categories.find(
+                  (category) => category.budget.id === budget.id,
+                );
+                const config = resolveBudgetConfig(state, budget, currentMonth);
+                const monthlyLimit = config?.amount ?? budget.amount;
+                const Icon = categoryIcon(budget.category);
+                return (
+                  <div key={budget.id} className="flex items-center gap-3 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setEditing(budget)}
+                      className="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-1 py-1 text-left transition hover:bg-foreground/5"
+                    >
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-[color:var(--primary)]">
+                        <Icon size={18} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-bold">{budget.category}</span>
+                        <span className="mt-0.5 block text-xs text-muted-foreground">
+                          {progress
+                            ? `${money(progress.spent)} spent · ${money(progress.committed)} upcoming`
+                            : `Starts ${monthLabel(budget.startMonth)}`}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block font-black">{money(monthlyLimit)}</span>
+                        <span className="block text-xs text-muted-foreground">per month</span>
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditing(budget)}
+                      className="p-1.5 text-muted-foreground hover:text-foreground"
+                      aria-label={`Edit ${budget.category} budget`}
+                      title={`Edit ${budget.category} budget`}
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm(`Remove the ${budget.category} budget from future planning?`)) {
+                          dispatch({ type: "DELETE_CATEGORY_BUDGET", id: budget.id });
+                          toast(`${budget.category} budget removed`);
+                        }
+                      }}
+                      className="p-1.5 text-[color:var(--bad)]"
+                      aria-label={`Delete ${budget.category} budget`}
+                      title={`Delete ${budget.category} budget`}
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </Card>
+
+      {(adding || editing) && (
+        <OngoingBudgetSheet
+          initial={editing ?? undefined}
+          currentMonth={currentMonth}
+          onClose={() => {
+            setAdding(false);
+            setEditing(null);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function OngoingBudgetSheet({
+  initial,
+  currentMonth,
+  onClose,
+}: {
+  initial?: CategoryBudget;
+  currentMonth: string;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const currentConfig = initial ? resolveBudgetConfig(state, initial, currentMonth) : null;
+  const usedCategories = new Set(
+    (state.categoryBudgets ?? []).map((budget) => budget.category.toLowerCase()),
+  );
+  const availableCategories = state.categories.filter(
+    (category) => !usedCategories.has(category.toLowerCase()),
+  );
+  const [category, setCategory] = useState(initial?.category ?? availableCategories[0] ?? "");
+  const [newCategory, setNewCategory] = useState("");
+  const [amount, setAmount] = useState(
+    initial ? String(currentConfig?.amount ?? initial.amount) : "",
+  );
+  const [protect, setProtect] = useState(
+    currentConfig?.protectInSpendableToday ?? initial?.protectInSpendableToday ?? true,
+  );
+  const [rollover, setRollover] = useState<BudgetRolloverPolicy>(
+    currentConfig?.rolloverPolicy ?? initial?.rolloverPolicy ?? "reset",
+  );
+
+  function save() {
+    const selectedCategory = category === "__new" ? newCategory.trim() : category;
+    const parsedAmount = toNumber(amount);
+    if (!selectedCategory) return toast("Choose a category");
+    if (parsedAmount <= 0) return toast("Enter a monthly limit above zero");
+
+    if (initial) {
+      dispatch({
+        type: "SET_CATEGORY_BUDGET_OVERRIDE",
+        payload: {
+          budgetId: initial.id,
+          month: currentMonth,
+          scope: "from_month",
+          amount: parsedAmount,
+          protectInSpendableToday: protect,
+          rolloverPolicy: rollover,
+        },
+      });
+      toast(`${initial.category} budget updated for this and future months`);
+    } else {
+      if (category === "__new") {
+        dispatch({ type: "ADD_CATEGORY", category: selectedCategory });
+      }
+      dispatch({
+        type: "ADD_CATEGORY_BUDGET",
+        payload: {
+          category: selectedCategory,
+          amount: parsedAmount,
+          startMonth: currentMonth,
+          protectInSpendableToday: protect,
+          rolloverPolicy: rollover,
+          active: true,
+        },
+      });
+      toast(`${selectedCategory} monthly budget created`);
+    }
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={initial ? "Edit category budget" : "Add category budget"}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Category">
+          {initial ? (
+            <div className="flex min-h-12 items-center rounded-2xl border border-border bg-muted/40 px-4 font-bold">
+              {initial.category}
+            </div>
+          ) : (
+            <Select value={category} onChange={(event) => setCategory(event.target.value)}>
+              <option value="">Choose category</option>
+              {availableCategories.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+              <option value="__new">Add new category</option>
+            </Select>
+          )}
+        </Field>
+        {!initial && category === "__new" && (
+          <Field label="New category">
+            <Input
+              value={newCategory}
+              onChange={(event) => setNewCategory(event.target.value)}
+              placeholder="Category name"
+            />
+          </Field>
+        )}
+        <Field label="Monthly limit">
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            placeholder="0.00"
+          />
+        </Field>
+        <Field label="Unused money">
+          <Select
+            value={rollover}
+            onChange={(event) => setRollover(event.target.value as BudgetRolloverPolicy)}
+          >
+            <option value="reset">Reset every month</option>
+            <option value="carry_remaining">Carry remaining forward</option>
+          </Select>
+        </Field>
+        <label className="flex min-h-14 cursor-pointer items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4 sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={protect}
+            onChange={(event) => setProtect(event.target.checked)}
+            className="mt-0.5 h-5 w-5 accent-[color:var(--primary)]"
+          />
+          <span>
+            <span className="flex items-center gap-2 font-black">
+              <ShieldCheck size={17} className="text-[color:var(--good)]" />
+              Protect in Spendable Today
+            </span>
+            <span className="mt-1 block text-sm text-muted-foreground">
+              Reserves the unused monthly allowance so it is not shown as safe surplus.
+            </span>
+          </span>
+        </label>
+        <div className="rounded-2xl border border-border bg-muted/20 p-4 text-sm text-muted-foreground sm:col-span-2">
+          This is an ongoing monthly rule. Changes made here apply from {monthLabel(currentMonth)}{" "}
+          forward.
+        </div>
+      </div>
+    </Sheet>
   );
 }
 
