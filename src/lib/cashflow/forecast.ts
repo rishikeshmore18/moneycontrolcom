@@ -983,6 +983,7 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
         },
       ];
     }
+    return [item];
   });
 
   const oneTimeIncomeItems: CashFlowBreakdownItem[] = incomeOverrides
