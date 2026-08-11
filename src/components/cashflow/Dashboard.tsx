@@ -840,6 +840,11 @@ function BreakdownSheet({
             <Plus size={16} /> Add upcoming expense
           </Button>
         )}
+        {incomeMode && onAddIncome && (
+          <Button variant="primary" full onClick={onAddIncome}>
+            <Plus size={16} /> Add upcoming income
+          </Button>
+        )}
         {sections.length === 0 && (
           <div className="rounded-2xl border border-border bg-muted/30 px-4 py-6 text-sm text-muted-foreground">
             No items are contributing to this number right now.
