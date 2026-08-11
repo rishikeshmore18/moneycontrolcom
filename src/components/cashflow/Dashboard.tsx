@@ -810,6 +810,7 @@ function BreakdownSheet({
   onIncomeAction?: (action: IncomeAction) => void;
   onSpendableAction?: (action: SpendableAction) => void;
   onAddExpense?: () => void;
+  onAddIncome?: () => void;
   onExpenseAction?: (action: ExpenseAction) => void;
 }) {
   const [activeAffordability, setActiveAffordability] = useState<CashFlowAffordability | null>(
