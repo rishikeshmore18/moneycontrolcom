@@ -1500,6 +1500,100 @@ function IncomePaydayOverrideSheet({
   );
 }
 
+function PlannedIncomeSheet({
+  item,
+  onClose,
+}: {
+  item?: CashFlowBreakdownItem;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const cur = state.profile.currency;
+  const [label, setLabel] = useState(item?.label ?? "");
+  const [amount, setAmount] = useState(item ? String(item.amount) : "");
+  const [date, setDate] = useState(item?.payDate ?? item?.periodDate ?? todayISO());
+  const [accountId, setAccountId] = useState(item?.accountId ?? state.accounts[0]?.id ?? "");
+  const [notes, setNotes] = useState("");
+
+  function save() {
+    const amt = toNumber(amount);
+    if (!label.trim()) return toast("Name the income");
+    if (amt <= 0) return toast("Enter an amount");
+    const payload = {
+      sourceId: item?.overrideId ?? `one-time-income-${newId()}`,
+      payDate: date,
+      action: "add" as const,
+      label: label.trim(),
+      amount: amt,
+      accountId: accountId || undefined,
+      notes: notes.trim() || undefined,
+    };
+    if (item?.overrideId) {
+      dispatch({
+        type: "UPDATE_PLANNED_INCOME_OVERRIDE",
+        payload: { ...payload, id: item.overrideId },
+      });
+      toast("Upcoming income updated");
+    } else {
+      dispatch({ type: "ADD_PLANNED_INCOME_OVERRIDE", payload });
+      toast("Upcoming income added");
+    }
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={item ? "Edit upcoming income" : "Add upcoming income"}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <Field label="Income name" hint="e.g. Bonus, Tax refund, Side gig payment">
+          <Input
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            placeholder="Bonus"
+          />
+        </Field>
+        <Field label="Amount expected">
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            placeholder="0.00"
+          />
+        </Field>
+        <Field label="Expected date">
+          <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </Field>
+        <Field label="Deposit to" hint="Where the money will land when it arrives">
+          <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+            {state.accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} - {formatMoney(account.balance, cur)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Notes (optional)">
+          <Input value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </Field>
+      </div>
+    </Sheet>
+  );
+}
+
 function MarkIncomeReceivedSheet({
   item,
   onClose,
