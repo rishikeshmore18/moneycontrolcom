@@ -121,6 +121,17 @@ export type Action =
         date: string;
       };
     }
+  | {
+      type: "ADD_INCOME";
+      payload: {
+        accountId: string;
+        amount: number;
+        date: string;
+        description: string;
+        category?: string;
+        notes?: string;
+      };
+    }
   | { type: "UPSERT_TIMESHEET"; payload: TimesheetEntry }
   | { type: "DELETE_TIMESHEET"; id: string }
   | {
@@ -724,6 +735,26 @@ export function reducer(state: AppState, action: Action): AppState {
         date: p.date,
         sourceAccountId: p.accountId,
         cardId: p.cardId,
+        notes: p.notes,
+      };
+      return { ...next, transactions: addTx(next, tx) };
+    }
+
+    case "ADD_INCOME": {
+      const p = action.payload;
+      const account = state.accounts.find((a) => a.id === p.accountId);
+      if (!account || p.amount <= 0) return state;
+      const next: AppState = {
+        ...state,
+        accounts: updateAccount(state, p.accountId, p.amount),
+      };
+      const tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
+        type: "income",
+        amount: p.amount,
+        category: p.category || "Income",
+        description: p.description || "Income",
+        date: p.date,
+        targetAccountId: p.accountId,
         notes: p.notes,
       };
       return { ...next, transactions: addTx(next, tx) };

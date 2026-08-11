@@ -69,6 +69,9 @@ type ExpenseAction =
   | { type: "edit_debt"; item: CashFlowBreakdownItem };
 
 type IncomeAction =
+  | { type: "add_one_time" }
+  | { type: "edit_one_time"; item: CashFlowBreakdownItem }
+  | { type: "delete_one_time"; item: CashFlowBreakdownItem }
   | { type: "edit_once"; item: CashFlowBreakdownItem }
   | { type: "mark_received"; item: CashFlowBreakdownItem }
   | { type: "edit_job"; item: CashFlowBreakdownItem }
@@ -440,6 +443,7 @@ export function Dashboard() {
         onIncomeAction={setIncomeAction}
         onSpendableAction={setSpendableAction}
         onAddExpense={() => setExpenseAction({ type: "add_one_time" })}
+        onAddIncome={() => setIncomeAction({ type: "add_one_time" })}
         onExpenseAction={setExpenseAction}
       />
       <IncomeActionSheets action={incomeAction} onClose={() => setIncomeAction(null)} />
@@ -788,6 +792,7 @@ function BreakdownSheet({
   onIncomeAction,
   onSpendableAction,
   onAddExpense,
+  onAddIncome,
   onExpenseAction,
 }: {
   open: boolean;
@@ -805,6 +810,7 @@ function BreakdownSheet({
   onIncomeAction?: (action: IncomeAction) => void;
   onSpendableAction?: (action: SpendableAction) => void;
   onAddExpense?: () => void;
+  onAddIncome?: () => void;
   onExpenseAction?: (action: ExpenseAction) => void;
 }) {
   const [activeAffordability, setActiveAffordability] = useState<CashFlowAffordability | null>(
@@ -832,6 +838,11 @@ function BreakdownSheet({
         {expenseMode && onAddExpense && (
           <Button variant="primary" full onClick={onAddExpense}>
             <Plus size={16} /> Add upcoming expense
+          </Button>
+        )}
+        {incomeMode && onAddIncome && (
+          <Button variant="primary" full onClick={onAddIncome}>
+            <Plus size={16} /> Add upcoming income
           </Button>
         )}
         {sections.length === 0 && (
@@ -1045,6 +1056,27 @@ function IncomeItemActions({
   onAction: (action: IncomeAction) => void;
 }) {
   if (!item.incomeSourceType) return null;
+  if (item.incomeSourceType === "one_time") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <MiniAction
+          label="Mark received"
+          onClick={() => onAction({ type: "mark_received", item })}
+        />
+        <MiniAction
+          label="Edit"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_one_time", item })}
+        />
+        <MiniAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => onAction({ type: "delete_one_time", item })}
+          danger
+        />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-2">
       <MiniAction label="Mark received" onClick={() => onAction({ type: "mark_received", item })} />
@@ -1179,6 +1211,42 @@ function IncomeActionSheets({
   const { state, dispatch } = useApp();
 
   if (!action) return null;
+
+  if (action.type === "add_one_time") {
+    return <PlannedIncomeSheet onClose={onClose} />;
+  }
+
+  if (action.type === "edit_one_time") {
+    return <PlannedIncomeSheet item={action.item} onClose={onClose} />;
+  }
+
+  if (action.type === "delete_one_time") {
+    const overrideId = action.item.overrideId;
+    return (
+      <Sheet open onClose={onClose} title="Delete upcoming income">
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="font-extrabold">{action.item.label}</div>
+            <div className="text-sm text-muted-foreground">
+              {action.item.detail ?? "One-time income"}
+            </div>
+          </div>
+          <Button
+            variant="danger"
+            full
+            onClick={() => {
+              if (overrideId) dispatch({ type: "DELETE_PLANNED_INCOME_OVERRIDE", id: overrideId });
+              toast("Upcoming income deleted");
+              onClose();
+            }}
+          >
+            Delete this income
+          </Button>
+        </div>
+      </Sheet>
+    );
+  }
+
 
   if (action.type === "edit_once") {
     return <IncomePaydayOverrideSheet item={action.item} onClose={onClose} />;
@@ -1432,6 +1500,100 @@ function IncomePaydayOverrideSheet({
   );
 }
 
+function PlannedIncomeSheet({
+  item,
+  onClose,
+}: {
+  item?: CashFlowBreakdownItem;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const cur = state.profile.currency;
+  const [label, setLabel] = useState(item?.label ?? "");
+  const [amount, setAmount] = useState(item ? String(item.amount) : "");
+  const [date, setDate] = useState(item?.payDate ?? item?.periodDate ?? todayISO());
+  const [accountId, setAccountId] = useState(item?.accountId ?? state.accounts[0]?.id ?? "");
+  const [notes, setNotes] = useState("");
+
+  function save() {
+    const amt = toNumber(amount);
+    if (!label.trim()) return toast("Name the income");
+    if (amt <= 0) return toast("Enter an amount");
+    const payload = {
+      sourceId: item?.overrideId ?? `one-time-income-${newId()}`,
+      payDate: date,
+      action: "add" as const,
+      label: label.trim(),
+      amount: amt,
+      accountId: accountId || undefined,
+      notes: notes.trim() || undefined,
+    };
+    if (item?.overrideId) {
+      dispatch({
+        type: "UPDATE_PLANNED_INCOME_OVERRIDE",
+        payload: { ...payload, id: item.overrideId },
+      });
+      toast("Upcoming income updated");
+    } else {
+      dispatch({ type: "ADD_PLANNED_INCOME_OVERRIDE", payload });
+      toast("Upcoming income added");
+    }
+    onClose();
+  }
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={item ? "Edit upcoming income" : "Add upcoming income"}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save}>
+            Save
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <Field label="Income name" hint="e.g. Bonus, Tax refund, Side gig payment">
+          <Input
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
+            placeholder="Bonus"
+          />
+        </Field>
+        <Field label="Amount expected">
+          <Input
+            type="number"
+            inputMode="decimal"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            placeholder="0.00"
+          />
+        </Field>
+        <Field label="Expected date">
+          <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        </Field>
+        <Field label="Deposit to" hint="Where the money will land when it arrives">
+          <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+            {state.accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name} - {formatMoney(account.balance, cur)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Notes (optional)">
+          <Input value={notes} onChange={(event) => setNotes(event.target.value)} />
+        </Field>
+      </div>
+    </Sheet>
+  );
+}
+
 function MarkIncomeReceivedSheet({
   item,
   onClose,
@@ -1444,7 +1606,8 @@ function MarkIncomeReceivedSheet({
   const job = state.jobs.find((candidate) => candidate.id === item.jobId);
   const payDate = item.payDate ?? item.periodDate ?? todayISO();
   const entries = item.incomeEntries ?? [];
-  const defaultAccountId = job?.defaultDepositAccountId || state.accounts[0]?.id || "";
+  const defaultAccountId =
+    item.accountId || job?.defaultDepositAccountId || state.accounts[0]?.id || "";
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [amount, setAmount] = useState(String(item.amount));
   const [date, setDate] = useState(payDate);
@@ -1457,7 +1620,28 @@ function MarkIncomeReceivedSheet({
     const actualTotal = toNumber(amount) || item.amount;
     if (actualTotal <= 0) return toast("Enter an amount");
     if (!accountId) return toast("Choose an account");
+
+    if (item.incomeSourceType === "one_time") {
+      dispatch({
+        type: "ADD_INCOME",
+        payload: {
+          accountId,
+          amount: actualTotal,
+          date,
+          description: item.label,
+          category: "Income",
+        },
+      });
+      if (item.overrideId) {
+        dispatch({ type: "DELETE_PLANNED_INCOME_OVERRIDE", id: item.overrideId });
+      }
+      toast(`+${formatMoney(actualTotal, cur)} received`);
+      onClose();
+      return;
+    }
+
     if (entries.length === 0) return toast("No timesheet entries found for this payday");
+
 
     entries.forEach((entry, index) => {
       const entryExpected = entry.actualAmount ?? entry.expectedAmount;
