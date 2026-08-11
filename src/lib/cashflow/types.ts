@@ -177,7 +177,7 @@ export interface PlannedExpenseOverride {
   notes?: string;
 }
 
-export type PlannedIncomeOverrideAction = "skip" | "override";
+export type PlannedIncomeOverrideAction = "skip" | "override" | "add";
 
 export interface PlannedIncomeOverride {
   id: string;
@@ -187,6 +187,8 @@ export interface PlannedIncomeOverride {
   action: PlannedIncomeOverrideAction;
   label?: string;
   amount?: number;
+  accountId?: string;
+  category?: string;
   notes?: string;
 }
 
