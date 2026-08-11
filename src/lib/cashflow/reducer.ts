@@ -121,6 +121,17 @@ export type Action =
         date: string;
       };
     }
+  | {
+      type: "ADD_INCOME";
+      payload: {
+        accountId: string;
+        amount: number;
+        date: string;
+        description: string;
+        category?: string;
+        notes?: string;
+      };
+    }
   | { type: "UPSERT_TIMESHEET"; payload: TimesheetEntry }
   | { type: "DELETE_TIMESHEET"; id: string }
   | {
