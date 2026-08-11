@@ -1056,6 +1056,27 @@ function IncomeItemActions({
   onAction: (action: IncomeAction) => void;
 }) {
   if (!item.incomeSourceType) return null;
+  if (item.incomeSourceType === "one_time") {
+    return (
+      <div className="flex flex-wrap gap-2">
+        <MiniAction
+          label="Mark received"
+          onClick={() => onAction({ type: "mark_received", item })}
+        />
+        <MiniAction
+          label="Edit"
+          icon={Pencil}
+          onClick={() => onAction({ type: "edit_one_time", item })}
+        />
+        <MiniAction
+          label="Delete"
+          icon={Trash2}
+          onClick={() => onAction({ type: "delete_one_time", item })}
+          danger
+        />
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap gap-2">
       <MiniAction label="Mark received" onClick={() => onAction({ type: "mark_received", item })} />
