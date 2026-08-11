@@ -1606,7 +1606,8 @@ function MarkIncomeReceivedSheet({
   const job = state.jobs.find((candidate) => candidate.id === item.jobId);
   const payDate = item.payDate ?? item.periodDate ?? todayISO();
   const entries = item.incomeEntries ?? [];
-  const defaultAccountId = job?.defaultDepositAccountId || state.accounts[0]?.id || "";
+  const defaultAccountId =
+    item.accountId || job?.defaultDepositAccountId || state.accounts[0]?.id || "";
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [amount, setAmount] = useState(String(item.amount));
   const [date, setDate] = useState(payDate);
