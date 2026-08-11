@@ -443,6 +443,7 @@ export function Dashboard() {
         onIncomeAction={setIncomeAction}
         onSpendableAction={setSpendableAction}
         onAddExpense={() => setExpenseAction({ type: "add_one_time" })}
+        onAddIncome={() => setIncomeAction({ type: "add_one_time" })}
         onExpenseAction={setExpenseAction}
       />
       <IncomeActionSheets action={incomeAction} onClose={() => setIncomeAction(null)} />
