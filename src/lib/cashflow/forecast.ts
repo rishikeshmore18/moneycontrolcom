@@ -983,10 +983,30 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
         },
       ];
     }
-    return [item];
   });
 
-  return sortByDueDate(items);
+  const oneTimeIncomeItems: CashFlowBreakdownItem[] = incomeOverrides
+    .filter(
+      (override) =>
+        override.action === "add" &&
+        (override.amount ?? 0) > 0 &&
+        override.payDate >= range.start &&
+        override.payDate <= range.end,
+    )
+    .map((override) => ({
+      id: override.id,
+      label: override.label ?? "One-time income",
+      detail: `One-time income - ${formatDisplayDate(override.payDate)}`,
+      amount: override.amount ?? 0,
+      periodDate: override.payDate,
+      payDate: override.payDate,
+      overrideId: override.id,
+      accountId: override.accountId,
+      incomeSourceType: "one_time" as const,
+      incomeConfidence: "confirmed" as const,
+    }));
+
+  return sortByDueDate([...items, ...oneTimeIncomeItems]);
 }
 
 function unpaidPendingIncomeItems(
