@@ -1212,6 +1212,42 @@ function IncomeActionSheets({
 
   if (!action) return null;
 
+  if (action.type === "add_one_time") {
+    return <PlannedIncomeSheet onClose={onClose} />;
+  }
+
+  if (action.type === "edit_one_time") {
+    return <PlannedIncomeSheet item={action.item} onClose={onClose} />;
+  }
+
+  if (action.type === "delete_one_time") {
+    const overrideId = action.item.overrideId;
+    return (
+      <Sheet open onClose={onClose} title="Delete upcoming income">
+        <div className="grid gap-3">
+          <div className="rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="font-extrabold">{action.item.label}</div>
+            <div className="text-sm text-muted-foreground">
+              {action.item.detail ?? "One-time income"}
+            </div>
+          </div>
+          <Button
+            variant="danger"
+            full
+            onClick={() => {
+              if (overrideId) dispatch({ type: "DELETE_PLANNED_INCOME_OVERRIDE", id: overrideId });
+              toast("Upcoming income deleted");
+              onClose();
+            }}
+          >
+            Delete this income
+          </Button>
+        </div>
+      </Sheet>
+    );
+  }
+
+
   if (action.type === "edit_once") {
     return <IncomePaydayOverrideSheet item={action.item} onClose={onClose} />;
   }
