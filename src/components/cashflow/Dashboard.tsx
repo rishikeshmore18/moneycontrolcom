@@ -1619,7 +1619,28 @@ function MarkIncomeReceivedSheet({
     const actualTotal = toNumber(amount) || item.amount;
     if (actualTotal <= 0) return toast("Enter an amount");
     if (!accountId) return toast("Choose an account");
+
+    if (item.incomeSourceType === "one_time") {
+      dispatch({
+        type: "ADD_INCOME",
+        payload: {
+          accountId,
+          amount: actualTotal,
+          date,
+          description: item.label,
+          category: "Income",
+        },
+      });
+      if (item.overrideId) {
+        dispatch({ type: "DELETE_PLANNED_INCOME_OVERRIDE", id: item.overrideId });
+      }
+      toast(`+${formatMoney(actualTotal, cur)} received`);
+      onClose();
+      return;
+    }
+
     if (entries.length === 0) return toast("No timesheet entries found for this payday");
+
 
     entries.forEach((entry, index) => {
       const entryExpected = entry.actualAmount ?? entry.expectedAmount;
