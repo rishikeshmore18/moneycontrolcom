@@ -61,7 +61,7 @@ export interface CashFlowBreakdownItem {
   pendingAmount?: number;
   jobId?: string;
   payDate?: string;
-  incomeSourceType?: "salary_paycheck" | "work_paycheck";
+  incomeSourceType?: "salary_paycheck" | "work_paycheck" | "one_time";
   incomeConfidence?: "confirmed" | "projected";
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
