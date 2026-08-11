@@ -69,6 +69,9 @@ type ExpenseAction =
   | { type: "edit_debt"; item: CashFlowBreakdownItem };
 
 type IncomeAction =
+  | { type: "add_one_time" }
+  | { type: "edit_one_time"; item: CashFlowBreakdownItem }
+  | { type: "delete_one_time"; item: CashFlowBreakdownItem }
   | { type: "edit_once"; item: CashFlowBreakdownItem }
   | { type: "mark_received"; item: CashFlowBreakdownItem }
   | { type: "edit_job"; item: CashFlowBreakdownItem }
