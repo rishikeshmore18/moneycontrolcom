@@ -792,6 +792,7 @@ function BreakdownSheet({
   onIncomeAction,
   onSpendableAction,
   onAddExpense,
+  onAddIncome,
   onExpenseAction,
 }: {
   open: boolean;
