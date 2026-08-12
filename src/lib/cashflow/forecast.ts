@@ -65,7 +65,9 @@ export interface CashFlowBreakdownItem {
   incomeConfidence?: "confirmed" | "projected";
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
+  isOverdue?: boolean;
 }
+
 
 export interface CashFlowBreakdownSection {
   title: string;
