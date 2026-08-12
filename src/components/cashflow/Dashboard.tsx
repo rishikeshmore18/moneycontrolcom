@@ -863,12 +863,22 @@ function BreakdownSheet({
               <div className="divide-y divide-border">
                 {section.items.map((item) => {
                   const affordability = affordabilityById?.[item.id];
+                  const isOverdue = item.isOverdue;
                   return (
                     <div key={`${section.title}-${item.id}`} className="grid gap-3 px-4 py-3">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <div className="truncate font-bold">{item.label}</div>
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <div
+                              className={`truncate font-bold ${isOverdue ? "text-[color:var(--bad)]" : ""}`}
+                            >
+                              {item.label}
+                            </div>
+                            {isOverdue && (
+                              <span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-[color:var(--bad)]/12 text-[color:var(--bad)]">
+                                Overdue
+                              </span>
+                            )}
                             {affordability && (
                               <AffordabilityMarker
                                 affordability={affordability}
@@ -877,12 +887,16 @@ function BreakdownSheet({
                             )}
                           </div>
                           {item.detail && (
-                            <div className="text-xs text-muted-foreground">{item.detail}</div>
+                            <div
+                              className={`text-xs ${isOverdue ? "text-[color:var(--bad)]/80" : "text-muted-foreground"}`}
+                            >
+                              {item.detail}
+                            </div>
                           )}
                         </div>
                         <div
                           className={`shrink-0 text-right font-black ${
-                            item.amount < 0 ? "text-[color:var(--bad)]" : ""
+                            isOverdue || item.amount < 0 ? "text-[color:var(--bad)]" : ""
                           }`}
                         >
                           {formatMoney(item.amount)}
