@@ -1048,16 +1048,31 @@ function expenseSectionsForRange(
   ref: Date = new Date(),
   range: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
-  const monthRefs = monthRefsForRange(range);
+  const today = toISO(ref);
+  // Keep unpaid items whose due date has already passed in the current month visible
+  // instead of letting them vanish from the forecast when the period starts at today.
+  const expandedRange = {
+    start: range.start < today ? range.start : toISO(startOfMonth(ref)),
+    end: range.end,
+  };
+  const monthRefs = monthRefsForRange(expandedRange);
+
+  const markOverdue = (item: CashFlowBreakdownItem): CashFlowBreakdownItem => {
+    const dueDate = item.dueDate ?? item.periodDate;
+    if (dueDate && dueDate < today) return { ...item, isOverdue: true };
+    return item;
+  };
+
   const billItems = sortByDueDate(
     monthRefs
       .flatMap((monthRef) => billExpenseItems(state, monthRef))
-      .filter((item) => itemInRange(item, range)),
+      .filter((item) => itemInRange(item, expandedRange))
+      .map(markOverdue),
   );
   const recurringBillItems = billItems.filter((item) => item.sourceType === "recurring_bill");
   const oneTimeItems = billItems.filter((item) => item.sourceType === "one_time");
-  const cardItems = cardCashFlowItemsForRange(state, ref, range);
-  const debtItems = sortByDueDate(debtPlanItemsForRange(state, ref, range));
+  const cardItems = cardCashFlowItemsForRange(state, ref, expandedRange).map(markOverdue);
+  const debtItems = sortByDate(debtPlanItemsForRange(state, ref, expandedRange).map(markOverdue));
   const sections: CashFlowBreakdownSection[] = [];
   if (recurringBillItems.length > 0) sections.push({ title: "Bills", items: recurringBillItems });
   if (oneTimeItems.length > 0)
@@ -1066,6 +1081,7 @@ function expenseSectionsForRange(
   if (debtItems.length > 0) sections.push({ title: "Debt plan", items: debtItems });
   return sections;
 }
+
 
 export const SPENDABLE_TODAY_HORIZON_DAYS = 90;
 
