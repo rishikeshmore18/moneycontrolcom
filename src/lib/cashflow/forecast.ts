@@ -1072,7 +1072,7 @@ function expenseSectionsForRange(
   const recurringBillItems = billItems.filter((item) => item.sourceType === "recurring_bill");
   const oneTimeItems = billItems.filter((item) => item.sourceType === "one_time");
   const cardItems = cardCashFlowItemsForRange(state, ref, expandedRange).map(markOverdue);
-  const debtItems = sortByDate(debtPlanItemsForRange(state, ref, expandedRange).map(markOverdue));
+  const debtItems = sortByDueDate(debtPlanItemsForRange(state, ref, expandedRange).map(markOverdue));
   const sections: CashFlowBreakdownSection[] = [];
   if (recurringBillItems.length > 0) sections.push({ title: "Bills", items: recurringBillItems });
   if (oneTimeItems.length > 0)
