@@ -354,11 +354,42 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
   const defaultAcc = job?.defaultDepositAccountId ?? state.accounts[0]?.id ?? "";
   const [accId, setAccId] = useState(defaultAcc);
   const [amount, setAmount] = useState("");
+  const [scope, setScope] = useState<"payday" | "single">("payday");
 
-  // sync when entry changes
-  const expected = entry?.expectedAmount ?? 0;
+  const payDate = entry ? payDateForTimesheetEntry(state, entry) : "";
+  // The paycheck this entry belongs to (same job, same payday) as the dashboard sees it.
+  const paydayItem = useMemo(() => {
+    if (!entry) return undefined;
+    return paydayItemsOnDate(state, payDate).find(
+      (item) => item.jobId === entry.jobId && (item.incomeEntryIds ?? []).includes(entry.id),
+    );
+  }, [entry, payDate, state]);
+
+  const groupEntries = paydayItem?.incomeEntries ?? [];
+  const siblings = groupEntries.filter((e) => e.id !== entry?.id);
+  const hasGroup = siblings.length > 0;
+  const effectiveScope = hasGroup ? scope : "single";
+
+  const expected =
+    effectiveScope === "payday" && paydayItem
+      ? paydayItem.amount
+      : (entry?.actualAmount ?? entry?.expectedAmount ?? 0);
 
   if (!entry) return null;
+
+  function markEntryPaid(target: TimesheetEntry, allocated: number, accountId: string) {
+    let id = target.id;
+    if (target.auto) {
+      const real: TimesheetEntry = { ...target, id: newId(), auto: false, userEdited: true };
+      dispatch({ type: "UPSERT_TIMESHEET", payload: real });
+      id = real.id;
+    }
+    dispatch({
+      type: "MARK_TIMESHEET_PAID",
+      payload: { id, paidAccountId: accountId, actualAmount: allocated, date: payDate },
+    });
+  }
+
   return (
     <Sheet
       open={!!entry}
@@ -374,22 +405,29 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
             onClick={() => {
               const amt = toNumber(amount) || expected;
               if (!accId) return toast("Choose an account");
-              // upgrade synthetic auto entry to real one first
-              let id = entry.id;
-              if (entry.auto) {
-                const real: TimesheetEntry = {
-                  ...entry,
-                  id: newId(),
-                  auto: false,
-                  userEdited: true,
-                };
-                dispatch({ type: "UPSERT_TIMESHEET", payload: real });
-                id = real.id;
+              if (effectiveScope === "payday" && groupEntries.length > 0) {
+                const total = groupEntries.reduce(
+                  (s, e) => s + (e.actualAmount ?? e.expectedAmount),
+                  0,
+                );
+                let allocatedSoFar = 0;
+                groupEntries.forEach((e, index) => {
+                  const share =
+                    index === groupEntries.length - 1
+                      ? Math.round((amt - allocatedSoFar) * 100) / 100
+                      : Math.round(
+                          amt *
+                            (total > 0
+                              ? (e.actualAmount ?? e.expectedAmount) / total
+                              : 1 / groupEntries.length) *
+                            100,
+                        ) / 100;
+                  allocatedSoFar += share;
+                  markEntryPaid(e, share, accId);
+                });
+              } else {
+                markEntryPaid(entry, amt, accId);
               }
-              dispatch({
-                type: "MARK_TIMESHEET_PAID",
-                payload: { id, paidAccountId: accId, actualAmount: amt },
-              });
               toast(`+${formatMoney(amt, cur)} deposited`);
               onClose();
             }}
@@ -403,10 +441,43 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
         <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
           <div className="font-extrabold">{entry.jobName}</div>
           <div className="text-xs text-muted-foreground">
-            {entry.entryType === "salary_paycheck" ? "Scheduled paycheck" : "Shift"} · expected{" "}
-            {formatMoney(expected, cur)}
+            {entry.entryType === "salary_paycheck" ? "Scheduled paycheck" : "Shift"} · paid out on{" "}
+            {formatDisplayDate(payDate)} · expected {formatMoney(expected, cur)}
           </div>
         </div>
+
+        {hasGroup && (
+          <Field
+            label="What are you marking received?"
+            hint="Keeps this in sync with “Income coming” on the dashboard."
+          >
+            <div className="grid gap-2">
+              {(
+                [
+                  [
+                    "payday",
+                    `Whole payday · ${groupEntries.length} entries · ${formatMoney(paydayItem?.amount ?? 0, cur)}`,
+                  ],
+                  ["single", "Only this entry"],
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setScope(id)}
+                  className={`px-3 py-2.5 rounded-xl font-bold text-sm border text-left ${
+                    effectiveScope === id
+                      ? "border-primary text-primary"
+                      : "border-border text-muted-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        )}
+
         <Field
           label="Actual amount received"
           hint={`Leave blank to use ${formatMoney(expected, cur)}`}
@@ -432,6 +503,7 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
     </Sheet>
   );
 }
+
 
 /* ----- Add Entry sheet ----- */
 function AddEntrySheet({
