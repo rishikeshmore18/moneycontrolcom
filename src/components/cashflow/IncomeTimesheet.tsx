@@ -301,7 +301,15 @@ function DayDetailSheet({
                       {e.startTime && e.endTime ? `${e.startTime}–${e.endTime}` : `${e.hours}h`}{" "}
                       {e.rate > 0 && `· ${formatMoney(e.rate, cur)}/h`}
                     </div>
+                    {!e.paid &&
+                      e.entryType === "work_shift" &&
+                      payDateForTimesheetEntry(state, e) !== e.date && (
+                        <div className="text-[11px] font-bold text-muted-foreground">
+                          Pays out {formatDisplayDate(payDateForTimesheetEntry(state, e))}
+                        </div>
+                      )}
                   </div>
+
                   <div className="text-right">
                     <div className="font-black">{formatMoney(amt, cur)}</div>
                     {e.entryType !== "time_off" && (
