@@ -1012,6 +1012,28 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
   return sortByDueDate([...items, ...oneTimeIncomeItems]);
 }
 
+/**
+ * Unpaid paycheck items (work paychecks, salary paychecks, one-time income)
+ * whose payday lands exactly on the given date. Used to keep the timesheet's
+ * "mark paid" flow in sync with the dashboard's "Income coming" list.
+ */
+export function paydayItemsOnDate(state: AppState, date: string): CashFlowBreakdownItem[] {
+  return incomeItemsForRange(state, { start: date, end: date });
+}
+
+/** The date a given timesheet entry is expected to actually be paid out. */
+export function payDateForTimesheetEntry(state: AppState, entry: TimesheetEntry): string {
+  if (entry.entryType !== "work_shift") return entry.date;
+  const job = state.jobs.find((candidate) => candidate.id === entry.jobId);
+  const anchor =
+    job?.payFrequency === "biweekly" && !job.biweeklyAnchorDate
+      ? fallbackBiweeklyAnchor(job, entry.date)
+      : undefined;
+  return payDateForWorkEntry(entry, job, anchor);
+}
+
+
+
 function unpaidPendingIncomeItems(
   state: AppState,
   monthDate: Date = new Date(),
