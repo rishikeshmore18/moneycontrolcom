@@ -886,12 +886,21 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
   const entries = monthRefsForIncomeRange(range).flatMap((monthRef) =>
     forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
   );
-  const unpaidPositiveEntries = entries.filter(
+  const today = toISO(new Date());
+  // A projected (auto) shift in the past never became real work — the user either
+  // took the day off or simply didn't work it, so it must not count as income.
+  const liveEntries = entries.filter((entry) => !(entry.auto && entry.date < today));
+  const unpaidPositiveEntries = liveEntries.filter(
     (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
   );
   const workEntries = unpaidPositiveEntries
     .filter((entry) => entry.entryType === "work_shift")
     .sort((a, b) => a.date.localeCompare(b.date));
+  // Time off logged against a day that still has a shift reduces that paycheck.
+  const timeOffEntries = liveEntries.filter(
+    (entry) => entry.entryType === "time_off" && !entry.paid && entry.hours > 0,
+  );
+
   const anchorMonthStart = toISO(startOfMonth(fromISODate(range.start)));
   const anchorMonthEnd = toISO(endOfMonth(fromISODate(range.start)));
   const firstWorkDateByJob = new Map<string, string>();
