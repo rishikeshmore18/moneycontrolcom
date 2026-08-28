@@ -886,12 +886,21 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
   const entries = monthRefsForIncomeRange(range).flatMap((monthRef) =>
     forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
   );
-  const unpaidPositiveEntries = entries.filter(
+  const today = toISO(new Date());
+  // A projected (auto) shift in the past never became real work — the user either
+  // took the day off or simply didn't work it, so it must not count as income.
+  const liveEntries = entries.filter((entry) => !(entry.auto && entry.date < today));
+  const unpaidPositiveEntries = liveEntries.filter(
     (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
   );
   const workEntries = unpaidPositiveEntries
     .filter((entry) => entry.entryType === "work_shift")
     .sort((a, b) => a.date.localeCompare(b.date));
+  // Time off logged against a day that still has a shift reduces that paycheck.
+  const timeOffEntries = liveEntries.filter(
+    (entry) => entry.entryType === "time_off" && !entry.paid && entry.hours > 0,
+  );
+
   const anchorMonthStart = toISO(startOfMonth(fromISODate(range.start)));
   const anchorMonthEnd = toISO(endOfMonth(fromISODate(range.start)));
   const firstWorkDateByJob = new Map<string, string>();
@@ -950,22 +959,39 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
     groups.set(key, existing);
   });
 
-  const paycheckItems = Array.from(groups.entries()).map(([key, group]) => ({
-    id: `paycheck-${key}`,
-    label: group.jobName,
-    detail: paycheckDetail(group.payDate, group.entries),
-    amount: Math.round(group.amount * 100) / 100,
-    periodDate: group.payDate,
-    jobId: group.entries[0]?.jobId,
-    payDate: group.payDate,
-    incomeSourceType: "work_paycheck" as const,
-    incomeConfidence: group.entries.every((entry) => entry.auto)
-      ? ("projected" as const)
-      : ("confirmed" as const),
-    accountId: jobsById.get(group.entries[0]?.jobId ?? "")?.defaultDepositAccountId,
-    incomeEntryIds: group.entries.map((entry) => entry.id),
-    incomeEntries: group.entries,
-  }));
+
+  // Subtract logged time off from the paycheck covering that work date, but only
+  // when a shift still exists on that date (otherwise the projection already
+  // removed the shift and deducting again would double-count).
+  const shiftDates = new Set(workEntries.map((entry) => `${entry.jobId}:${entry.date}`));
+  timeOffEntries.forEach((entry) => {
+    if (!shiftDates.has(`${entry.jobId}:${entry.date}`)) return;
+    const job = jobsById.get(entry.jobId);
+    const payDate = payDateForWorkEntry(entry, job, fallbackAnchors.get(entry.jobId));
+    const group = groups.get(`${entry.jobId}:${payDate}`);
+    if (!group) return;
+    group.amount -= Math.abs(entry.actualAmount ?? entry.expectedAmount);
+  });
+
+  const paycheckItems = Array.from(groups.entries())
+    .filter(([, group]) => Math.round(group.amount * 100) / 100 > 0)
+    .map(([key, group]) => ({
+      id: `paycheck-${key}`,
+      label: group.jobName,
+      detail: paycheckDetail(group.payDate, group.entries),
+      amount: Math.round(group.amount * 100) / 100,
+      periodDate: group.payDate,
+      jobId: group.entries[0]?.jobId,
+      payDate: group.payDate,
+      incomeSourceType: "work_paycheck" as const,
+      incomeConfidence: group.entries.every((entry) => entry.auto)
+        ? ("projected" as const)
+        : ("confirmed" as const),
+      accountId: jobsById.get(group.entries[0]?.jobId ?? "")?.defaultDepositAccountId,
+      incomeEntryIds: group.entries.map((entry) => entry.id),
+      incomeEntries: group.entries,
+    }));
+
 
   const items = [...salaryItems, ...paycheckItems].flatMap((item) => {
     const override = incomeOverrides.find(
