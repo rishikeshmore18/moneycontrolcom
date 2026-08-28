@@ -959,22 +959,39 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
     groups.set(key, existing);
   });
 
-  const paycheckItems = Array.from(groups.entries()).map(([key, group]) => ({
-    id: `paycheck-${key}`,
-    label: group.jobName,
-    detail: paycheckDetail(group.payDate, group.entries),
-    amount: Math.round(group.amount * 100) / 100,
-    periodDate: group.payDate,
-    jobId: group.entries[0]?.jobId,
-    payDate: group.payDate,
-    incomeSourceType: "work_paycheck" as const,
-    incomeConfidence: group.entries.every((entry) => entry.auto)
-      ? ("projected" as const)
-      : ("confirmed" as const),
-    accountId: jobsById.get(group.entries[0]?.jobId ?? "")?.defaultDepositAccountId,
-    incomeEntryIds: group.entries.map((entry) => entry.id),
-    incomeEntries: group.entries,
-  }));
+
+  // Subtract logged time off from the paycheck covering that work date, but only
+  // when a shift still exists on that date (otherwise the projection already
+  // removed the shift and deducting again would double-count).
+  const shiftDates = new Set(workEntries.map((entry) => `${entry.jobId}:${entry.date}`));
+  timeOffEntries.forEach((entry) => {
+    if (!shiftDates.has(`${entry.jobId}:${entry.date}`)) return;
+    const job = jobsById.get(entry.jobId);
+    const payDate = payDateForWorkEntry(entry, job, fallbackAnchors.get(entry.jobId));
+    const group = groups.get(`${entry.jobId}:${payDate}`);
+    if (!group) return;
+    group.amount -= Math.abs(entry.actualAmount ?? entry.expectedAmount);
+  });
+
+  const paycheckItems = Array.from(groups.entries())
+    .filter(([, group]) => Math.round(group.amount * 100) / 100 > 0)
+    .map(([key, group]) => ({
+      id: `paycheck-${key}`,
+      label: group.jobName,
+      detail: paycheckDetail(group.payDate, group.entries),
+      amount: Math.round(group.amount * 100) / 100,
+      periodDate: group.payDate,
+      jobId: group.entries[0]?.jobId,
+      payDate: group.payDate,
+      incomeSourceType: "work_paycheck" as const,
+      incomeConfidence: group.entries.every((entry) => entry.auto)
+        ? ("projected" as const)
+        : ("confirmed" as const),
+      accountId: jobsById.get(group.entries[0]?.jobId ?? "")?.defaultDepositAccountId,
+      incomeEntryIds: group.entries.map((entry) => entry.id),
+      incomeEntries: group.entries,
+    }));
+
 
   const items = [...salaryItems, ...paycheckItems].flatMap((item) => {
     const override = incomeOverrides.find(
