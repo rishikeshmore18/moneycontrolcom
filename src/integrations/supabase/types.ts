@@ -14,6 +14,243 @@ export type Database = {
   }
   public: {
     Tables: {
+      plaid_accounts: {
+        Row: {
+          account_id: string
+          available_balance: number | null
+          created_at: string
+          current_balance: number | null
+          id: string
+          is_active: boolean
+          iso_currency: string | null
+          item_id: string
+          limit_amount: number | null
+          linked_local_id: string | null
+          linked_local_kind: string | null
+          mask: string | null
+          name: string
+          official_name: string | null
+          subtype: string | null
+          type: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          available_balance?: number | null
+          created_at?: string
+          current_balance?: number | null
+          id?: string
+          is_active?: boolean
+          iso_currency?: string | null
+          item_id: string
+          limit_amount?: number | null
+          linked_local_id?: string | null
+          linked_local_kind?: string | null
+          mask?: string | null
+          name: string
+          official_name?: string | null
+          subtype?: string | null
+          type?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          available_balance?: number | null
+          created_at?: string
+          current_balance?: number | null
+          id?: string
+          is_active?: boolean
+          iso_currency?: string | null
+          item_id?: string
+          limit_amount?: number | null
+          linked_local_id?: string | null
+          linked_local_kind?: string | null
+          mask?: string | null
+          name?: string
+          official_name?: string | null
+          subtype?: string | null
+          type?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaid_accounts_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "plaid_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plaid_items: {
+        Row: {
+          access_token_enc: string
+          created_at: string
+          cursor: string | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          institution_id: string | null
+          institution_name: string | null
+          item_id: string
+          last_synced_at: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token_enc: string
+          created_at?: string
+          cursor?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          institution_id?: string | null
+          institution_name?: string | null
+          item_id: string
+          last_synced_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token_enc?: string
+          created_at?: string
+          cursor?: string | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          institution_id?: string | null
+          institution_name?: string | null
+          item_id?: string
+          last_synced_at?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      plaid_sync_log: {
+        Row: {
+          created_at: string
+          detail: Json | null
+          event: string | null
+          id: string
+          item_id: string | null
+          source: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          detail?: Json | null
+          event?: string | null
+          id?: string
+          item_id?: string | null
+          source: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          detail?: Json | null
+          event?: string | null
+          id?: string
+          item_id?: string | null
+          source?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaid_sync_log_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "plaid_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plaid_transactions: {
+        Row: {
+          amount: number
+          authorized_date: string | null
+          created_at: string
+          date: string
+          id: string
+          iso_currency: string | null
+          item_id: string
+          local_transaction_id: string | null
+          merchant_name: string | null
+          name: string
+          payment_channel: string | null
+          pending: boolean
+          pending_transaction_id: string | null
+          plaid_account_id: string
+          plaid_category: string | null
+          status: string
+          suggested_kind: string | null
+          suggested_match_id: string | null
+          transaction_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          authorized_date?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          iso_currency?: string | null
+          item_id: string
+          local_transaction_id?: string | null
+          merchant_name?: string | null
+          name: string
+          payment_channel?: string | null
+          pending?: boolean
+          pending_transaction_id?: string | null
+          plaid_account_id: string
+          plaid_category?: string | null
+          status?: string
+          suggested_kind?: string | null
+          suggested_match_id?: string | null
+          transaction_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          authorized_date?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          iso_currency?: string | null
+          item_id?: string
+          local_transaction_id?: string | null
+          merchant_name?: string | null
+          name?: string
+          payment_channel?: string | null
+          pending?: boolean
+          pending_transaction_id?: string | null
+          plaid_account_id?: string
+          plaid_category?: string | null
+          status?: string
+          suggested_kind?: string | null
+          suggested_match_id?: string | null
+          transaction_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plaid_transactions_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "plaid_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_data: {
         Row: {
           data: Json
