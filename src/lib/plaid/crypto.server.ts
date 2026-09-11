@@ -15,11 +15,12 @@ function toB64(bytes: Uint8Array): string {
   return btoa(s);
 }
 
-function fromB64(value: string): Uint8Array {
+function fromB64(value: string): ArrayBuffer {
   const bin = atob(value);
-  const out = new Uint8Array(bin.length);
+  const buf = new ArrayBuffer(bin.length);
+  const out = new Uint8Array(buf);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
+  return buf;
 }
 
 export async function encryptToken(token: string): Promise<string> {
