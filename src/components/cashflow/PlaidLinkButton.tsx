@@ -14,7 +14,11 @@ export default function PlaidLinkButton({ linkToken, label, onExchange, onExit }
   const [done, setDone] = useState(false);
 
   const onSuccess = useCallback(
-    (publicToken: string, metadata: { institution?: { institution_id?: string; name?: string } | null }) => {
+    (
+      publicToken: string | null,
+      metadata: { institution?: { institution_id?: string; name?: string } | null },
+    ) => {
+      if (!publicToken) return;
       setDone(true);
       onExchange(publicToken, metadata.institution?.institution_id, metadata.institution?.name);
     },
