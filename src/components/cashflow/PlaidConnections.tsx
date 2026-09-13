@@ -4,7 +4,7 @@ import { Building2, RefreshCw, Inbox, Unlink, AlertTriangle } from "lucide-react
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Button } from "./Button";
-import { Field, Select } from "./Field";
+import { Select } from "./Field";
 import { toast } from "./Toast";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
@@ -472,9 +472,4 @@ function InboxSheet({
       )}
     </Sheet>
   );
-}
-
-/** Small helper used elsewhere to keep the Field import honest. */
-export function PlaidMappingField({ children }: { children: React.ReactNode }) {
-  return <Field label="Linked to">{children}</Field>;
 }
