@@ -165,6 +165,8 @@ export function Profile() {
         onDelete={(id) => dispatch({ type: "DELETE_DEBT", id })}
       />
 
+      <PlaidConnectionsCard />
+
       <CategoryBudgetsProfileCard />
 
       <ListCard
