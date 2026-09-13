@@ -26,6 +26,7 @@ import type {
 
 import { toast } from "./Toast";
 import { CategoryBudgetsProfileCard } from "./MonthlyBudget";
+import { PlaidConnectionsCard } from "./PlaidConnections";
 
 export function Profile() {
   const { state, dispatch, userEmail, signOut } = useApp();
