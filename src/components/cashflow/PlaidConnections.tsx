@@ -342,7 +342,7 @@ function InboxSheet({
     await onResolved();
   };
 
-  const accept = async (item: InboxItem) => {
+  const accept = async (item: InboxItem, chosenCategory?: string) => {
     const map = mappingFor(item.plaidAccountId);
     if (!map?.linkedLocalId) {
       toast("Link this bank account to one of your accounts or cards first.");
@@ -357,7 +357,7 @@ function InboxSheet({
           type: "ADD_EXPENSE",
           payload: {
             amount: Math.abs(item.amount),
-            category: item.plaidCategory || "Miscellaneous",
+            category: chosenCategory || item.plaidCategory || "Miscellaneous",
             description: label,
             date,
             method: map.linkedLocalKind === "card" ? "credit_card" : "debit",
