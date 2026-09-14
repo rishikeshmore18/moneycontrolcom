@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Building2, RefreshCw, Inbox, Unlink, AlertTriangle } from "lucide-react";
 import { Card } from "./Card";
@@ -21,8 +21,18 @@ import {
   type Connection,
   type InboxItem,
 } from "@/lib/plaid/plaid.functions";
+import { applyBankBalances } from "@/lib/plaid/bankBalances";
+import { guessCategory } from "@/lib/plaid/categoryGuess";
 
 const PlaidLinkButton = lazy(() => import("./PlaidLinkButton"));
+
+function formatDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
@@ -47,11 +57,17 @@ export function PlaidConnectionsCard() {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
 
+  const stateRef = useRef({ accounts: state.accounts, cards: state.cards, dispatch });
+  stateRef.current = { accounts: state.accounts, cards: state.cards, dispatch };
+
   const refresh = useCallback(async () => {
     try {
       const [c, i] = await Promise.all([listConnections(), listInbox()]);
       setConnections(c);
-      setInbox(i);
+      setInbox(
+        [...i].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+      );
+      applyBankBalances(c, stateRef.current.accounts, stateRef.current.cards, stateRef.current.dispatch);
     } catch (err) {
       console.error("[plaid] load failed", err);
     } finally {
@@ -303,7 +319,12 @@ function InboxSheet({
 }) {
   const resolve = useServerFn(plaidResolveInbox);
   const [busy, setBusy] = useState<string | null>(null);
+  const [catFor, setCatFor] = useState<Record<string, string>>({});
   const cur = state.profile.currency;
+  const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const categories: string[] = baseCategories.includes("Miscellaneous")
+    ? baseCategories
+    : [...baseCategories, "Miscellaneous"];
 
   const mappingFor = (plaidAccountId: string) =>
     accounts.find((a) => a.accountId === plaidAccountId) ?? null;
@@ -334,7 +355,7 @@ function InboxSheet({
     await onResolved();
   };
 
-  const accept = async (item: InboxItem) => {
+  const accept = async (item: InboxItem, chosenCategory?: string) => {
     const map = mappingFor(item.plaidAccountId);
     if (!map?.linkedLocalId) {
       toast("Link this bank account to one of your accounts or cards first.");
@@ -349,7 +370,7 @@ function InboxSheet({
           type: "ADD_EXPENSE",
           payload: {
             amount: Math.abs(item.amount),
-            category: item.plaidCategory || "Miscellaneous",
+            category: chosenCategory || item.plaidCategory || "Miscellaneous",
             description: label,
             date,
             method: map.linkedLocalKind === "card" ? "credit_card" : "debit",
@@ -404,22 +425,26 @@ function InboxSheet({
     }
   };
 
+  const sorted = [...items].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
   return (
     <Sheet open={open} onClose={onClose} title="Review bank transactions" size="wide">
       {items.length === 0 ? (
         <div className="text-sm text-muted-foreground">Nothing waiting for review.</div>
       ) : (
         <div className="grid gap-3">
-          {items.map((item) => {
+          {sorted.map((item) => {
             const map = mappingFor(item.plaidAccountId);
             const dup = duplicateFor(item);
+            const chosen =
+              catFor[item.id] ?? guessCategory([item.plaidCategory, item.merchantName, item.name], categories);
             return (
               <div key={item.id} className="rounded-2xl border border-border p-3 grid gap-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="font-bold">{item.merchantName || item.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {item.date} · {map?.name ?? "Unlinked account"}
+                      {formatDate(item.date)} · {map?.name ?? "Unlinked account"}
                       {item.pending ? " · Pending" : ""}
                       {item.plaidCategory ? ` · ${item.plaidCategory}` : ""}
                     </div>
@@ -453,10 +478,28 @@ function InboxSheet({
                   </div>
                 )}
 
+                {item.amount > 0 && map?.linkedLocalId && (
+                  <div className="grid gap-1">
+                    <div className="text-xs text-muted-foreground">
+                      Category (auto-detected — change it if it's wrong)
+                    </div>
+                    <Select
+                      value={chosen}
+                      onChange={(e) => setCatFor((p) => ({ ...p, [item.id]: e.target.value }))}
+                    >
+                      {(categories.includes(chosen) ? categories : [chosen, ...categories]).map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="primary"
-                    onClick={() => accept(item)}
+                    onClick={() => accept(item, chosen)}
                     disabled={busy === item.id || !map?.linkedLocalId}
                   >
                     Accept
