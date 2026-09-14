@@ -412,22 +412,26 @@ function InboxSheet({
     }
   };
 
+  const sorted = [...items].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
   return (
     <Sheet open={open} onClose={onClose} title="Review bank transactions" size="wide">
       {items.length === 0 ? (
         <div className="text-sm text-muted-foreground">Nothing waiting for review.</div>
       ) : (
         <div className="grid gap-3">
-          {items.map((item) => {
+          {sorted.map((item) => {
             const map = mappingFor(item.plaidAccountId);
             const dup = duplicateFor(item);
+            const chosen =
+              catFor[item.id] ?? guessCategory([item.plaidCategory, item.merchantName, item.name], categories);
             return (
               <div key={item.id} className="rounded-2xl border border-border p-3 grid gap-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="font-bold">{item.merchantName || item.name}</div>
                     <div className="text-xs text-muted-foreground">
-                      {item.date} · {map?.name ?? "Unlinked account"}
+                      {formatDate(item.date)} · {map?.name ?? "Unlinked account"}
                       {item.pending ? " · Pending" : ""}
                       {item.plaidCategory ? ` · ${item.plaidCategory}` : ""}
                     </div>
@@ -461,10 +465,28 @@ function InboxSheet({
                   </div>
                 )}
 
+                {item.amount > 0 && map?.linkedLocalId && (
+                  <div className="grid gap-1">
+                    <div className="text-xs text-muted-foreground">
+                      Category (auto-detected — change it if it's wrong)
+                    </div>
+                    <Select
+                      value={chosen}
+                      onChange={(e) => setCatFor((p) => ({ ...p, [item.id]: e.target.value }))}
+                    >
+                      {(categories.includes(chosen) ? categories : [chosen, ...categories]).map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
+                )}
+
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="primary"
-                    onClick={() => accept(item)}
+                    onClick={() => accept(item, chosen)}
                     disabled={busy === item.id || !map?.linkedLocalId}
                   >
                     Accept
