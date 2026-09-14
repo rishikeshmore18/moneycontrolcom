@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { Building2, RefreshCw, Inbox, Unlink, AlertTriangle } from "lucide-react";
 import { Card } from "./Card";
@@ -21,6 +21,8 @@ import {
   type Connection,
   type InboxItem,
 } from "@/lib/plaid/plaid.functions";
+import { applyBankBalances } from "@/lib/plaid/bankBalances";
+import { guessCategory } from "@/lib/plaid/categoryGuess";
 
 const PlaidLinkButton = lazy(() => import("./PlaidLinkButton"));
 
@@ -47,11 +49,17 @@ export function PlaidConnectionsCard() {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [inboxOpen, setInboxOpen] = useState(false);
 
+  const stateRef = useRef({ accounts: state.accounts, cards: state.cards, dispatch });
+  stateRef.current = { accounts: state.accounts, cards: state.cards, dispatch };
+
   const refresh = useCallback(async () => {
     try {
       const [c, i] = await Promise.all([listConnections(), listInbox()]);
       setConnections(c);
-      setInbox(i);
+      setInbox(
+        [...i].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
+      );
+      applyBankBalances(c, stateRef.current.accounts, stateRef.current.cards, stateRef.current.dispatch);
     } catch (err) {
       console.error("[plaid] load failed", err);
     } finally {
