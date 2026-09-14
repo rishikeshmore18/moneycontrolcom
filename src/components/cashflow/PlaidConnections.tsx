@@ -26,6 +26,14 @@ import { guessCategory } from "@/lib/plaid/categoryGuess";
 
 const PlaidLinkButton = lazy(() => import("./PlaidLinkButton"));
 
+function formatDate(iso: string): string {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
