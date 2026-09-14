@@ -311,7 +311,12 @@ function InboxSheet({
 }) {
   const resolve = useServerFn(plaidResolveInbox);
   const [busy, setBusy] = useState<string | null>(null);
+  const [catFor, setCatFor] = useState<Record<string, string>>({});
   const cur = state.profile.currency;
+  const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const categories: string[] = baseCategories.includes("Miscellaneous")
+    ? baseCategories
+    : [...baseCategories, "Miscellaneous"];
 
   const mappingFor = (plaidAccountId: string) =>
     accounts.find((a) => a.accountId === plaidAccountId) ?? null;
