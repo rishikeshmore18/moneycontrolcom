@@ -10,6 +10,7 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { reducer, type Action } from "./reducer";
+import { useBankAutoSync } from "@/lib/plaid/bankBalances";
 import { loadUserState, saveUserState } from "./storage";
 import { emptyState, type AppState } from "./types";
 import type { CashFlowPeriod, ForecastDateRange } from "./forecast";
@@ -79,6 +80,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setReady(true);
     });
   }, [userId]);
+
+  // Bank data is the source of truth: sync + mirror balances once per session
+  useBankAutoSync(Boolean(userId) && ready, state.accounts, state.cards, dispatch);
 
   // Persist on state changes (debounced)
   useEffect(() => {
