@@ -43,14 +43,11 @@ export function PlaidConnectionsCard() {
   const syncAll = useServerFn(plaidSyncAll);
   const linkAccount = useServerFn(plaidLinkAccount);
   const unlinkItem = useServerFn(plaidUnlinkItem);
-  const listInbox = useServerFn(plaidListInbox);
 
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [inbox, setInbox] = useState<InboxItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [linkToken, setLinkToken] = useState<string | null>(null);
-  const [inboxOpen, setInboxOpen] = useState(false);
 
   const stateRef = useRef({ accounts: state.accounts, cards: state.cards, dispatch });
   stateRef.current = { accounts: state.accounts, cards: state.cards, dispatch };
