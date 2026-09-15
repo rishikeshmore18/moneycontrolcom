@@ -68,7 +68,10 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
     };
 
     document.addEventListener("keydown", onKey);
-    window.requestAnimationFrame(focusFirstControl);
+    window.requestAnimationFrame(() => {
+      containerRef.current?.scrollTo(0, 0);
+      focusFirstControl();
+    });
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
