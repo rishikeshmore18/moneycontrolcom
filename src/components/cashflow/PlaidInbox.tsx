@@ -47,7 +47,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
       setInbox(
         [...i].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
       );
-      setCount(i.filter((item) => item.status === "pending").length);
+      setCount(i.length);
     } catch (err) {
       console.error("[plaid] inbox load failed", err);
     } finally {
