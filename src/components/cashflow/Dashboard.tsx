@@ -14,6 +14,7 @@ import { Card, KPI } from "./Card";
 import { Sheet } from "./Sheet";
 import { Button } from "./Button";
 import { Field, Input, Select, Textarea } from "./Field";
+import { PlaidReviewButton } from "./PlaidInbox";
 import { useApp } from "@/lib/cashflow/AppContext";
 import type { Transaction } from "@/lib/cashflow/types";
 import {
@@ -332,15 +333,18 @@ export function Dashboard() {
       <Card>
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-extrabold tracking-tight">Recent activity</h3>
-          {state.transactions.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setActivityOpen(true)}
-              className="text-xs font-bold text-[color:var(--primary)] hover:underline"
-            >
-              View all ({state.transactions.length})
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <PlaidReviewButton variant="ghost" />
+            {state.transactions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActivityOpen(true)}
+                className="text-xs font-bold text-[color:var(--primary)] hover:underline"
+              >
+                View all ({state.transactions.length})
+              </button>
+            )}
+          </div>
         </div>
         {recent.length === 0 && <Empty label="No transactions yet" />}
         <div className="divide-y divide-border">
