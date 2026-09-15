@@ -261,19 +261,6 @@ export function PlaidConnectionsCard() {
         Bank balances are read-only. Nothing from your bank changes your numbers until you accept it
         in the review list.
       </p>
-
-      <InboxSheet
-        open={inboxOpen}
-        onClose={() => {
-          setInboxOpen(false);
-          void refresh();
-        }}
-        items={inbox}
-        accounts={allAccounts}
-        onResolved={refresh}
-        dispatch={dispatch}
-        state={state}
-      />
     </Card>
   );
 }
