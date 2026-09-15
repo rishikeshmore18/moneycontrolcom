@@ -54,18 +54,15 @@ export function PlaidConnectionsCard() {
 
   const refresh = useCallback(async () => {
     try {
-      const [c, i] = await Promise.all([listConnections(), listInbox()]);
+      const c = await listConnections();
       setConnections(c);
-      setInbox(
-        [...i].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
-      );
       applyBankBalances(c, stateRef.current.accounts, stateRef.current.cards, stateRef.current.dispatch);
     } catch (err) {
       console.error("[plaid] load failed", err);
     } finally {
       setLoading(false);
     }
-  }, [listConnections, listInbox]);
+  }, [listConnections]);
 
   useEffect(() => {
     void refresh();
