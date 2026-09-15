@@ -66,7 +66,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
     listInbox()
       .then((i) => {
         if (cancelled) return;
-        setCount(i.filter((item) => item.status === "pending").length);
+        setCount(i.length);
       })
       .catch(() => {});
     return () => {
