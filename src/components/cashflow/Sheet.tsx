@@ -13,6 +13,7 @@ interface Props {
 
 export function Sheet({ open, onClose, title, children, footer, size = "default" }: Props) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const titleId = useId();
 
