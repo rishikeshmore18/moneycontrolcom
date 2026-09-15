@@ -87,6 +87,7 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
   const maxW = size === "wide" ? "sm:max-w-[980px]" : "sm:max-w-[640px]";
   return createPortal(
     <div
+      ref={containerRef}
       className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/45 backdrop-blur-sm animate-fade p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:p-6"
       style={{ WebkitOverflowScrolling: "touch" }}
       onClick={onClose}
