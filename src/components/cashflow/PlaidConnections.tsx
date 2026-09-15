@@ -147,11 +147,6 @@ export function PlaidConnectionsCard() {
     }
   };
 
-  const allAccounts = useMemo(
-    () => connections.flatMap((c) => c.accounts),
-    [connections],
-  );
-
   return (
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -159,11 +154,7 @@ export function PlaidConnectionsCard() {
           <Building2 size={18} /> Bank connections
         </h3>
         <div className="flex flex-wrap gap-2">
-          {inbox.length > 0 && (
-            <Button variant="soft" onClick={() => setInboxOpen(true)}>
-              <Inbox size={16} /> Review {inbox.length}
-            </Button>
-          )}
+          <PlaidReviewButton variant="soft" />
           <Button variant="ghost" onClick={doSync} disabled={busy === "sync" || !connections.length}>
             <RefreshCw size={16} /> {busy === "sync" ? "Syncing..." : "Sync"}
           </Button>
