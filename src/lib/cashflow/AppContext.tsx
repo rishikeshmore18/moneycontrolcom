@@ -82,7 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [userId]);
 
   // Bank data is the source of truth: sync + mirror balances once per session
-  useBankAutoSync(Boolean(userId) && ready, state.accounts, state.cards, dispatch);
+  useBankAutoSync(Boolean(userId) && ready, state, dispatch);
 
   // Persist on state changes (debounced)
   useEffect(() => {

@@ -44,18 +44,23 @@ export function applyBankBalances(
   }
 }
 
-/** Sync every connection once per session when the app opens, then mirror balances. */
+/**
+ * Sync every connection once per session when the app opens, mirror balances,
+ * then settle any credit-card bill payment that is visible on both the card and
+ * the bank account (posted once, never twice).
+ */
 export function useBankAutoSync(
   enabled: boolean,
-  accounts: Account[],
-  cards: Card[],
+  state: AppState,
   dispatch: (a: Action) => void,
 ): void {
   const syncAll = useServerFn(plaidSyncAll);
   const listConnections = useServerFn(plaidListConnections);
+  const listInbox = useServerFn(plaidListInbox);
+  const resolveInbox = useServerFn(plaidResolveInbox);
   const ran = useRef(false);
-  const latest = useRef({ accounts, cards, dispatch });
-  latest.current = { accounts, cards, dispatch };
+  const latest = useRef({ state, dispatch });
+  latest.current = { state, dispatch };
 
   useEffect(() => {
     if (!enabled || ran.current) return;
@@ -64,13 +69,43 @@ export function useBankAutoSync(
       try {
         const before = await listConnections();
         if (before.length === 0) return;
-        applyBankBalances(before, latest.current.accounts, latest.current.cards, latest.current.dispatch);
+        const mirror = (connections: Connection[]) =>
+          applyBankBalances(
+            connections,
+            latest.current.state.accounts,
+            latest.current.state.cards,
+            latest.current.dispatch,
+          );
+        mirror(before);
         await syncAll();
         const after = await listConnections();
-        applyBankBalances(after, latest.current.accounts, latest.current.cards, latest.current.dispatch);
+        mirror(after);
+
+        // Auto-settle matched card payments.
+        const inbox = await listInbox();
+        const { matched } = scanCardPayments(inbox, after);
+        for (const match of matched) {
+          const { state: s, dispatch: d } = latest.current;
+          const card = s.cards.find((c) => c.id === match.cardId);
+          if (!card) continue;
+          if (!cardPaymentAlreadyRecorded(s, match.cardId, match.amount, match.date)) {
+            d({
+              type: "PAY_CREDIT_CARD",
+              payload: {
+                cardId: match.cardId,
+                amount: match.amount,
+                sourceAccountId: match.sourceAccountId ?? "",
+                date: match.date,
+                notes: "Matched automatically from your bank",
+              },
+            });
+          }
+          const ids = [match.cardItem.id, ...(match.bankItem ? [match.bankItem.id] : [])];
+          await resolveInbox({ data: { ids, status: "accepted" } });
+        }
       } catch (err) {
         console.error("[plaid] auto sync failed", err);
       }
     })();
-  }, [enabled, listConnections, syncAll]);
+  }, [enabled, listConnections, syncAll, listInbox, resolveInbox]);
 }
