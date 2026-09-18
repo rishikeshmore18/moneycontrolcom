@@ -79,8 +79,6 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
     };
   }, [listInbox]);
 
-  const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
-
   return (
     <>
       <Button variant={variant} onClick={() => setOpen(true)}>
@@ -97,7 +95,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
           open={open}
           onClose={() => setOpen(false)}
           items={inbox}
-          accounts={accounts}
+          connections={connections}
           onResolved={refresh}
           dispatch={dispatch}
           state={state}
