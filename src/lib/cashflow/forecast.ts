@@ -24,7 +24,7 @@ import {
   startOfMonth,
 } from "./dates";
 import { formatMoney } from "./money";
-import { forecastIncomeEntriesForMonth, timesheetEntryAmount } from "./timesheetLogic";
+import { timesheetEntryAmount, visibleIncomeEntriesForMonth } from "./timesheetLogic";
 import { monthlyBudgetSummary } from "./budget";
 
 export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months" | "custom";

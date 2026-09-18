@@ -17,10 +17,10 @@ import {
   todayISO,
 } from "@/lib/cashflow/dates";
 import {
-  entriesForMonth,
   makeShiftEntry,
   makeTimeOffEntry,
   timesheetEntryAmount,
+  visibleIncomeEntriesForMonth,
 } from "@/lib/cashflow/timesheetLogic";
 import { payDateForTimesheetEntry, paydayItemsOnDate } from "@/lib/cashflow/forecast";
 import type { TimesheetEntry } from "@/lib/cashflow/types";
