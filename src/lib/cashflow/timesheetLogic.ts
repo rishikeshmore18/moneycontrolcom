@@ -126,7 +126,7 @@ export function syntheticPartTimeForecastEntries(
       const key = `${job.id}:${date}`;
       if (realShiftKeys.has(key)) continue;
 
-      const hours = roundedHours(Math.max(0, scheduledHours - (timeOffHours.get(key) ?? 0)));
+      const hours = roundedHours(scheduledHours);
       if (hours <= 0) continue;
 
       entries.push({
