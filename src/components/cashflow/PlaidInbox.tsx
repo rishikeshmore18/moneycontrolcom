@@ -16,6 +16,11 @@ import {
   type InboxItem,
 } from "@/lib/plaid/plaid.functions";
 import { guessCategory } from "@/lib/plaid/categoryGuess";
+import {
+  cardPaymentAlreadyRecorded,
+  scanCardPayments,
+  type CardPaymentMatch,
+} from "@/lib/plaid/cardPayments";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -74,8 +79,6 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
     };
   }, [listInbox]);
 
-  const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
-
   return (
     <>
       <Button variant={variant} onClick={() => setOpen(true)}>
@@ -92,7 +95,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
           open={open}
           onClose={() => setOpen(false)}
           items={inbox}
-          accounts={accounts}
+          connections={connections}
           onResolved={refresh}
           dispatch={dispatch}
           state={state}

@@ -105,14 +105,9 @@ export function syntheticPartTimeForecastEntries(
       .filter((entry) => entry.entryType === "work_shift")
       .map((entry) => `${entry.jobId}:${entry.date}`),
   );
-  const timeOffHours = new Map<string, number>();
-
-  inMonth
-    .filter((entry) => entry.entryType === "time_off")
-    .forEach((entry) => {
-      const key = `${entry.jobId}:${entry.date}`;
-      timeOffHours.set(key, (timeOffHours.get(key) ?? 0) + entry.hours);
-    });
+  // NOTE: time off is NOT netted out here. A logged time-off entry already
+  // carries a negative amount, so both the income tab and the dashboard
+  // subtract it exactly once from the projected shift on that day.
 
   return jobs.flatMap((job) => {
     if (job.type !== "part_time") return [];
@@ -131,7 +126,7 @@ export function syntheticPartTimeForecastEntries(
       const key = `${job.id}:${date}`;
       if (realShiftKeys.has(key)) continue;
 
-      const hours = roundedHours(Math.max(0, scheduledHours - (timeOffHours.get(key) ?? 0)));
+      const hours = roundedHours(scheduledHours);
       if (hours <= 0) continue;
 
       entries.push({
@@ -178,6 +173,23 @@ export function forecastIncomeEntriesForMonth(
     ...syntheticPartTimeForecastEntries(jobs, monthDate, all),
   ];
 }
+
+/**
+ * The single source of truth for "what income exists in this month" used by
+ * BOTH the income tab and the dashboard's "Income coming" list. A projected
+ * (auto) shift in the past never became real work, so it is dropped.
+ */
+export function visibleIncomeEntriesForMonth(
+  all: TimesheetEntry[],
+  jobs: Job[],
+  monthDate: Date,
+  today: string = toISODate(new Date()),
+): TimesheetEntry[] {
+  return forecastIncomeEntriesForMonth(all, jobs, monthDate).filter(
+    (entry) => !(entry.auto && entry.date < today),
+  );
+}
+
 
 export function makeShiftEntry(input: {
   jobId: string;

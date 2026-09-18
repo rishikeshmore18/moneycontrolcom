@@ -17,10 +17,10 @@ import {
   todayISO,
 } from "@/lib/cashflow/dates";
 import {
-  entriesForMonth,
   makeShiftEntry,
   makeTimeOffEntry,
   timesheetEntryAmount,
+  visibleIncomeEntriesForMonth,
 } from "@/lib/cashflow/timesheetLogic";
 import { payDateForTimesheetEntry, paydayItemsOnDate } from "@/lib/cashflow/forecast";
 import type { TimesheetEntry } from "@/lib/cashflow/types";
@@ -38,7 +38,7 @@ export function IncomeTimesheet() {
   const [addDate, setAddDate] = useState<string>(todayISO());
 
   const entries = useMemo(
-    () => entriesForMonth(state.timesheet, state.jobs, monthDate),
+    () => visibleIncomeEntriesForMonth(state.timesheet, state.jobs, monthDate, todayISO()),
     [state.timesheet, state.jobs, monthDate],
   );
 
