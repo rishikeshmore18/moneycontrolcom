@@ -105,14 +105,9 @@ export function syntheticPartTimeForecastEntries(
       .filter((entry) => entry.entryType === "work_shift")
       .map((entry) => `${entry.jobId}:${entry.date}`),
   );
-  const timeOffHours = new Map<string, number>();
-
-  inMonth
-    .filter((entry) => entry.entryType === "time_off")
-    .forEach((entry) => {
-      const key = `${entry.jobId}:${entry.date}`;
-      timeOffHours.set(key, (timeOffHours.get(key) ?? 0) + entry.hours);
-    });
+  // NOTE: time off is NOT netted out here. A logged time-off entry already
+  // carries a negative amount, so both the income tab and the dashboard
+  // subtract it exactly once from the projected shift on that day.
 
   return jobs.flatMap((job) => {
     if (job.type !== "part_time") return [];
