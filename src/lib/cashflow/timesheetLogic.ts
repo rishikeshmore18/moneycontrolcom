@@ -174,6 +174,23 @@ export function forecastIncomeEntriesForMonth(
   ];
 }
 
+/**
+ * The single source of truth for "what income exists in this month" used by
+ * BOTH the income tab and the dashboard's "Income coming" list. A projected
+ * (auto) shift in the past never became real work, so it is dropped.
+ */
+export function visibleIncomeEntriesForMonth(
+  all: TimesheetEntry[],
+  jobs: Job[],
+  monthDate: Date,
+  today: string = toISODate(new Date()),
+): TimesheetEntry[] {
+  return forecastIncomeEntriesForMonth(all, jobs, monthDate).filter(
+    (entry) => !(entry.auto && entry.date < today),
+  );
+}
+
+
 export function makeShiftEntry(input: {
   jobId: string;
   jobName: string;
