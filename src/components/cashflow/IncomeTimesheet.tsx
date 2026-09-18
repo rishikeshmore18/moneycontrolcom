@@ -38,7 +38,7 @@ export function IncomeTimesheet() {
   const [addDate, setAddDate] = useState<string>(todayISO());
 
   const entries = useMemo(
-    () => entriesForMonth(state.timesheet, state.jobs, monthDate),
+    () => visibleIncomeEntriesForMonth(state.timesheet, state.jobs, monthDate, todayISO()),
     [state.timesheet, state.jobs, monthDate],
   );
 

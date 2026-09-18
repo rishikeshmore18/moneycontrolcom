@@ -883,13 +883,10 @@ function paycheckDetail(payDate: string, entries: TimesheetEntry[]): string {
 function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlowBreakdownItem[] {
   const jobsById = new Map(state.jobs.map((job) => [job.id, job]));
   const incomeOverrides = state.plannedIncomeOverrides ?? [];
-  const entries = monthRefsForIncomeRange(range).flatMap((monthRef) =>
-    forecastIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef),
+  // Same entry list the income tab renders, so the two screens can never disagree.
+  const liveEntries = monthRefsForIncomeRange(range).flatMap((monthRef) =>
+    visibleIncomeEntriesForMonth(state.timesheet, state.jobs, monthRef, toISO(new Date())),
   );
-  const today = toISO(new Date());
-  // A projected (auto) shift in the past never became real work — the user either
-  // took the day off or simply didn't work it, so it must not count as income.
-  const liveEntries = entries.filter((entry) => !(entry.auto && entry.date < today));
   const unpaidPositiveEntries = liveEntries.filter(
     (entry) => !entry.paid && entry.entryType !== "time_off" && timesheetEntryAmount(entry) > 0,
   );
