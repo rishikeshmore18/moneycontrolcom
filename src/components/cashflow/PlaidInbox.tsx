@@ -16,6 +16,11 @@ import {
   type InboxItem,
 } from "@/lib/plaid/plaid.functions";
 import { guessCategory } from "@/lib/plaid/categoryGuess";
+import {
+  cardPaymentAlreadyRecorded,
+  scanCardPayments,
+  type CardPaymentMatch,
+} from "@/lib/plaid/cardPayments";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
