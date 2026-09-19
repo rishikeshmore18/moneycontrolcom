@@ -96,6 +96,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
           onClose={() => setOpen(false)}
           items={inbox}
           connections={connections}
+
           onResolved={refresh}
           dispatch={dispatch}
           state={state}
@@ -112,7 +113,7 @@ function InboxSheet({
   open,
   onClose,
   items,
-  accounts,
+  connections,
   onResolved,
   dispatch,
   state,
@@ -121,7 +122,7 @@ function InboxSheet({
   open: boolean;
   onClose: () => void;
   items: InboxItem[];
-  accounts: Connection["accounts"];
+  connections: Connection[];
   onResolved: () => Promise<void> | void;
   dispatch: AppCtx["dispatch"];
   state: AppCtx["state"];
@@ -130,6 +131,12 @@ function InboxSheet({
   const resolve = useServerFn(plaidResolveInbox);
   const [busy, setBusy] = useState<string | null>(null);
   const [catFor, setCatFor] = useState<Record<string, string>>({});
+  const [payFrom, setPayFrom] = useState<Record<string, string>>({});
+  const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
+  const { unmatched, rest } = useMemo(
+    () => scanCardPayments(items, connections),
+    [items, connections],
+  );
   const cur = state.profile.currency;
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
   const categories: string[] = baseCategories.includes("Miscellaneous")
