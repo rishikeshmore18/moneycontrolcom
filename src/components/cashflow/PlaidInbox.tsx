@@ -242,16 +242,95 @@ function InboxSheet({
     }
   };
 
-  const sorted = [...items].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const acceptCardPayment = async (match: CardPaymentMatch) => {
+    const key = match.cardItem.id;
+    const source = payFrom[key] ?? "cash";
+    setBusy(key);
+    try {
+      if (!cardPaymentAlreadyRecorded(state, match.cardId, match.amount, match.date)) {
+        dispatch({
+          type: "PAY_CREDIT_CARD",
+          payload: {
+            cardId: match.cardId,
+            amount: match.amount,
+            sourceAccountId: source === "cash" ? "" : source,
+            date: match.date,
+            notes: source === "cash" ? "Paid with cash" : "Card bill payment",
+          },
+        });
+      }
+      await finish([key], "accepted");
+      toast("Card payment recorded.");
+    } catch (err) {
+      toast(`Couldn't record that: ${errText(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const sorted = [...rest].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const nothing = unmatched.length === 0 && sorted.length === 0;
 
   return (
     <Sheet open={open} onClose={onClose} title="Review bank transactions" size="wide">
       {loading ? (
         <div className="text-sm text-muted-foreground">Loading transactions...</div>
-      ) : items.length === 0 ? (
+      ) : nothing ? (
         <div className="text-sm text-muted-foreground">Nothing waiting for review.</div>
       ) : (
         <div className="grid gap-3">
+          {unmatched.map((match) => {
+            const card = state.cards.find((c) => c.id === match.cardId);
+            const key = match.cardItem.id;
+            return (
+              <div
+                key={key}
+                className="rounded-2xl border border-[color:var(--warn)] p-3 grid gap-2"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className="font-bold">
+                      Card bill payment · {card?.name ?? "Card"}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatDate(match.date)} · we couldn't find this leaving any linked account
+                    </div>
+                  </div>
+                  <div className="font-black">{formatMoney(match.amount, cur)}</div>
+                </div>
+                <div className="grid gap-1">
+                  <div className="text-xs text-muted-foreground">How was this paid?</div>
+                  <Select
+                    value={payFrom[key] ?? "cash"}
+                    onChange={(e) => setPayFrom((p) => ({ ...p, [key]: e.target.value }))}
+                  >
+                    <option value="cash">Cash</option>
+                    {state.accounts.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => acceptCardPayment(match)}
+                    disabled={busy === key}
+                  >
+                    Record payment
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => dismiss(match.cardItem)}
+                    disabled={busy === key}
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+              </div>
+            );
+          })}
           {sorted.map((item) => {
             const map = mappingFor(item.plaidAccountId);
             const dup = duplicateFor(item);
