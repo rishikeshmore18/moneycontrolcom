@@ -245,12 +245,14 @@ function DayDetailSheet({
   entries,
   onClose,
   onAdd,
+  onEdit,
 }: {
   open: boolean;
   date: string | null;
   entries: TimesheetEntry[];
   onClose: () => void;
   onAdd: (d: string) => void;
+  onEdit: (e: TimesheetEntry) => void;
 }) {
   const { state, dispatch } = useApp();
   const cur = state.profile.currency;
