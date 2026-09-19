@@ -541,32 +541,39 @@ function MarkPaidSheet({ entry, onClose }: { entry: TimesheetEntry | null; onClo
 }
 
 
-/* ----- Add Entry sheet ----- */
+/* ----- Add / Edit Entry sheet ----- */
 function AddEntrySheet({
   open,
   date,
+  entry,
   onClose,
   onSave,
 }: {
   open: boolean;
   date: string;
+  entry?: TimesheetEntry | null;
   onClose: () => void;
   onSave: (e: TimesheetEntry) => void;
 }) {
   const { state } = useApp();
-  const [kind, setKind] = useState<"shift" | "time_off">("shift");
+  const editing = entry ?? null;
+  const [kind, setKind] = useState<"shift" | "time_off">(
+    editing?.entryType === "time_off" ? "time_off" : "shift",
+  );
   const partAndCustom = state.jobs.filter((j) => j.type !== "full_time");
   const fullTime = state.jobs.find((j) => j.type === "full_time");
   const jobOptions = kind === "time_off" ? state.jobs : partAndCustom;
 
-  const [jobId, setJobId] = useState(jobOptions[0]?.id ?? "");
+  const [jobId, setJobId] = useState(editing?.jobId ?? jobOptions[0]?.id ?? "");
   const job = state.jobs.find((j) => j.id === jobId);
 
-  const [useTimeRange, setUseTimeRange] = useState(true);
-  const [start, setStart] = useState("09:00");
-  const [end, setEnd] = useState("17:00");
-  const [hoursManual, setHoursManual] = useState("4");
-  const [rate, setRate] = useState("");
+  const [useTimeRange, setUseTimeRange] = useState(
+    editing ? Boolean(editing.startTime && editing.endTime) : true,
+  );
+  const [start, setStart] = useState(editing?.startTime ?? "09:00");
+  const [end, setEnd] = useState(editing?.endTime ?? "17:00");
+  const [hoursManual, setHoursManual] = useState(editing ? String(editing.hours) : "4");
+  const [rate, setRate] = useState(editing ? String(editing.rate) : "");
 
   const computedHours =
     kind === "time_off"
@@ -579,30 +586,43 @@ function AddEntrySheet({
   function submit() {
     if (!jobId) return toast("Pick a job");
     const j = state.jobs.find((x) => x.id === jobId)!;
-    if (kind === "shift") {
-      onSave(
-        makeShiftEntry({
-          jobId: j.id,
-          jobName: j.name,
-          date,
-          hours: computedHours,
-          rate: rateNum,
-          startTime: useTimeRange ? start : undefined,
-          endTime: useTimeRange ? end : undefined,
-        }),
-      );
-    } else {
-      onSave(
-        makeTimeOffEntry({
-          jobId: j.id,
-          jobName: j.name,
-          date,
-          hours: computedHours,
-          rate: rateNum,
-        }),
-      );
-    }
+    const base =
+      kind === "shift"
+        ? makeShiftEntry({
+            jobId: j.id,
+            jobName: j.name,
+            date,
+            hours: computedHours,
+            rate: rateNum,
+            startTime: useTimeRange ? start : undefined,
+            endTime: useTimeRange ? end : undefined,
+          })
+        : makeTimeOffEntry({
+            jobId: j.id,
+            jobName: j.name,
+            date,
+            hours: computedHours,
+            rate: rateNum,
+          });
+
+    if (!editing) return onSave(base);
+
+    // Editing: keep identity + paid state. A projected (auto) entry becomes a
+    // real one so the schedule stops generating it for this day.
+    onSave({
+      ...base,
+      id: editing.auto ? newId() : editing.id,
+      auto: false,
+      userEdited: true,
+      paid: editing.paid,
+      payStatus: editing.payStatus,
+      paidAccountId: editing.paidAccountId,
+      actualAmount: editing.paid ? base.expectedAmount : undefined,
+      createdAt: editing.createdAt,
+      updatedAt: new Date().toISOString(),
+    });
   }
+
 
   return (
     <Sheet
