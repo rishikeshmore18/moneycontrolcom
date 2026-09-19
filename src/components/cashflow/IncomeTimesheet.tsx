@@ -36,6 +36,7 @@ export function IncomeTimesheet() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addDate, setAddDate] = useState<string>(todayISO());
+  const [editEntry, setEditEntry] = useState<TimesheetEntry | null>(null);
 
   const entries = useMemo(
     () => visibleIncomeEntriesForMonth(state.timesheet, state.jobs, monthDate, todayISO()),
@@ -191,18 +192,31 @@ export function IncomeTimesheet() {
         onAdd={(date) => {
           setSelectedDate(null);
           setAddDate(date);
+          setEditEntry(null);
+          setAddOpen(true);
+        }}
+        onEdit={(entry) => {
+          setSelectedDate(null);
+          setAddDate(entry.date);
+          setEditEntry(entry);
           setAddOpen(true);
         }}
       />
 
       <AddEntrySheet
+        key={editEntry ? `edit-${editEntry.id}` : `add-${addDate}`}
         open={addOpen}
         date={addDate}
-        onClose={() => setAddOpen(false)}
+        entry={editEntry}
+        onClose={() => {
+          setAddOpen(false);
+          setEditEntry(null);
+        }}
         onSave={(entry) => {
           persistAndSave(entry);
-          toast("Entry saved");
+          toast(editEntry ? "Entry updated" : "Entry saved");
           setAddOpen(false);
+          setEditEntry(null);
         }}
       />
     </div>
