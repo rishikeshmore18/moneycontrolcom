@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { Card } from "./Card";
 import { Sheet } from "./Sheet";
 import { Field, Input, Select } from "./Field";
@@ -345,20 +345,31 @@ function DayDetailSheet({
                       </button>
                     )}
                   </div>
-                  {!e.auto && (
-                    <button
-                      onClick={() => {
-                        if (confirm("Delete this entry?")) {
-                          dispatch({ type: "DELETE_TIMESHEET", id: e.id });
-                          toast("Entry deleted");
-                        }
-                      }}
-                      className="text-[color:var(--bad)] p-1.5 rounded-lg hover:bg-[color:var(--bad)]/10"
-                      aria-label="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  <div className="grid gap-1">
+                    {e.entryType !== "salary_paycheck" && (
+                      <button
+                        onClick={() => onEdit(e)}
+                        className="text-muted-foreground p-1.5 rounded-lg hover:bg-muted hover:text-foreground"
+                        aria-label="Edit"
+                      >
+                        <Pencil size={16} />
+                      </button>
+                    )}
+                    {!e.auto && (
+                      <button
+                        onClick={() => {
+                          if (confirm("Delete this entry?")) {
+                            dispatch({ type: "DELETE_TIMESHEET", id: e.id });
+                            toast("Entry deleted");
+                          }
+                        }}
+                        className="text-[color:var(--bad)] p-1.5 rounded-lg hover:bg-[color:var(--bad)]/10"
+                        aria-label="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })}
