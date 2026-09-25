@@ -827,18 +827,18 @@ function BreakdownSheet({
       onClose={onClose}
       title={title}
       footer={
-        <div className="flex w-full items-center justify-between gap-3">
-          <div className="text-sm text-muted-foreground">{helper}</div>
-          <div className="text-right">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0 text-sm text-muted-foreground">{helper}</div>
+          <div className="min-w-0 text-right">
             <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
               Total
             </div>
-            <div className={`text-xl font-black ${flowTone[tone].text}`}>{formatMoney(total)}</div>
+            <div className={`break-words text-xl font-black ${flowTone[tone].text}`}>{formatMoney(total)}</div>
           </div>
         </div>
       }
     >
-      <div className="grid gap-4">
+      <div className="grid min-w-0 gap-4">
         {expenseMode && onAddExpense && (
           <Button variant="primary" full onClick={onAddExpense}>
             <Plus size={16} /> Add upcoming expense
@@ -857,24 +857,24 @@ function BreakdownSheet({
         {sections.map((section) => {
           const sectionTotal = section.items.reduce((sum, item) => sum + item.amount, 0);
           return (
-            <div key={section.title} className="rounded-2xl border border-border bg-muted/20">
-              <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-                <div className="font-extrabold">{section.title}</div>
-                <div className="text-sm font-bold text-muted-foreground">
+            <div key={section.title} className="min-w-0 rounded-2xl border border-border bg-muted/20">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-3">
+                <div className="min-w-0 break-words font-extrabold">{section.title}</div>
+                <div className="min-w-0 break-words text-sm font-bold text-muted-foreground">
                   {formatMoney(sectionTotal)}
                 </div>
               </div>
-              <div className="divide-y divide-border">
+              <div className="min-w-0 divide-y divide-border">
                 {section.items.map((item) => {
                   const affordability = affordabilityById?.[item.id];
                   const isOverdue = item.isOverdue;
                   return (
-                    <div key={`${section.title}-${item.id}`} className="grid gap-3 px-4 py-3">
-                      <div className="flex items-start justify-between gap-4">
+                    <div key={`${section.title}-${item.id}`} className="grid min-w-0 gap-3 px-4 py-3">
+                      <div className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
                         <div className="min-w-0">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
                             <div
-                              className={`truncate font-bold ${isOverdue ? "text-[color:var(--bad)]" : ""}`}
+                              className={`min-w-0 break-words font-bold ${isOverdue ? "text-[color:var(--bad)]" : ""}`}
                             >
                               {item.label}
                             </div>
@@ -892,14 +892,14 @@ function BreakdownSheet({
                           </div>
                           {item.detail && (
                             <div
-                              className={`text-xs ${isOverdue ? "text-[color:var(--bad)]/80" : "text-muted-foreground"}`}
+                              className={`break-words text-xs ${isOverdue ? "text-[color:var(--bad)]/80" : "text-muted-foreground"}`}
                             >
                               {item.detail}
                             </div>
                           )}
                         </div>
                         <div
-                          className={`shrink-0 text-right font-black ${
+                          className={`min-w-0 break-words font-black sm:text-right ${
                             isOverdue || item.amount < 0 ? "text-[color:var(--bad)]" : ""
                           }`}
                         >

@@ -88,22 +88,22 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
   return createPortal(
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/45 backdrop-blur-sm animate-fade p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:p-6"
+      className="fixed inset-0 z-50 overflow-x-hidden overflow-y-auto overscroll-contain bg-black/45 backdrop-blur-sm animate-fade p-3 pt-[max(1rem,env(safe-area-inset-top))] sm:p-6"
       style={{ WebkitOverflowScrolling: "touch" }}
       onClick={onClose}
     >
-      <div className="flex min-h-full items-start justify-center">
+      <div className="flex min-h-full min-w-0 items-start justify-center">
         <div
           ref={panelRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className={`relative mb-3 min-w-0 w-full ${maxW} rounded-3xl bg-[color:var(--card-solid)] shadow-elegant animate-sheet outline-none sm:mb-6`}
+          className={`relative mb-3 min-w-0 w-full max-w-full ${maxW} rounded-3xl bg-[color:var(--card-solid)] shadow-elegant animate-sheet outline-none sm:mb-6`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
-            <h2 id={titleId} className="text-lg font-black tracking-tight">
+          <div className="flex min-w-0 items-center justify-between gap-3 px-5 py-4 border-b border-border">
+            <h2 id={titleId} className="min-w-0 break-words text-lg font-black tracking-tight">
               {title}
             </h2>
             <button

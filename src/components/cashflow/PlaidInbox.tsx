@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { Inbox } from "lucide-react";
+import { Inbox, Trash2 } from "lucide-react";
 import { Button } from "./Button";
 import { Sheet } from "./Sheet";
 import { Field, Input, Select } from "./Field";
@@ -13,7 +13,10 @@ import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import {
   plaidListConnections,
   plaidListInbox,
+  plaidPreviewClearInbox,
+  plaidClearInbox,
   plaidResolveInbox,
+  type ClearInboxRange,
   type Connection,
   type InboxItem,
 } from "@/lib/plaid/plaid.functions";
@@ -131,7 +134,21 @@ function InboxSheet({
   loading?: boolean;
 }) {
   const resolve = useServerFn(plaidResolveInbox);
+  const previewClear = useServerFn(plaidPreviewClearInbox);
+  const clearInbox = useServerFn(plaidClearInbox);
   const [busy, setBusy] = useState<string | null>(null);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearMode, setClearMode] = useState<ClearInboxRange["mode"]>("all");
+  const [beforeDate, setBeforeDate] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [confirmation, setConfirmation] = useState<{ range: ClearInboxRange; count: number } | null>(null);
+  const cancelClearRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!confirmation) return;
+    const frame = window.requestAnimationFrame(() => cancelClearRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [confirmation]);
   const [catFor, setCatFor] = useState<Record<string, string>>({});
   const [otherCategoryFor, setOtherCategoryFor] = useState<Record<string, string>>({});
   const [payFrom, setPayFrom] = useState<Record<string, string>>({});
@@ -305,14 +322,104 @@ function InboxSheet({
   const sorted = [...rest].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const nothing = unmatched.length === 0 && sorted.length === 0;
 
+  const requestedRange = (): ClearInboxRange => {
+    if (clearMode === "before") return { mode: "before", before: beforeDate };
+    if (clearMode === "between") return { mode: "between", start: startDate, end: endDate };
+    return { mode: "all" };
+  };
+
+  const describeRange = (range: ClearInboxRange) => {
+    if (range.mode === "before") return `before ${formatDate(range.before)}`;
+    if (range.mode === "between") return `from ${formatDate(range.start)} through ${formatDate(range.end)}`;
+    return "in the entire review queue";
+  };
+
+  const requestClear = async () => {
+    setBusy("bulk");
+    try {
+      const range = requestedRange();
+      const { count } = await previewClear({ data: range });
+      if (!count) {
+        toast("No transactions match those dates.");
+        return;
+      }
+      setConfirmation({ range, count });
+    } catch (err) {
+      toast(`Couldn't check transactions: ${errText(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmClear = async () => {
+    if (!confirmation) return;
+    setBusy("bulk");
+    try {
+      const { count } = await clearInbox({ data: confirmation.range });
+      setConfirmation(null);
+      setClearOpen(false);
+      await onResolved();
+      toast(`${count} bank transaction${count === 1 ? "" : "s"} cleared from Review.`);
+    } catch (err) {
+      toast(`Couldn't clear transactions: ${errText(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
-    <Sheet open={open} onClose={onClose} title="Review bank transactions" size="wide">
-      {loading ? (
+    <Sheet open={open} onClose={confirmation ? () => setConfirmation(null) : onClose} title="Review bank transactions" size="wide">
+      {confirmation ? (
+        <div role="alertdialog" aria-labelledby="clear-confirm-title" aria-describedby="clear-confirm-description" className="mx-auto my-4 w-full max-w-md rounded-2xl border border-border bg-[color:var(--card-solid)] p-5 shadow-elegant">
+          <h3 id="clear-confirm-title" className="text-lg font-black">Clear {confirmation.count} transaction{confirmation.count === 1 ? "" : "s"}?</h3>
+          <p id="clear-confirm-description" className="mt-2 text-sm leading-relaxed text-muted-foreground">
+            This will remove bank transactions {describeRange(confirmation.range)} from Review. They won't be available to accept or merge later. Your recorded activity and balances won't change.
+          </p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            <Button variant="danger" onClick={confirmClear} disabled={busy !== null}>
+              {busy === "bulk" ? "Clearing..." : `Clear ${confirmation.count}`}
+            </Button>
+            <Button ref={cancelClearRef} variant="ghost" onClick={() => setConfirmation(null)} disabled={busy !== null}>Keep reviewing</Button>
+          </div>
+        </div>
+      ) : loading ? (
         <div className="text-sm text-muted-foreground">Loading transactions...</div>
       ) : nothing ? (
         <div className="text-sm text-muted-foreground">Nothing waiting for review.</div>
       ) : (
         <div className="grid gap-3">
+          <div className="min-w-0 rounded-2xl border border-border bg-muted/20 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-bold">Clear past transactions</div>
+                <p className="text-xs text-muted-foreground">Remove transactions you don't need to review.</p>
+              </div>
+              <Button variant="ghost" onClick={() => setClearOpen(!clearOpen)} disabled={busy !== null} aria-expanded={clearOpen}>
+                <Trash2 size={16} /> {clearOpen ? "Close" : "Choose dates"}
+              </Button>
+            </div>
+            {clearOpen && (
+              <div className="mt-3 grid min-w-0 gap-3 border-t border-border pt-3">
+                <Field label="Which transactions?">
+                  <Select value={clearMode} onChange={(e) => setClearMode(e.target.value as ClearInboxRange["mode"])}>
+                    <option value="all">Clear all</option>
+                    <option value="before">Clear before a date</option>
+                    <option value="between">Clear between dates</option>
+                  </Select>
+                </Field>
+                {clearMode === "before" && <Field label="Before (date not included)"><Input type="date" value={beforeDate} onChange={(e) => setBeforeDate(e.target.value)} /></Field>}
+                {clearMode === "between" && (
+                  <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+                    <Field label="Start date (included)"><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
+                    <Field label="End date (included)"><Input type="date" min={startDate || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
+                  </div>
+                )}
+                <Button variant="danger" className="justify-self-start" onClick={requestClear} disabled={busy !== null || (clearMode === "before" && !beforeDate) || (clearMode === "between" && (!startDate || !endDate || startDate > endDate))}>
+                  {busy === "bulk" ? "Checking..." : "Review clear action"}
+                </Button>
+              </div>
+            )}
+          </div>
           {unmatched.map((match) => {
             const card = state.cards.find((c) => c.id === match.cardId);
             const key = match.cardItem.id;
