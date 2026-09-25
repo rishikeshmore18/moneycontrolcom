@@ -12,6 +12,7 @@ export const DEFAULT_CATEGORIES = [
   "Travel",
   "Health",
   "Subscriptions",
+  "Gave to friend",
   "Other",
 ];
 
@@ -192,6 +193,9 @@ export interface PlannedIncomeOverride {
   accountId?: string;
   category?: string;
   notes?: string;
+  /** A loaned amount expected back, linked to the original outgoing transaction. */
+  kind?: "friend_repayment";
+  linkedExpenseId?: string;
 }
 
 export type BudgetRolloverPolicy = "reset" | "carry_remaining";
