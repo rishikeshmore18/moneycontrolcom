@@ -19,3 +19,7 @@ This is a personal finance app, not a construction project. The installed DDC sk
 ## Project skills
 
 - Skills live under `.agents/skills/`, and `skills-lock.json` records their source revisions. Use only skills relevant to the task at hand; their presence does not validate this app's calculations.
+
+## Git workflow
+
+- After completing and verifying an authorized implementation change, commit it and push it to the current project branch automatically. Do not merge or deploy unless the user explicitly asks.
