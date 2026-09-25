@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`glass-card p-5 animate-rise ${className}`}>{children}</div>;
+  return <div className={`glass-card min-w-0 max-w-full [overflow-wrap:anywhere] p-4 sm:p-5 animate-rise ${className}`}>{children}</div>;
 }
 
 export function KPI({
@@ -26,7 +26,7 @@ export function KPI({
   return (
     <Card>
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className={`mt-2 text-3xl font-black tracking-tight ${toneClass}`}>{value}</div>
+      <div className={`mt-2 break-words text-3xl font-black tracking-tight ${toneClass}`}>{value}</div>
       {hint && <div className="mt-1 text-xs text-muted-foreground">{hint}</div>}
     </Card>
   );

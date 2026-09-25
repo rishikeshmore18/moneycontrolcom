@@ -682,7 +682,7 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
         </div>
       )}
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+      <div className="grid min-w-0 grid-cols-1 gap-2 min-[420px]:grid-cols-2 sm:grid-cols-3">
         {(
           [
             ["cycle", "This cycle"],
@@ -697,14 +697,14 @@ function CardPaymentForm({ onDone }: { onDone: () => void }) {
             key={id}
             type="button"
             onClick={() => setMode(id)}
-            className={`px-3 py-3 rounded-2xl text-sm font-bold border transition ${
+            className={`min-w-0 break-words px-3 py-3 rounded-2xl text-sm font-bold border transition ${
               mode === id
                 ? "border-primary brand-gradient text-primary-foreground"
                 : "border-border bg-[color:var(--card-solid)] hover:bg-muted"
             }`}
           >
             <div>{label}</div>
-            <div className="text-xs opacity-80 font-medium">
+            <div className="break-words text-xs opacity-80 font-medium">
               {formatMoney(amounts[id as keyof typeof amounts], cur)}
             </div>
           </button>

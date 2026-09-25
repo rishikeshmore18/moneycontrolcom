@@ -511,7 +511,7 @@ export function Forecast({ setTab }: { setTab?: (tab: Tab) => void }) {
         <h2 id="forecast-summary-title" className="sr-only">
           Forecast summary
         </h2>
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
+        <div className="grid min-w-0 grid-cols-1 gap-2.5 min-[440px]:grid-cols-2 lg:grid-cols-4 lg:gap-4">
           <SummaryCard
             label="Safe to spend"
             value={money(safetyProjection.safeSurplus)}
@@ -1891,7 +1891,7 @@ function ForecastPanels({
     return (
       <Sheet open onClose={onClose} title="Forecast details" size="wide">
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid min-w-0 grid-cols-1 gap-3 min-[440px]:grid-cols-2 sm:grid-cols-4">
             <MiniMetric
               label="Starting cash"
               value={formatMoney(selectedProjection.startingCash, currency)}
