@@ -541,11 +541,13 @@ export function QuickAddModal({
   open,
   onClose,
   initialFlow,
+  initialCardId,
   setTab,
 }: {
   open: boolean;
   onClose: () => void;
   initialFlow?: Flow;
+  initialCardId?: string;
   setTab: (t: "income") => void;
 }) {
   const [flow, setFlow] = useState<Flow>(initialFlow ?? "menu");
@@ -587,7 +589,7 @@ export function QuickAddModal({
         </div>
       )}
       {flow === "expense" && <ExpenseForm onDone={close} />}
-      {flow === "card_payment" && <CardPaymentForm onDone={close} />}
+      {flow === "card_payment" && <CardPaymentForm onDone={close} initialCardId={initialCardId} />}
       {flow === "transfer" && <TransferForm onDone={close} />}
       {flow === "adjustment" && <AdjustmentForm onDone={close} />}
     </Sheet>
@@ -606,10 +608,10 @@ function MenuBtn({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 /* ----- Card payment ----- */
-function CardPaymentForm({ onDone }: { onDone: () => void }) {
+function CardPaymentForm({ onDone, initialCardId }: { onDone: () => void; initialCardId?: string }) {
   const { state, dispatch } = useApp();
   const cur = state.profile.currency;
-  const [cardId, setCardId] = useState(state.cards[0]?.id ?? "");
+  const [cardId, setCardId] = useState(initialCardId ?? state.cards[0]?.id ?? "");
   const card = state.cards.find((c) => c.id === cardId);
   const [mode, setMode] = useState<
     "cycle" | "minimum" | "statement" | "current" | "target" | "custom"

@@ -136,6 +136,8 @@ export interface Transaction {
   createdAt: string;
   updatedAt: string;
   notes?: string;
+  /** Posted bank transactions already reflected in the linked balance must not move it twice. */
+  balanceAlreadySynced?: boolean;
   // Cycle reconciliation (card payments + the expenses they cover)
   cycleStart?: string; // ISO date — start of billing cycle (exclusive)
   cycleEnd?: string; // ISO date — statement / cycle close date (inclusive)

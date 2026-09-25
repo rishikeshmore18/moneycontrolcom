@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { AppProvider, useApp } from "@/lib/cashflow/AppContext";
 import { AppLayout, type Tab } from "@/components/cashflow/AppLayout";
 import { Dashboard } from "@/components/cashflow/Dashboard";
@@ -47,13 +47,12 @@ function Shell() {
   const [tab, setTab] = useState<Tab>("dashboard");
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickFlow, setQuickFlow] = useState<"menu" | "expense">("menu");
+  const [paymentCardId, setPaymentCardId] = useState<string | undefined>();
 
-  // Auto-open Add Expense on first load after onboarding for a faster entry experience.
-  useEffect(() => {
-    if (!state.onboarded) return;
-    setQuickFlow("expense");
+  const openCardPayment = (cardId: string) => {
+    setPaymentCardId(cardId);
     setQuickOpen(true);
-  }, [state.onboarded]);
+  };
 
   if (!state.onboarded) {
     return <OnboardingWizard open={true} />;
@@ -72,10 +71,11 @@ function Shell() {
           setQuickFlow("expense");
           setQuickOpen(true);
         }}
+        onPayCard={openCardPayment}
       >
         {tab === "dashboard" && <Dashboard />}
         {tab === "income" && <IncomeTimesheet />}
-        {tab === "cards" && <CardsScreen onPay={() => setQuickOpen(true)} />}
+        {tab === "cards" && <CardsScreen onPay={openCardPayment} />}
         {tab === "forecast" && (
           <Suspense
             fallback={
@@ -90,10 +90,12 @@ function Shell() {
         {tab === "profile" && <Profile />}
       </AppLayout>
       <QuickAddModal
+        key={quickOpen ? paymentCardId ? `card-${paymentCardId}` : quickFlow : "closed"}
         open={quickOpen}
-        onClose={() => setQuickOpen(false)}
+        onClose={() => { setQuickOpen(false); setPaymentCardId(undefined); }}
         setTab={setTab}
-        initialFlow={quickFlow}
+        initialFlow={paymentCardId ? "card_payment" : quickFlow}
+        initialCardId={paymentCardId}
       />
     </>
   );

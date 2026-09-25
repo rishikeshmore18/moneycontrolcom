@@ -13,6 +13,8 @@ import {
   X,
 } from "lucide-react";
 import { useApp } from "@/lib/cashflow/AppContext";
+import { imminentCardPayments } from "@/lib/cashflow/plannedReview";
+import { formatMoney } from "@/lib/cashflow/money";
 import type { Theme } from "@/lib/cashflow/types";
 
 export type Tab = "dashboard" | "income" | "cards" | "forecast" | "profile";
@@ -30,15 +32,21 @@ export function AppLayout({
   setTab,
   onQuickAdd,
   onAddExpense,
+  onPayCard,
   children,
 }: {
   tab: Tab;
   setTab: (t: Tab) => void;
   onQuickAdd: () => void;
   onAddExpense?: () => void;
+  onPayCard: (cardId: string) => void;
   children: ReactNode;
 }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [dismissedReminder, setDismissedReminder] = useState<string | null>(null);
+  const { state } = useApp();
+  const reminder = imminentCardPayments(state)[0];
+  const reminderKey = reminder ? `${reminder.cardId}:${reminder.dueDate}` : null;
 
   return (
     <div
@@ -65,6 +73,20 @@ export function AppLayout({
         {children}
       </main>
       <BottomNav tab={tab} setTab={setTab} />
+      {reminder && dismissedReminder !== reminderKey && (
+        <div role="status" className="fixed bottom-[calc(9.5rem+env(safe-area-inset-bottom))] left-4 right-4 z-30 flex min-w-0 items-center gap-2 rounded-2xl border border-[color:var(--warn)]/40 bg-[color:var(--card-solid)] p-2.5 shadow-elegant sm:left-auto sm:right-8 sm:w-[min(23rem,calc(100vw-2rem))] md:bottom-28">
+          <div className="min-w-0 flex-1 text-xs leading-snug">
+            <div className="font-extrabold">Card payment {reminder.daysUntilDue === 0 ? "due today" : reminder.daysUntilDue === 1 ? "due tomorrow" : "due in 2 days"}</div>
+            <div className="truncate text-muted-foreground">{reminder.cardName} · {formatMoney(reminder.amount, state.profile.currency)}</div>
+          </div>
+          <button type="button" onClick={() => onPayCard(reminder.cardId)} className="min-h-11 shrink-0 rounded-xl brand-gradient px-3 text-xs font-extrabold" aria-label={`Pay ${reminder.cardName} card`}>
+            Pay
+          </button>
+          <button type="button" onClick={() => setDismissedReminder(reminderKey)} className="grid h-11 w-11 shrink-0 place-items-center rounded-xl text-muted-foreground hover:bg-muted" aria-label="Dismiss card payment reminder">
+            <X size={16} />
+          </button>
+        </div>
+      )}
       {/* Single FAB: opens Add Expense directly (falls back to full quick add menu) */}
       <button
         onClick={onAddExpense ?? onQuickAdd}
