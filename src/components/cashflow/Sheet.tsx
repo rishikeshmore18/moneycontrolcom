@@ -99,7 +99,7 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
           aria-modal="true"
           aria-labelledby={titleId}
           tabIndex={-1}
-          className={`relative mb-3 w-full ${maxW} rounded-3xl bg-[color:var(--card-solid)] shadow-elegant animate-sheet outline-none sm:mb-6`}
+          className={`relative mb-3 min-w-0 w-full ${maxW} rounded-3xl bg-[color:var(--card-solid)] shadow-elegant animate-sheet outline-none sm:mb-6`}
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
@@ -114,7 +114,7 @@ export function Sheet({ open, onClose, title, children, footer, size = "default"
               <X size={18} />
             </button>
           </div>
-          <div className="px-5 py-4">{children}</div>
+          <div className="min-w-0 px-4 py-4 sm:px-5">{children}</div>
           {footer && (
             <div className="border-t border-border bg-[color:var(--card-solid)] px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] rounded-b-3xl flex flex-wrap gap-2 justify-end">
               {footer}

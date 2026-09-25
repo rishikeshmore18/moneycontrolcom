@@ -42,7 +42,7 @@ export function AppLayout({
 
   return (
     <div
-      className={`min-h-screen md:grid ${sidebarOpen ? "md:grid-cols-[260px_1fr]" : "md:grid-cols-[1fr]"}`}
+      className={`min-h-screen min-w-0 md:grid ${sidebarOpen ? "md:grid-cols-[260px_minmax(0,1fr)]" : "md:grid-cols-[minmax(0,1fr)]"}`}
     >
       {sidebarOpen && (
         <Sidebar
@@ -51,7 +51,7 @@ export function AppLayout({
           onClose={() => setSidebarOpen(false)}
         />
       )}
-      <main className="w-full max-w-[1400px] mx-auto overflow-x-hidden px-4 pt-5 pb-28 md:px-8 md:pt-6 md:pb-10">
+      <main className="min-w-0 w-full max-w-[1400px] mx-auto px-4 pt-5 pb-[calc(10rem+env(safe-area-inset-bottom))] md:px-8 md:pt-6 md:pb-28">
         {/* Desktop/tablet top bar with sidebar toggle */}
         <div className="hidden md:flex items-center mb-4">
           <button
@@ -68,11 +68,11 @@ export function AppLayout({
       {/* Single FAB: opens Add Expense directly (falls back to full quick add menu) */}
       <button
         onClick={onAddExpense ?? onQuickAdd}
-        className="fixed right-4 bottom-24 md:bottom-8 md:right-8 z-30 flex items-center gap-2 h-14 pl-4 pr-5 rounded-2xl brand-gradient text-primary-foreground font-extrabold shadow-elegant transition hover:-translate-y-1"
+        className="fixed right-4 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] md:bottom-8 md:right-8 z-30 flex h-12 w-12 items-center justify-center gap-2 rounded-2xl brand-gradient text-primary-foreground font-extrabold shadow-elegant transition hover:-translate-y-1 sm:h-14 sm:w-auto sm:px-5"
         aria-label="Add expense"
       >
         <Plus size={22} strokeWidth={2.75} />
-        <span className="text-sm tracking-tight">Add expense</span>
+        <span className="sr-only sm:not-sr-only sm:text-sm sm:tracking-tight">Add expense</span>
       </button>
     </div>
   );
@@ -129,12 +129,13 @@ function Sidebar({
 
 function BottomNav({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
   return (
-    <nav className="md:hidden fixed left-2 right-2 bottom-2 z-30 grid grid-cols-5 gap-0.5 p-1.5 rounded-3xl border border-border bg-[color:var(--card)] backdrop-blur-xl shadow-elegant">
+    <nav aria-label="Main navigation" className="md:hidden fixed left-2 right-2 bottom-[calc(0.5rem+env(safe-area-inset-bottom))] z-30 grid grid-cols-5 gap-0.5 p-1.5 rounded-3xl border border-border bg-[color:var(--card)] backdrop-blur-xl shadow-elegant">
       {NAV.map(({ id, label, icon: Icon }) => (
         <button
           key={id}
           onClick={() => setTab(id)}
-          className={`flex min-w-0 flex-col items-center justify-center py-2 px-0.5 rounded-2xl text-[10px] font-extrabold transition ${
+          aria-current={tab === id ? "page" : undefined}
+          className={`flex min-h-12 min-w-0 flex-col items-center justify-center py-2 px-0.5 rounded-2xl text-[10px] font-extrabold transition ${
             tab === id
               ? "bg-gradient-to-br from-primary/22 to-primary-glow/15 text-foreground"
               : "text-muted-foreground"

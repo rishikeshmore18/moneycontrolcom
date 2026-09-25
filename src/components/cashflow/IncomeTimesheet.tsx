@@ -74,7 +74,7 @@ export function IncomeTimesheet() {
   }
 
   return (
-    <div className="grid gap-5 max-w-[1000px] mx-auto w-full">
+    <div className="grid min-w-0 gap-5 max-w-[1000px] mx-auto w-full">
       <header className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-3xl font-black tracking-tight">Timesheet</h1>
@@ -93,7 +93,7 @@ export function IncomeTimesheet() {
         </Button>
       </header>
 
-      <div className="grid gap-3 grid-cols-3">
+      <div className="grid min-w-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2 md:grid-cols-3">
         <Stat label="This month hours" value={`${totals.hours.toFixed(1)}h`} />
         <Stat label="Earnings paid" value={formatMoney(totals.paid, cur)} tone="good" />
         <Stat label="Pending income" value={formatMoney(totals.pending, cur)} tone="warn" />
@@ -120,7 +120,7 @@ export function IncomeTimesheet() {
           </button>
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5 mb-1.5">
+        <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 mb-1.5 sm:gap-1.5">
           {WEEKDAY_SHORT.map((w) => (
             <div key={w} className="text-center text-xs font-extrabold text-muted-foreground py-1">
               {w}
@@ -128,7 +128,7 @@ export function IncomeTimesheet() {
           ))}
         </div>
 
-        <div className="grid grid-cols-7 gap-1.5">
+        <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 sm:gap-1.5">
           {days.map((d) => {
             const list = byDate.get(d.iso) ?? [];
             const hasPaid = list.some((e) => e.paid);
@@ -151,7 +151,7 @@ export function IncomeTimesheet() {
                     setSelectedDate(d.iso);
                   }
                 }}
-                className={`min-h-[78px] rounded-2xl border p-2 text-left transition hover:-translate-y-0.5 ${cls}`}
+                className={`min-w-0 min-h-[52px] rounded-xl border p-1 text-left transition hover:-translate-y-0.5 sm:min-h-[78px] sm:rounded-2xl sm:p-2 ${cls}`}
               >
                 <div className="font-extrabold text-sm">{d.date.getDate()}</div>
                 {list.slice(0, 2).map((e) => (
@@ -233,7 +233,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "go
   return (
     <Card className={`!p-4 ${t}`}>
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
-      <div className="mt-1.5 text-2xl font-black">{value}</div>
+      <div className="mt-1.5 break-words text-2xl font-black">{value}</div>
     </Card>
   );
 }
@@ -266,14 +266,14 @@ function DayDetailSheet({
     <>
       <Sheet open={open} onClose={onClose} title={formatDisplayDate(date)}>
         <div className="grid gap-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid min-w-0 grid-cols-1 gap-3 min-[420px]:grid-cols-2">
             <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
               <div className="text-xs text-muted-foreground font-bold uppercase">Hours</div>
               <div className="text-2xl font-black mt-1">{hours.toFixed(1)}h</div>
             </div>
             <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
               <div className="text-xs text-muted-foreground font-bold uppercase">Total</div>
-              <div className="text-2xl font-black mt-1">{formatMoney(total, cur)}</div>
+              <div className="mt-1 break-words text-2xl font-black">{formatMoney(total, cur)}</div>
             </div>
           </div>
 

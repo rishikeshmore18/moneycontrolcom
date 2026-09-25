@@ -1,0 +1,1398 @@
+{
+  "version": 1,
+  "skills": {
+    "4d-simulation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.3-4D-BIM-CO2-Simulation/4d-simulation/SKILL.md",
+      "computedHash": "14d902965be6178c06ee086a8a16248258627c1ba60d720ed7ae65ece932807f"
+    },
+    "5000-projects-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Kaggle-Notebooks/5000-projects-analysis/SKILL.md",
+      "computedHash": "320c2cb4f87e7936aab386d3155f15e33efc1befc213b712fcc9f168bfd21748"
+    },
+    "ai-act-compliance": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/ai-act-compliance/SKILL.md",
+      "computedHash": "608f9baff8a3501f3a1f6302be62601e28986bfa78fbacc6e8a5d4d9bf5f54e1"
+    },
+    "ai-agent-orchestration": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/ai-agent-orchestration/SKILL.md",
+      "computedHash": "04d4f3a1be26262f0e20002e31f3bf47088306d3ca960b263091afc99c87d50c"
+    },
+    "airflow-dag": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.2-ETL-Automation/airflow-dag/SKILL.md",
+      "computedHash": "91cfdec47a787103e6498991f75c6a5da5cf414351a90cbfcdf9f8fae2fdccd8"
+    },
+    "as-built-documentation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Document-Control/as-built-documentation/SKILL.md",
+      "computedHash": "696332de979a507485a4891b21bbed2e9713d72e33114e41c3596ca7d8294395"
+    },
+    "as-built-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Closeout/as-built-tracker/SKILL.md",
+      "computedHash": "cf5fbbd4c784375eb357e8be33b5156ee861f719a083eab0f6a8dcb8708fee18"
+    },
+    "auto-estimate-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.2-QTO-Auto-Estimates/auto-estimate-generator/SKILL.md",
+      "computedHash": "18db88a37f7bfb8f9b4962dfe8ba4e3dfc31d7e8f23918d7681a4efae20659d0"
+    },
+    "batch-cad-converter": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/batch-cad-converter/SKILL.md",
+      "computedHash": "32045376f1314da4b0ba6711e674dc9500fbca366f4ea0d51317347580bab39e"
+    },
+    "bid-analysis-comparator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Procurement/bid-analysis-comparator/SKILL.md",
+      "computedHash": "eb553062cd7e7b9ec5694c9e792d6c174813db0c93528fe9b74da1c979d3b3c1"
+    },
+    "big-data-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.4-Vector-Search-BigData/big-data-analysis/SKILL.md",
+      "computedHash": "8cb4730094e3d0e5cc0336dfa6296fbe45321883779ad02758417fc799a83edc"
+    },
+    "bim-clash-detection": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Analysis/bim-clash-detection/SKILL.md",
+      "computedHash": "cf1dddb8a64d2734712b745aed7c54f296a74f6d788fe346791838dceaba2b6e"
+    },
+    "bim-classification-ai": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Analysis/bim-classification-ai/SKILL.md",
+      "computedHash": "38fd226a6e19c4b1d093524c798e237e4b3f78561c7703240365385a269af5b2"
+    },
+    "bim-consistency-checker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.3-BIM-Validation-Pipeline/bim-consistency-checker/SKILL.md",
+      "computedHash": "ddc047ddaaadd1f15465d2b9e6d7c28f90773c46807fca5a8a5fd1a23b520caf"
+    },
+    "bim-cost-estimation-cwicr": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/bim-cost-estimation-cwicr/SKILL.md",
+      "computedHash": "f75dc360d4e11cca62c81804cc0b4fd9770bdc23601d625ae02c8098864e02d1"
+    },
+    "bim-qto": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.2-QTO-Auto-Estimates/bim-qto/SKILL.md",
+      "computedHash": "bac1764445033b9c985ffcd3ed065cb1bfdd5782144b02d0f1e240f8cee9a4bd"
+    },
+    "bim-to-schedule-4d": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Schedule-Integration/bim-to-schedule-4d/SKILL.md",
+      "computedHash": "c9d2c1512e5e37469b2dc2347e3297750d7c845733b3a503891d6fc95e6ca08c"
+    },
+    "bim-validation-pipeline": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.3-BIM-Validation-Pipeline/bim-validation-pipeline/SKILL.md",
+      "computedHash": "532e5c1446226585bb1a202bf8170a2af04f95de81da474436385868f0e29331"
+    },
+    "bim-validation-report": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Analysis/bim-validation-report/SKILL.md",
+      "computedHash": "95c3fa0b6edd5d17a625f7acccf72169aba10bcb035309b5f0a54925057710b4"
+    },
+    "bim-visual-programming-automation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/bim-visual-programming-automation/SKILL.md",
+      "computedHash": "fed1609f1d505d97047b2a0cd5230e4947a1abf9dbdab0bda406bc063807900a"
+    },
+    "budget-variance-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/budget-variance-analyzer/SKILL.md",
+      "computedHash": "cd2698719d6b06b17f2ec195472969dcfec8c69227094407346744205a2ae69f"
+    },
+    "cad-to-data": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.4-PDF-CAD-to-Data/cad-to-data/SKILL.md",
+      "computedHash": "0a994be26fb0fd26f941fe6e6148f5ba4ed5aec715b06a9afbd23b04ac1649a5"
+    },
+    "capacity-planning": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/capacity-planning/SKILL.md",
+      "computedHash": "c0a5f695cfc74af2ddf9aaf791c7bb76219b9fce10cb0b9e981f2f9ceaf00774"
+    },
+    "carbon-calculator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Sustainability/carbon-calculator/SKILL.md",
+      "computedHash": "66b67261475b0d842a1ceac510c29b18c9a1c9d0feaee25a58ed937e08ebeb57"
+    },
+    "cash-flow-forecaster": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/cash-flow-forecaster/SKILL.md",
+      "computedHash": "0dcc863200c5d245ee57a280cda7fe84ae8a09f34abd2ea7563d49ea4f1c2e0d"
+    },
+    "cashflow-forecaster": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Financial-Management/cashflow-forecaster/SKILL.md",
+      "computedHash": "c61d2c299c42ee85c4c89752b9be0f7801b7ce22e5f65963e2ff76af78170af9"
+    },
+    "change-order-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/change-order-analysis/SKILL.md",
+      "computedHash": "ea396f87f338acb4b6b81b4c0784dcad1d8d4d3e3581e9d0220a4a036e86b76c"
+    },
+    "change-order-manager": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Contract-Legal/change-order-manager/SKILL.md",
+      "computedHash": "265e020f78d982d20040963f325fddd0982a9fe90a97b6003fb874d9625bd894"
+    },
+    "change-order-processor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/change-order-processor/SKILL.md",
+      "computedHash": "2402d3a669983d9d48ce879a291df812cef46653c4592ce0f6dc2694c385aef6"
+    },
+    "claims-documentation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Contract-Legal/claims-documentation/SKILL.md",
+      "computedHash": "2e32e08442dff2b3f9aa95b5ac7e9df7341538c4b2243af949a6975a29dc243c"
+    },
+    "clash-detection-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/clash-detection-analysis/SKILL.md",
+      "computedHash": "b83c559f9043f8e9d449981f76e0fc8609ed70eddafdee5feeec1e810b0c8d9a"
+    },
+    "clash-resolution-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.3-BIM-Validation-Pipeline/clash-resolution-analyzer/SKILL.md",
+      "computedHash": "501c2f1cec89c130935289d9675f3f3b032a19cca9220318d564453304ef78f2"
+    },
+    "co2-carbon-footprint": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Analysis/co2-carbon-footprint/SKILL.md",
+      "computedHash": "c12b8e9bf41cac2a2c7b3145819f5d2c22974ef62deacc394cde11e6dba9c422"
+    },
+    "co2-estimation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.3-4D-BIM-CO2-Simulation/co2-estimation/SKILL.md",
+      "computedHash": "f33135bbc3a6671579f82a5f54e206627aab123de80e7c8cf5b515b15737c051"
+    },
+    "compliance-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Safety-Quality/compliance-tracker/SKILL.md",
+      "computedHash": "212c5b7f07570b64964bd92e7dbe915a1a5c3f97a4ce81649dddcfeadd7378ac"
+    },
+    "continuous-learning-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Quality-Assurance/continuous-learning/SKILL.md",
+      "computedHash": "1644f8c50e7ee452b0dbb02de70408bd4389ce3c78fba52f88560ba27bc54f8e"
+    },
+    "contract-clause-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Document-Control/contract-clause-analyzer/SKILL.md",
+      "computedHash": "bb041325538c45cf311e88a780fb37d99deae5a0c709fd56ec4cc29bec34405e"
+    },
+    "contract-clause-extractor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Contract-Legal/contract-clause-extractor/SKILL.md",
+      "computedHash": "ed12f438f1d5ba151a8fb2cfa3de5fa5e545f7182360920ad14a4ddd6e30387e"
+    },
+    "contractor-matching-ai": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/contractor-matching-ai/SKILL.md",
+      "computedHash": "402cd8899d59af4f581e156345c0197c106e86b2c99a44e3753149d13fbe9c57"
+    },
+    "cost-estimation-resource": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.1-Cost-Estimation/cost-estimation-resource/SKILL.md",
+      "computedHash": "c8c5a8c4c2d459e5b22cbae8983d70bbad2ccc3cf89230975bc3633a30732ded"
+    },
+    "cost-prediction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.5-ML-Cost-Prediction/cost-prediction/SKILL.md",
+      "computedHash": "790f903fb5e7856bb08f1911d1c6a98d1775e9a9f6833df82c7dfecf4b57c15e"
+    },
+    "critical-path-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Schedule-Management/critical-path-analyzer/SKILL.md",
+      "computedHash": "88d07b5fe2db4c7e521a427706c42d5351dcd3b8654e7a9fde696289f018b953"
+    },
+    "csv-handler": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.1-Data-Types-Classification/csv-handler/SKILL.md",
+      "computedHash": "909c4221f40cdcd2a212de74baf2971201b4d864953fa228acb2a422938bcd75"
+    },
+    "cwicr-assembly-builder": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-assembly-builder/SKILL.md",
+      "computedHash": "6c005da222799160cbda36e729ce40ce6209f58c74f5c647d98eda2cb6d0d909"
+    },
+    "cwicr-bid-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-bid-analyzer/SKILL.md",
+      "computedHash": "e3cac4fd5f0f424547c892b120fce8830b267f0b5c24ee0d12328f82d15bcad1"
+    },
+    "cwicr-change-order": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-change-order/SKILL.md",
+      "computedHash": "9758f032f4ae9a6006603a65a8904927d575f80eb6d6b235207c4192e11144d7"
+    },
+    "cwicr-comparison-tool": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-comparison-tool/SKILL.md",
+      "computedHash": "a762fafc9340d94f122cd4fe12ed74ad96a90de9a51a0376ab1b4d2d154372e7"
+    },
+    "cwicr-cost-calculator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-cost-calculator/SKILL.md",
+      "computedHash": "78ee990467fbbedc2d07cd2471430cb85a718355e7ca47c74aa8bac2d1cc7ea3"
+    },
+    "cwicr-crew-optimizer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-crew-optimizer/SKILL.md",
+      "computedHash": "f8629f962b32e2b6b09c80098a767e22f764acd9f02a9302d244cdb8c09b7de9"
+    },
+    "cwicr-data-loader": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-data-loader/SKILL.md",
+      "computedHash": "00058df63cfa94506071a708c1c8b01f16db61e561cfb1fe811f0a303cad10b6"
+    },
+    "cwicr-data-validator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-data-validator/SKILL.md",
+      "computedHash": "88a7a5b76687d3f3418e9865059ff40dcffdd31788d0c367bcb2b1bf54824f8b"
+    },
+    "cwicr-equipment-planner": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-equipment-planner/SKILL.md",
+      "computedHash": "f71bc65e72f31e85aaf4a8586f9a58ccb6ff734787dad09a59c80328aaf0809c"
+    },
+    "cwicr-escalation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-escalation/SKILL.md",
+      "computedHash": "4c8f962b03250e5efddc83ffde9372427ecb21d36e2f4f74fd46c0bf95ddbe5e"
+    },
+    "cwicr-historical-cost": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-historical-cost/SKILL.md",
+      "computedHash": "5b0abc9cc0a4a5e3d7cb33228abe97a6f31b23b88975fbecf0dae3cbeaca61a3"
+    },
+    "cwicr-labor-scheduler": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-labor-scheduler/SKILL.md",
+      "computedHash": "be1ee59a9aec4d275d7941ed894a4f171890f28a7619da3a768efdca8ae42c51"
+    },
+    "cwicr-location-factor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-location-factor/SKILL.md",
+      "computedHash": "8916b60bb4f5cb792b6b96cff2adced34b270d54cd99dcef30da8abe4179fd88"
+    },
+    "cwicr-material-procurement": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-material-procurement/SKILL.md",
+      "computedHash": "7ecad07330528c91e6649b3c9c06efa6b07824800be19e1e8c89ee870e3a9b11"
+    },
+    "cwicr-material-substitution": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-material-substitution/SKILL.md",
+      "computedHash": "bcb011c1ac099689851fb2c278ba861e337b011427cf6db43d74e36f2a07cee4"
+    },
+    "cwicr-multilingual": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-multilingual/SKILL.md",
+      "computedHash": "ce2e5687b8a76858c7d0a113d596ae3aa632457f3a0c11e4a3eabc7f41ef3f88"
+    },
+    "cwicr-overhead-markup": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-overhead-markup/SKILL.md",
+      "computedHash": "7af54f899d2e4c41003cc3ee02f6befbf8869a8262d2e3055327559696f64155"
+    },
+    "cwicr-productivity-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-productivity-tracker/SKILL.md",
+      "computedHash": "975c4198cade39f3c9a452f841f14192290e3e9ba552371a10dc13f7d2f30b3e"
+    },
+    "cwicr-quantity-matcher": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-quantity-matcher/SKILL.md",
+      "computedHash": "bfcacd6ed8facaf767be76eddcd350abf9ebac53f4525d4f5e44e258e1ae26f9"
+    },
+    "cwicr-rate-updater": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-rate-updater/SKILL.md",
+      "computedHash": "c891fb4108588cf4f14e755b6ded8c28fd34132e390372a01d35d81e1fb32995"
+    },
+    "cwicr-report-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-report-generator/SKILL.md",
+      "computedHash": "499a264930609f0ad482198c2e9539f0cd4eb728f6ccfa158999729a27f1c575"
+    },
+    "cwicr-resource-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-resource-analyzer/SKILL.md",
+      "computedHash": "b6a5040d21938689f9db06aeb4bc795a441f22867e4feb6549f20f23969281f2"
+    },
+    "cwicr-risk-calculator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-risk-calculator/SKILL.md",
+      "computedHash": "4b5550ede7f192425a9939bfc0882006e915240a968eaeafffa7d0e897dccac6"
+    },
+    "cwicr-schedule-integrator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-schedule-integrator/SKILL.md",
+      "computedHash": "143fd33e6824eb2f61419a5be43effdcb9c4bda1b317516ab57c98e3b8f9a488"
+    },
+    "cwicr-subcontractor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-subcontractor/SKILL.md",
+      "computedHash": "2b951001e2860613c95fb0fbfd0e75b90fa21205ee980a3810cfe9a5b33c0cc7"
+    },
+    "cwicr-takeoff-helper": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-takeoff-helper/SKILL.md",
+      "computedHash": "cd0c74b3026344fd435a29790402e16f2ef22bbb58cfa666c24f970c1e3b0516"
+    },
+    "cwicr-unit-converter": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-unit-converter/SKILL.md",
+      "computedHash": "dada428fc65d7b3a75f5cad936f02639a860ed519f45e1b2dd83108738fc2d16"
+    },
+    "cwicr-value-engineering": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-value-engineering/SKILL.md",
+      "computedHash": "a012c03ab510e00508d6e8f4ea1f84ebeca3e3c81cb8c327bf01c4f575ba562c"
+    },
+    "cwicr-waste-calculator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-waste-calculator/SKILL.md",
+      "computedHash": "60a1bb70cef9a88a35e94b28d1e5e43112a35bce5513d3dd8c279e1e877e2903"
+    },
+    "cwicr-work-breakdown": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/cwicr-work-breakdown/SKILL.md",
+      "computedHash": "4802b41bd06b3ff2e9de1a4e13f91c16198698db8efb95d8be7735e926dd64f1"
+    },
+    "daily-progress-report": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Analytics/daily-progress-report/SKILL.md",
+      "computedHash": "e7631ea945a992aad7603967a2f29e8307233ba8d5f36dbc88d802cd61a7e646"
+    },
+    "daily-report-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Field-Operations/daily-report-generator/SKILL.md",
+      "computedHash": "55e9393d66e7434cdf53b80e5878a5dda97c0923dfae9b27ada10d0527e41a70"
+    },
+    "data-anomaly-detector": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.6-Data-Quality-Validation/data-anomaly-detector/SKILL.md",
+      "computedHash": "bc9cbd146429fe657a1de1a0c5f5f588a2a37e6f1c55abaf910377cf74a0810d"
+    },
+    "data-evolution-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/1.1-Data-Evolution/data-evolution-analysis/SKILL.md",
+      "computedHash": "2a15a6d23a3feff5d91a9e1ec4650ccd0efd39aa3e8eada67a5d4c1024e0c9cf"
+    },
+    "data-lineage-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.6-Data-Quality-Validation/data-lineage-tracker/SKILL.md",
+      "computedHash": "4f6dc5e62b9caa2a05e4e94d95431db47d22a52841ed6930f1edd88f3d8869ac"
+    },
+    "data-model-designer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.5-Data-Modeling-Standards/data-model-designer/SKILL.md",
+      "computedHash": "e2d57d2764f1d30e289c2d9cf6ded97724417678de1ed39b4b3e99e916d92ff0"
+    },
+    "data-profiler": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.1-Data-Types-Classification/data-profiler/SKILL.md",
+      "computedHash": "34111a4457b5cded1b3d7a4d8bba44ae7737cc82241cd70cdf01e15fa0ea15cf"
+    },
+    "data-quality-check": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.6-Data-Quality-Validation/data-quality-check/SKILL.md",
+      "computedHash": "a137e7b464d9e6990f724f653f1fe5b5adec979b28d3f25e004549e497048df0"
+    },
+    "data-silo-detection": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/1.2-Data-Silos-Integration/data-silo-detection/SKILL.md",
+      "computedHash": "acd33c7130af2df02fd6ac55937d7d5d92ccf9817f20957017fe10ddc0bded6b"
+    },
+    "data-source-audit": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/1.2-Data-Silos-Integration/data-source-audit/SKILL.md",
+      "computedHash": "e3a9b70543841fdf9931d0a2365f573a7f6752e1583f41a56a861334a479608d"
+    },
+    "data-type-classifier": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.1-Data-Types-Classification/data-type-classifier/SKILL.md",
+      "computedHash": "bbe1bf487be477ca7d72e3d909486d456d452f8f33a91163f46d5e2dc4ff48d3"
+    },
+    "data-visualization": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.1-Analytics-KPI-Dashboard/data-visualization/SKILL.md",
+      "computedHash": "ff437c25143ed5975bbe171f6dded47f5b832e19c3fcad8cb89490f75c241816"
+    },
+    "decision-support": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.1-Analytics-KPI-Dashboard/decision-support/SKILL.md",
+      "computedHash": "7a768e26a50775d0f9cd59a53188f85dc49c9d8ed8609d91f16dce51ae9a69e0"
+    },
+    "defect-detection-ai": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/defect-detection-ai/SKILL.md",
+      "computedHash": "ba0cb16980dbcd1d67675e207c329863d2688d227770b2419ff949b55a4fa551"
+    },
+    "delay-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Schedule-Optimization/delay-analysis/SKILL.md",
+      "computedHash": "6a45f41dbc1a6717c3cb918cbd0f43f7a2214bef5fabbb27e2634f38dc0f1eb2"
+    },
+    "df-merger": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.3-Pandas-LLM-Analysis/df-merger/SKILL.md",
+      "computedHash": "bc50c15facc2f2f89ac59841621133a8e0876feeca1ae37a604acdbfe2b13059"
+    },
+    "dgn-to-excel": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/dgn-to-excel/SKILL.md",
+      "computedHash": "dc50049102f062f3497c68b86b458c28f69771f92f46a58b17385933f8432aa5"
+    },
+    "digital-maturity-assessment": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/5.1-Digital-Maturity-Strategy/digital-maturity-assessment/SKILL.md",
+      "computedHash": "ef535eb2906224144593e7fe351e5d96cf72b118f094ee85b4b2fca35b504785"
+    },
+    "digital-twin-sync": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/digital-twin-sync/SKILL.md",
+      "computedHash": "43bb9de83193a598b57fa7008f94c35677f55166292f12bf9b7dc767da58b010"
+    },
+    "document-classification-nlp": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/document-classification-nlp/SKILL.md",
+      "computedHash": "f75c2022c6db692131ae4552446f3d210be188b0b07d7ec108ae366d779c9ed8"
+    },
+    "docx-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Document-Generation/docx-construction/SKILL.md",
+      "computedHash": "2aa7e9620f77f8c28f48c8ac768f53b5620b676ddeb655ea2779f051e02e2e12"
+    },
+    "drawing-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.4-PDF-CAD-to-Data/drawing-analyzer/SKILL.md",
+      "computedHash": "bdb43042dc2746b1f734c1cf6444b2cb7ac45301e5cfa06ebcc3bb390667d41e"
+    },
+    "drone-site-survey": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/drone-site-survey/SKILL.md",
+      "computedHash": "cfb6459bebcd769f0e02dc34774dfeee4eee3c21fc594b161b02de02d37a9b4b"
+    },
+    "duration-prediction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.5-ML-Cost-Prediction/duration-prediction/SKILL.md",
+      "computedHash": "861b7b81a3a6a2eaa4b0f41e30c1323e3c36ca271b10afa32058f95b1fd962fe"
+    },
+    "dwg-to-excel": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/dwg-to-excel/SKILL.md",
+      "computedHash": "444e52a3674bd990e7155dd60c0fde8d673897b415f159e84c01f1552b959296"
+    },
+    "email-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Document-Generation/email-construction/SKILL.md",
+      "computedHash": "ff853dc9b32725c3bc13ccd0815bfd7b143215afe567b11a81d50d2f70c709e1"
+    },
+    "embodied-carbon-esg": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/embodied-carbon-esg/SKILL.md",
+      "computedHash": "9ce83ef379c376424f48d32a6debca87206b0758786c847fb00f0c7655933650"
+    },
+    "energy-simulation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/energy-simulation/SKILL.md",
+      "computedHash": "90b847aed0176ab83c8510e58b223000bd42fe4664e1e3c8d061c09eb1a3c9fb"
+    },
+    "enterprise-risk-aggregator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/enterprise-risk-aggregator/SKILL.md",
+      "computedHash": "837a6ea4888aff1c747da4b983694aa2d6a29ca0c81e45b52b9c45ee80727e9f"
+    },
+    "environmental-monitoring": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/environmental-monitoring/SKILL.md",
+      "computedHash": "d7f8457a94538e2dbb746452dba167ddf330607702aab9c56dcf844cbd8d0d04"
+    },
+    "equipment-fleet-manager": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Resource-Management/equipment-fleet-manager/SKILL.md",
+      "computedHash": "ff2a7123781d4852491da58a7d4a45872427d0a00c0e49763ff1fa9d420c78fc"
+    },
+    "equipment-telematics": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/equipment-telematics/SKILL.md",
+      "computedHash": "8f8f85f3270c36efa69e7977126ceda8dbd6b75705b7d6dbb021e9eb863db039"
+    },
+    "erp-data-extractor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.4-ERP-Integration/erp-data-extractor/SKILL.md",
+      "computedHash": "4a1f4e01a48c73da4790918ed838ec446546729b2e4ae191d43d766fb3aad75d"
+    },
+    "erp-integration-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/1.2-Data-Silos-Integration/erp-integration-analysis/SKILL.md",
+      "computedHash": "d46d7912427256ffdffa2498f4b2e7dd9ad50b997b34c110d7db27c8931c8e28"
+    },
+    "estimate-builder": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.1-Cost-Estimation/estimate-builder/SKILL.md",
+      "computedHash": "34c3e4448638fe7bdb615222f5b53831eadb76e130981e9eba861d6e4e4f78bf"
+    },
+    "etl-pipeline": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.2-ETL-Automation/etl-pipeline/SKILL.md",
+      "computedHash": "4bda1628666e3a57212063ed7423da7167e83f376c99ce59c97577c2e309ce39"
+    },
+    "excel-to-bim": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/excel-to-bim/SKILL.md",
+      "computedHash": "7747ec959581b47a4bb9291e7a3cdc5d83bc736955cdb3fd371d206c5039c935"
+    },
+    "excel-to-rvt": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/excel-to-rvt/SKILL.md",
+      "computedHash": "f6076cddd6274e714fac71d935bbd4e8a9a4931aa1910527dadf8729a46c020c"
+    },
+    "few-shot-examples": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Prompt-Engineering/few-shot-examples/SKILL.md",
+      "computedHash": "ab0b12973a3f710a53bc0fa3a7ec9582f757fab05db2fe53f185f04ac84b159c"
+    },
+    "gantt-chart": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.3-4D-BIM-CO2-Simulation/gantt-chart/SKILL.md",
+      "computedHash": "134bc5a28bf1ee49a779532cccea6822e10c03076c14103c9ac6a257d67665d7"
+    },
+    "generative-ai-design": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/generative-ai-design/SKILL.md",
+      "computedHash": "ab2a8e6efb9c3c63fe6c7fac97ff3a6d714e7e0f2492a564aa0b4670d985c956"
+    },
+    "historical-cost-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.1-Cost-Estimation/historical-cost-analyzer/SKILL.md",
+      "computedHash": "d967b6030fb5975ac5858e13a9c986b05c38ca881d0cd820b5d4017e4d16a0d5"
+    },
+    "historical-data-manager": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/1.1-Data-Evolution/historical-data-manager/SKILL.md",
+      "computedHash": "e1d0a49a244646bbfcee2cdec6e8f46144b075b5ad898328a738989fbae3a128"
+    },
+    "ids-checker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.3-BIM-Validation-Pipeline/ids-checker/SKILL.md",
+      "computedHash": "568702f9f921c5393e2c4248207c443aace054f359fa5c257cfde8dd403c0a4d"
+    },
+    "ifc-data-extraction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/ifc-data-extraction/SKILL.md",
+      "computedHash": "9c75e4ac323235290d0c1fb969183d2a85c9deca8b8c54e36f422d9af7d8c4c5"
+    },
+    "ifc-qto-extraction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Analysis/ifc-qto-extraction/SKILL.md",
+      "computedHash": "bad41683e6f2911859d0ad96894896850f6a10fa2d767a594494ec79e65c5f2e"
+    },
+    "ifc-to-excel": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/ifc-to-excel/SKILL.md",
+      "computedHash": "4efbf6ee90609ecaf71c16e63d1b5942056f164be9f1a67c2e5c6c688e020b97"
+    },
+    "image-to-data": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.4-PDF-CAD-to-Data/image-to-data/SKILL.md",
+      "computedHash": "96c5cb5d6888eb72c0525ecebaa53b0da2133b0058e41555b1e700958c94f401"
+    },
+    "impeccable": {
+      "source": "pbakaus/impeccable",
+      "ref": "main",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/impeccable/SKILL.md",
+      "computedHash": "f7c4e03bef91154273d2dc3b62aff829cf4ab1b1f16e6b98c8c6a31be4405318"
+    },
+    "incident-reporting": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Safety-Quality/incident-reporting/SKILL.md",
+      "computedHash": "aedd386d4358226e72d323f4b15035bb0dac0bb0c19d2b10def556a6bbbd2240"
+    },
+    "input-validation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Data-Validation/input-validation/SKILL.md",
+      "computedHash": "a6990684d6c31202ea5bcc3e1abdaa0a4dda352bf4bbb6cb51e0a999fb382476"
+    },
+    "interoperability-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.5-Interoperability/interoperability-analyzer/SKILL.md",
+      "computedHash": "294d1137bc6e0db82d8630b8855cb1e192134b10707c4e5bc5c1abe234fdb53b"
+    },
+    "json-parser": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.1-Data-Types-Classification/json-parser/SKILL.md",
+      "computedHash": "c97e6b271b6d465fd5bbf8c6e209dfc68fd2cce1f8e41c27dd5b704d095a8cb8"
+    },
+    "kpi-dashboard": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.1-Analytics-KPI-Dashboard/kpi-dashboard/SKILL.md",
+      "computedHash": "8017e6575fd9f129ab07839f6ff296ddb453c03992140d347192072e6a9a6833"
+    },
+    "labor-allocation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Resource-Management/labor-allocation/SKILL.md",
+      "computedHash": "21176de76f965e1c74601b67e96ee6befb4bd10e380415f0dac3aa090f645d61"
+    },
+    "labor-productivity-analytics": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/labor-productivity-analytics/SKILL.md",
+      "computedHash": "77fcca6ed1e503318525e388dbb7d420f060adb46bae8c4f82b8270b626ed2fe"
+    },
+    "labor-productivity-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Resource-Management/labor-productivity-analyzer/SKILL.md",
+      "computedHash": "08c4ded198a0059ddac3239cb541d65be80bc65eb5f92e966ce89716b2e1cbfb"
+    },
+    "labor-rate": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.1-Cost-Estimation/labor-rate/SKILL.md",
+      "computedHash": "6a519361521dc00fa3898c1a375752123a54d8d6f5dd2c3686a6373a80e0ad4a"
+    },
+    "lien-waiver-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Contract-Legal/lien-waiver-tracker/SKILL.md",
+      "computedHash": "4d29d1e0798bb05b850c45a6954c89c4e54d9b6270ea5f453946c2a07628cfb6"
+    },
+    "lifecycle-carbon-calculator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.3-4D-BIM-CO2-Simulation/lifecycle-carbon-calculator/SKILL.md",
+      "computedHash": "cbcaa39772307aefb9eede92a7cdcf923563a3dda7937775e16886d0153411a5"
+    },
+    "llm-data-automation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.3-Pandas-LLM-Analysis/llm-data-automation/SKILL.md",
+      "computedHash": "e3c591d57cfb2753b0f2a56aa7a0e585a47f98561e6f47e572d8ea9b9e4ce814"
+    },
+    "llm-document-extraction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/AI-Agents/llm-document-extraction/SKILL.md",
+      "computedHash": "e3d9a0030577728fc2ba23af2ca7c40a2c15de46ec8b730c7eeb5c2de4870982"
+    },
+    "look-ahead-scheduler": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Schedule-Optimization/look-ahead-scheduler/SKILL.md",
+      "computedHash": "265e5dd8913dc220848c1cb52cd44f6da79616b5ef4003d0f46bfbb4a8a132c2"
+    },
+    "material-delivery-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/material-delivery-tracker/SKILL.md",
+      "computedHash": "1b2a89c5253db3b801e01fe2e3550fa578d932be306e9948361cd348041505fc"
+    },
+    "material-passports-circular": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/material-passports-circular/SKILL.md",
+      "computedHash": "3e1775171501b8c32301d8199777e0c4d7c79250bb4219c0ce528a9faeece21b"
+    },
+    "material-procurement-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Procurement/material-procurement-tracker/SKILL.md",
+      "computedHash": "360a6d51030048f706181e3ad673c2a6173ac2e271b231d94e6c2bd3e7e23b30"
+    },
+    "material-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Procurement/material-tracker/SKILL.md",
+      "computedHash": "0b207ae61f51f1b37835ee11151149bb3370b70017396d9d986bc7063893532b"
+    },
+    "material-tracking-iot": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/material-tracking-iot/SKILL.md",
+      "computedHash": "f7affdb698f81f7c0f3302f7d0fbc5e38586a5269bc9ab502cdd064807c4e3ab"
+    },
+    "meeting-minutes-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Document-Control/meeting-minutes-generator/SKILL.md",
+      "computedHash": "cf18c908436bbdcc193d2dc5268097ee5dc4134b84a29d0a24c9c9eda2ad5700"
+    },
+    "ml-model-builder": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.5-ML-Cost-Prediction/ml-model-builder/SKILL.md",
+      "computedHash": "d407793374b1791d3540a55967399742238d28b7e47272f81d2a308cc16a4a33"
+    },
+    "ml-model-retrainer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.5-ML-Cost-Prediction/ml-model-retrainer/SKILL.md",
+      "computedHash": "0ffc4495053be0cdb1aa5a1cffb27220f0f6552637c1372885fbd82a2822c27f"
+    },
+    "multi-agent-estimation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/AI-Agents/multi-agent-estimation/SKILL.md",
+      "computedHash": "1d000ceb14e5a291a0843be287590ae57db6a820c49c48039bda5ddec11785ea"
+    },
+    "n8n-cost-estimation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Automation-Workflows/n8n-cost-estimation/SKILL.md",
+      "computedHash": "94559abded8258fbc8d1e5449042f181f620b437fcdf5195e8fa1681190d5ebe"
+    },
+    "n8n-daily-report": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Automation-Workflows/n8n-daily-report/SKILL.md",
+      "computedHash": "d3429141ae26f061203a345bb1a8db4503cd9fb46618c5866cdfe70cc09e02ba"
+    },
+    "n8n-photo-report": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Automation-Workflows/n8n-photo-report/SKILL.md",
+      "computedHash": "e5ce64b6aabf6c654dc1f88773d78d55a4f39685e874b14d54c7928485d76ec8"
+    },
+    "n8n-project-management": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Automation-Workflows/n8n-project-management/SKILL.md",
+      "computedHash": "372e9329d9aa7bb85db2ffc6fee3424ece8b322281d310a1aeccb92af1bb07f6"
+    },
+    "n8n-pto-pipeline": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Automation-Workflows/n8n-pto-pipeline/SKILL.md",
+      "computedHash": "8a19f0d9e804af223851f13d664bfb9f81b491fb119b323f7312070082c4e8b6"
+    },
+    "n8n-workflow-automation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/n8n-workflow-automation/SKILL.md",
+      "computedHash": "0435e5253cbdf52427f84cf56ad3c9fb0a8bbc56f87a04e7bfb8b1db4a3582a8"
+    },
+    "nobim-image-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Visualization/nobim-image-generator/SKILL.md",
+      "computedHash": "492c1cb6088dfe2be359b147c52c1e84793e52aaa410429b2e17d9caf30106ea"
+    },
+    "oce-bim-takeoff": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-bim-takeoff/SKILL.md",
+      "computedHash": "1d4e531004f0694053070f3ff2ac3f131cea4716156045b80c8e6bb64d2cef3d"
+    },
+    "oce-cost-browser": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-cost-browser/SKILL.md",
+      "computedHash": "b6d9ef8e00abd8a9095d8e6e57cf6d239c07c4ed1445a95225972ac7e123b0fc"
+    },
+    "oce-estimate-boq": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-estimate-boq/SKILL.md",
+      "computedHash": "286abec60f81d2c00f443fab6bfc9556195049c8f5fb14f77b53c0098dd74e64"
+    },
+    "oce-field-ops": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-field-ops/SKILL.md",
+      "computedHash": "af0ecb273f09f4e28168a34725d78d54378e2d653ef4e47e744c23d29ca97ee2"
+    },
+    "oce-geo-coordination": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-geo-coordination/SKILL.md",
+      "computedHash": "caac1071c8bf0c6d7c5fea15fb0624d86011e3ee2b7487e003a7080c40db6941"
+    },
+    "oce-load-cost-bases": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-load-cost-bases/SKILL.md",
+      "computedHash": "9cc00db8ab898a18f4696df92d1aaecf1bfb056668050dcb95035283a0d1745a"
+    },
+    "oce-mcp-integration": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-mcp-integration/SKILL.md",
+      "computedHash": "74b3f99bc79a7fad31ecbe3f693d0b700913ea0ea4dc123f61e7fc3cbe8949ab"
+    },
+    "oce-platform-overview": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-platform-overview/SKILL.md",
+      "computedHash": "bf231ec3702cdcb826d7fce713a65b77e799618fee5572fc44752f10bc121efc"
+    },
+    "oce-property-dev": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-property-dev/SKILL.md",
+      "computedHash": "63aeb4d32da3598203fbfaaeeac7534cf972b2cdb2d714ef9553452355b2d8ce"
+    },
+    "oce-scheduling-4d5d": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-scheduling-4d5d/SKILL.md",
+      "computedHash": "593de2217cf2a69fb55cec35a3d710c67c2f3c81a106e212a9bf5604e742ae9a"
+    },
+    "oce-tendering": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-tendering/SKILL.md",
+      "computedHash": "0cb57d7544f7b35da6233c6db657c91431569f293d9137ba4838755ad66b5c8e"
+    },
+    "oce-validation-engine": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "6_OpenConstructionERP/oce-validation-engine/SKILL.md",
+      "computedHash": "9e34e1c69be9799dcdc17b2f204702998e8dcb5e1cfae1f504f4f1a8e57ac2ec"
+    },
+    "ontology-mapper": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.2-Open-Data-Standards/ontology-mapper/SKILL.md",
+      "computedHash": "32974953789058557a286cc2da39eacaa23f6086890a4a11bcf4badee115644f"
+    },
+    "open-construction-estimate": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/open-construction-estimate/SKILL.md",
+      "computedHash": "6099e9904f0904747ff6094e3ccd2eaa7f4178fb58c52003c5aa9f8b6e396bab"
+    },
+    "open-data-integrator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.2-Open-Data-Standards/open-data-integrator/SKILL.md",
+      "computedHash": "d045cc289fae421abbfffd3a88c97f062fef5a42fd492be5a13c26a6abb465d6"
+    },
+    "pandas-construction-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.3-Pandas-LLM-Analysis/pandas-construction-analysis/SKILL.md",
+      "computedHash": "b5371e5c5973ec11113ce34db3b42131f3997031f57bd38f533c0e75396ec8e4"
+    },
+    "parquet-converter": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.4-Vector-Search-BigData/parquet-converter/SKILL.md",
+      "computedHash": "dcd5b50a8a8f705bae1c12dd93dd9599b3c86b16cb5bcbd971b1e5289ff26fec"
+    },
+    "payment-application-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/payment-application-generator/SKILL.md",
+      "computedHash": "7209411ff01cef834efcc4e12358b415c38549ff31604816a64fbcb48839e6cb"
+    },
+    "payment-application-processor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Financial-Management/payment-application-processor/SKILL.md",
+      "computedHash": "e63a7c12aff11f2a871af7cd345733e63b9c2dbcadb1a0f4dd853f40b834d2af"
+    },
+    "pdf-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Document-Generation/pdf-construction/SKILL.md",
+      "computedHash": "217e367f98a7f28c8d4ac5b39a587049f7b30dc093e1756d42af6db7ed006d12"
+    },
+    "pdf-report-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.2-ETL-Automation/pdf-report-generator/SKILL.md",
+      "computedHash": "f001c76c5047c5e4f25a8a136db0244f3f9e9f544671f8abbc4f611f9f207852"
+    },
+    "pdf-to-structured": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.4-PDF-CAD-to-Data/pdf-to-structured/SKILL.md",
+      "computedHash": "44534fc7eaa7aa449518d627c27d0f507271f2fa36777444a0a952ba11dd632e"
+    },
+    "permit-tracking-automation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/permit-tracking-automation/SKILL.md",
+      "computedHash": "d9fa6ede545df823a0234752122ce19a77439a1190b71dbee6e7b817208f549c"
+    },
+    "portfolio-dashboard": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/portfolio-dashboard/SKILL.md",
+      "computedHash": "7924655b01755db8e55c428ea3a023023b90bee3daf23faf71a6a692b4dd1c19"
+    },
+    "pptx-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Document-Generation/pptx-construction/SKILL.md",
+      "computedHash": "fea6c23caaaa780f923e22322c5888694759d09ccefdd232d2d5a8d53f95e8dc"
+    },
+    "predictive-analytics-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.1-Analytics-KPI-Dashboard/predictive-analytics-construction/SKILL.md",
+      "computedHash": "690589933f9a52d308b9fb8ead28ecd847ca67e3017853659c4e1b60f45d0130"
+    },
+    "prefab-optimization": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/prefab-optimization/SKILL.md",
+      "computedHash": "8fe41a5524cadcec6f2779e2df37e69f4bc198de232bb0bc38b52572fd0b9657"
+    },
+    "price-api": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.2-Open-Data-Standards/price-api/SKILL.md",
+      "computedHash": "0a21dd80aa59706216e40d14e7e043e10df0d240f5454bff501f39238835313c"
+    },
+    "productivity-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Analytics/productivity-analyzer/SKILL.md",
+      "computedHash": "1602631b60f99e452e008a8c14ef25d4ba48893338d10402bd3419a3427f4430"
+    },
+    "progress-monitoring-cv": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/progress-monitoring-cv/SKILL.md",
+      "computedHash": "89706d7b7323fa9ef0f650368ae7f6eb08e68caa7686083324c20419d2f56c54"
+    },
+    "progress-photo-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/BIM-Analysis/progress-photo-analyzer/SKILL.md",
+      "computedHash": "f22f1506a6da707fdfbf0cc6f8a13c79315a1d40ac00d7a5a923000a88a85aa4"
+    },
+    "project-closeout-checklist": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Project-Closeout/project-closeout-checklist/SKILL.md",
+      "computedHash": "3dca107c42470f0b5f84d7b2d64b9a3403169bb55b02d1e32131425965d32333"
+    },
+    "project-kpi-dashboard": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Analytics/project-kpi-dashboard/SKILL.md",
+      "computedHash": "8700721ec2559d87fa6b19ea773adaa897d345f3e214c3ef32d5a000ff0b7899"
+    },
+    "prompt-templates": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Prompt-Engineering/prompt-templates/SKILL.md",
+      "computedHash": "8e5244cd9fe768736adb1c00c5ac006f399eeaf90e4f9df57aed650c40283d73"
+    },
+    "punch-list-manager": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Field-Operations/punch-list-manager/SKILL.md",
+      "computedHash": "edca155dddcaf9348238bef846187f606db2a41c35cfa5b38426d798e19d97e2"
+    },
+    "qto-report": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.2-QTO-Auto-Estimates/qto-report/SKILL.md",
+      "computedHash": "f4a0358a59ca5447c1d2310c2a45a9e2a952c7942535142ac29e71346ba334f3"
+    },
+    "quality-control-workflow": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Safety-Quality/quality-control-workflow/SKILL.md",
+      "computedHash": "915fc2072553187117b8cec4804fa29a1e9ad36407e51af485d5e81935f28b48"
+    },
+    "rag-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.3-Pandas-LLM-Analysis/rag-construction/SKILL.md",
+      "computedHash": "c73ecdc68d2227a3dbc51469e1b98ce23b3f78b4947095a0473019a978241aed"
+    },
+    "resource-allocation-optimizer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Schedule-Optimization/resource-allocation-optimizer/SKILL.md",
+      "computedHash": "cefb7eba9825f8e4980537d70dfedfb1c2c52b7ebff5f5c48cb9e31b978791e1"
+    },
+    "resource-leveler": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.3-4D-BIM-CO2-Simulation/resource-leveler/SKILL.md",
+      "computedHash": "939211e1a943a17659762171a10296c4a83aa2722cf8e17fc8ffe9efa35c6807"
+    },
+    "resource-pool-optimizer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/resource-pool-optimizer/SKILL.md",
+      "computedHash": "e1a968770a786d5a3dd0a07621c628477abb476e5295c3ba07c1abe2d47934bb"
+    },
+    "retention-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Financial-Management/retention-tracker/SKILL.md",
+      "computedHash": "f98ea36cbba0eb93b1232e03d709b495f5c7c7a153365379d4dc6079a0063d28"
+    },
+    "rfi-management": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Document-Control/rfi-management/SKILL.md",
+      "computedHash": "533956911d73052790cf2311ccc8d12bea4dfe3ed3a4a0bb32b17cbd7ff668f8"
+    },
+    "risk-assessment-ml": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/risk-assessment-ml/SKILL.md",
+      "computedHash": "c2ffca51917abe1fe5172a8517bdeea82ac66bbbaa218c1290450817af14f263"
+    },
+    "rvt-to-excel": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/rvt-to-excel/SKILL.md",
+      "computedHash": "cf5757afdc3450a110dc490a8d80272df6bf8fd47d284537a63796c19593367a"
+    },
+    "rvt-to-ifc": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CAD-Converters/rvt-to-ifc/SKILL.md",
+      "computedHash": "a8dec6ddf7b789c7d07f7c113ba19a048fa747f3a52880257a4f8908dfbd6911"
+    },
+    "safety-compliance-checker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/safety-compliance-checker/SKILL.md",
+      "computedHash": "27218abddab7c1e5df8bfe34f88f1e66222f2c68575fda6ef5b5e223031c3d40"
+    },
+    "safety-inspection": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Field-Operations/safety-inspection/SKILL.md",
+      "computedHash": "7a5c4ab590519e4d1e7a6e402b97c0555e7d432d5d7c065f3864dc3aaeb4749c"
+    },
+    "safety-inspection-checklist": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Safety-Quality/safety-inspection-checklist/SKILL.md",
+      "computedHash": "d23924829c671d49c43dc6fd421f7d7a40c7cdd6c5b2b09f8fe9af537249e299"
+    },
+    "scenario-planner": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.1-Analytics-KPI-Dashboard/scenario-planner/SKILL.md",
+      "computedHash": "abed9dfecdcd4a53bc65d28090dc7f9a1da9eb10aab746ce7063bc5b6c387fff"
+    },
+    "schedule-compression": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Schedule-Optimization/schedule-compression/SKILL.md",
+      "computedHash": "ac9b84f7041a0a2f345f23b94db0cd59b23a3b1c661ce0b9bd0a7eae8d2e00cf"
+    },
+    "schedule-cost-link": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Schedule-Integration/schedule-cost-link/SKILL.md",
+      "computedHash": "7ca243ca61a2a7b4c41ddb54fd295cbc81d0730b45a486bb21a8a0ad409a0032"
+    },
+    "schedule-delay-analyzer": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Schedule-Management/schedule-delay-analyzer/SKILL.md",
+      "computedHash": "449548dd00f28684146e5c024dd2be5c0e8075464f908678e59bafca7f1a22ac"
+    },
+    "schedule-forecaster": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.5-ML-Cost-Prediction/schedule-forecaster/SKILL.md",
+      "computedHash": "fb6576353c7fb189df9910d53ae6097c8c60392bfb75ed4fc3eb898356690740"
+    },
+    "schema-validation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Data-Validation/schema-validation/SKILL.md",
+      "computedHash": "e82f882860cce66e5092ff4d492d4213fbd00952e31e669d3e036291fe6ffa50"
+    },
+    "security-review-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Quality-Assurance/security-review-construction/SKILL.md",
+      "computedHash": "0fba00a23e517e914123baef411882ac2e7de1b24ba82c8b9630177e9d30d1a4"
+    },
+    "semantic-search-cwicr": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/CWICR-Database/semantic-search-cwicr/SKILL.md",
+      "computedHash": "8778f50af9eb9c0a0829798ff73b0734431ebbe2b1c934c9ecbc3a28492e84cb"
+    },
+    "sensor-data-aggregator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/sensor-data-aggregator/SKILL.md",
+      "computedHash": "bf7e73526befa57457948766c810fe46c58fdd078d2135a076d579809735d15a"
+    },
+    "site-logistics-optimization": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/site-logistics-optimization/SKILL.md",
+      "computedHash": "377228c47543742a3b21cb5aca20e83b74aac8a44d38aa5db94d0e5e9f627a0f"
+    },
+    "specification-extractor": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.4-PDF-CAD-to-Data/specification-extractor/SKILL.md",
+      "computedHash": "70903e62cf42bf69bd026f566f48116a6974639bfcd97726fcd4bce428f3dcba"
+    },
+    "sql-query-builder": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.1-Data-Types-Classification/sql-query-builder/SKILL.md",
+      "computedHash": "e7a4537fbd8d600ce726af821e91a3be827836fd34673ba4a0c6a5a004d84604"
+    },
+    "standards-compliance-checker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.5-Data-Modeling-Standards/standards-compliance-checker/SKILL.md",
+      "computedHash": "6159c332f16a36f58c9943addf5a19a133b7d0b7a0a45616ee6b12e1b374fd92"
+    },
+    "subcontractor-payment-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Cost-Management/subcontractor-payment-tracker/SKILL.md",
+      "computedHash": "d8cdaf80e9656329567e0dbc8d393a36d1b716bbe0ae93ccea08e1ae6555fe7e"
+    },
+    "subcontractor-prequalification": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Procurement/subcontractor-prequalification/SKILL.md",
+      "computedHash": "0c5c4a0cddfefa9c4ea8f7b0d3ad598b41be8e3a741c87732cc619162b6c5091"
+    },
+    "submittal-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Document-Control/submittal-tracker/SKILL.md",
+      "computedHash": "2e299f17ca5284858ff138094c88e3d567a2034b921f2eaf6a8e89b9f9363b4c"
+    },
+    "telegram-field-bot": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Field-Automation/telegram-field-bot/SKILL.md",
+      "computedHash": "0a30d34bd1cddeca13f5259256e4b3b8d91f6090732348cbb06742ad5f8e7309"
+    },
+    "toolbox-talk-generator": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Safety-Quality/toolbox-talk-generator/SKILL.md",
+      "computedHash": "b340e7712a67283f6a9632d2316d6fae29a7759e5bbb9e2ecb979a87bfa56d1d"
+    },
+    "uberization-readiness": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Open-Data-Transparency/uberization-readiness/SKILL.md",
+      "computedHash": "1c5d364bdd524517baadd6932036c01c5a10426d865f751ad6c5fbe44c66fd45"
+    },
+    "unit-price-database-manager": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/3.1-Cost-Estimation/unit-price-database-manager/SKILL.md",
+      "computedHash": "a591c170bea0f1930772f0566bcc83b6d6f6ff59e008cedbdfaec9f604c73032"
+    },
+    "validation-rules-builder": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.6-Data-Quality-Validation/validation-rules-builder/SKILL.md",
+      "computedHash": "2811e5c8a6535a3364918b5ab6dd53d96329125cb90d8b31d901cf7237252df9"
+    },
+    "vector-search": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.4-Vector-Search-BigData/vector-search/SKILL.md",
+      "computedHash": "56c3c8abd3e82ddc26e55492e47dfac0fedd957cc321a934c1e82c25588cd4ea"
+    },
+    "verification-loop-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Quality-Assurance/verification-loop-construction/SKILL.md",
+      "computedHash": "a78f7129ea3010cd60f6f9bfa4b61ea294a8d731407139873cdfefdda39dd223"
+    },
+    "voice-to-report": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "3_DDC_Insights/Field-Automation/voice-to-report/SKILL.md",
+      "computedHash": "d7f07e2ad46e206b94523feeb28ec9e3147b968b23427db588074db79bd6a224"
+    },
+    "warranty-tracker": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Closeout/warranty-tracker/SKILL.md",
+      "computedHash": "530af1ab8ca15571890d0c796f2f53b5aeaebb20f918d22267be04c0561e6a73"
+    },
+    "weather-api": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.2-Open-Data-Standards/weather-api/SKILL.md",
+      "computedHash": "79971cddc75d02dc621fc2171de222bb894ce622366b6379775f50c78878885c"
+    },
+    "weather-impact-analysis": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "5_DDC_Innovative/weather-impact-analysis/SKILL.md",
+      "computedHash": "6d5cb5a713912e803708708bb981248f6f4cd969258f4dcf0b64b9123f85933b"
+    },
+    "weather-impact-scheduler": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "1_DDC_Toolkit/Schedule-Integration/weather-impact-scheduler/SKILL.md",
+      "computedHash": "340a049303b337a84478e8ca613f9e433fb4ef88025f48b8fad61fe2956d8ccc"
+    },
+    "workflow-automation": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/4.2-ETL-Automation/workflow-automation/SKILL.md",
+      "computedHash": "81669a4b25700135b4df78765e51e0848232ad4c3495b9f7a7454d0c3c4d8d97"
+    },
+    "xlsx-construction": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "4_DDC_Curated/Document-Generation/xlsx-construction/SKILL.md",
+      "computedHash": "a31fdcee870b048df40f06cd1cf75e3daa9a0091bc0946b1be41bffe0c03a31c"
+    },
+    "xml-reader": {
+      "source": "datadrivenconstruction/ddc_skills_for_ai_agents_in_construction",
+      "sourceType": "github",
+      "skillPath": "2_DDC_Book/2.1-Data-Types-Classification/xml-reader/SKILL.md",
+      "computedHash": "18972406e0a62e09596184f3cfd1a72da5cd1d2a9a217b0d8a7b29590ad90b05"
+    }
+  }
+}

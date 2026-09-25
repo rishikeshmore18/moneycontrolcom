@@ -247,17 +247,17 @@ function ListCard<T extends { id: string }>({
       ) : (
         <div className="divide-y divide-border">
           {items.map((it) => (
-            <div key={it.id} className="flex items-center justify-between py-2.5 gap-3">
+            <div key={it.id} className="flex min-w-0 items-center gap-2 py-2.5 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setEditing(it)}
-                className="flex-1 flex justify-between gap-3 text-left rounded-lg hover:bg-foreground/5 px-1 py-1 -mx-1 transition"
+                className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg px-1 py-1 text-left break-words transition hover:bg-foreground/5"
               >
                 {render(it)}
               </button>
               <button
                 onClick={() => setEditing(it)}
-                className="text-muted-foreground p-1.5 rounded-lg hover:bg-foreground/10"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-foreground/10"
                 aria-label="Edit"
               >
                 <Pencil size={16} />
@@ -266,7 +266,7 @@ function ListCard<T extends { id: string }>({
                 onClick={() => {
                   if (confirm("Delete?")) onDelete(it.id);
                 }}
-                className="text-[color:var(--bad)] p-1.5 rounded-lg hover:bg-[color:var(--bad)]/10"
+                className="grid h-11 w-11 shrink-0 place-items-center rounded-lg text-[color:var(--bad)] hover:bg-[color:var(--bad)]/10"
                 aria-label="Delete"
               >
                 <Trash2 size={16} />

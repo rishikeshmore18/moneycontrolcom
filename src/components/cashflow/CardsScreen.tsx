@@ -42,31 +42,31 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
           const over = u > c.targetUtilizationPercent;
           return (
             <Card key={c.id} className="relative">
-              <div className="flex justify-between items-start mb-3">
-                <div>
+              <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1 break-words">
                   <div className="text-xs uppercase font-bold tracking-wide text-muted-foreground">
                     {c.type.replace("_", " ")}
                   </div>
-                  <div className="text-xl font-black">{c.name}</div>
+                  <div className="break-words text-xl font-black">{c.name}</div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="ml-auto flex shrink-0 items-center gap-2">
                   <button
                     onClick={() => setEditing(c)}
-                    className="p-2 rounded-xl bg-muted text-foreground hover:bg-border"
+                    className="grid h-11 w-11 place-items-center rounded-xl bg-muted text-foreground hover:bg-border"
                     aria-label="Edit card"
                   >
                     <Pencil size={14} />
                   </button>
                   <button
                     onClick={() => onPay(c.id)}
-                    className="px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-extrabold shadow-soft"
+                    className="min-h-11 px-3 py-2 rounded-xl brand-gradient text-primary-foreground text-xs font-extrabold shadow-soft"
                   >
                     Pay bill
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 mb-3">
+              <div className="mb-3 grid min-w-0 grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                 <Stat label="Current" value={formatMoney(c.currentBalance, cur)} />
                 <Stat label="Available" value={formatMoney(availableCredit(c), cur)} />
                 <Stat label="Statement" value={formatMoney(c.statementBalance, cur)} />
@@ -185,7 +185,7 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-[10px] uppercase font-bold tracking-wide text-muted-foreground">
         {label}
       </div>
-      <div className="text-sm font-black mt-0.5">{value}</div>
+      <div className="mt-0.5 break-words text-sm font-black">{value}</div>
     </div>
   );
 }

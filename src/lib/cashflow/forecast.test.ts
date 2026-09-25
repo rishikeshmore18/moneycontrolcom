@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { spendableToday, spendableTodayBreakdown } from "./forecast";
+import {
+  expensesComingTotal,
+  leftToSpendBreakdown,
+  pendingIncome,
+  spendableCash,
+  spendableToday,
+  spendableTodayBreakdown,
+} from "./forecast";
 import { type AppState, emptyState } from "./types";
 
 const REF = new Date(2026, 6, 25);
@@ -209,5 +216,42 @@ describe("Spendable today safety invariants", () => {
     );
     expect(warnings?.items[0]?.label).toBe("Checking");
     expect(warnings?.items[0]?.detail).toContain("Move money before this payment");
+  });
+});
+
+describe("Dashboard cash flow totals", () => {
+  it("reconciles the displayed cent amounts with their source breakdown", () => {
+    const state = stateWithCash(7_931.76);
+    state.plannedIncomeOverrides = [
+      {
+        id: "income",
+        sourceId: "one-time-income",
+        payDate: "2026-07-26",
+        action: "add",
+        label: "Expected payment",
+        amount: 343,
+        accountId: "checking",
+      },
+    ];
+    state.plannedExpenseOverrides = [
+      {
+        id: "bill",
+        sourceType: "one_time",
+        month: "2026-07",
+        action: "add",
+        name: "Upcoming bill",
+        amount: 5.67,
+        dueDate: "2026-07-27",
+        paymentMethod: "account",
+        accountId: "checking",
+      },
+    ];
+
+    expect(spendableCash(state)).toBe(7_931.76);
+    expect(pendingIncome(state, REF)).toBe(343);
+    expect(expensesComingTotal(state, REF)).toBe(5.67);
+    const formula = leftToSpendBreakdown(state, REF)[0].items;
+    expect(formula.map((item) => item.amount)).toEqual([7_931.76, 343, -5.67]);
+    expect(formula.reduce((total, item) => total + item.amount, 0)).toBeCloseTo(8_269.09, 2);
   });
 });

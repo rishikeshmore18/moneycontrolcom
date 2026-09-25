@@ -1,13 +1,14 @@
 export function formatMoney(amount: number, currency = "USD"): string {
-  const safe = Number.isFinite(amount) ? amount : 0;
+  // An invalid calculation must not look like a real zero-dollar balance.
+  if (!Number.isFinite(amount)) return "—";
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency,
       maximumFractionDigits: 2,
-    }).format(safe);
+    }).format(amount);
   } catch {
-    return `$${safe.toFixed(2)}`;
+    return `$${amount.toFixed(2)}`;
   }
 }
 

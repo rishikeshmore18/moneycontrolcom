@@ -249,15 +249,15 @@ export function Dashboard() {
         <KPI label="Net worth" value={m(netWorth(state))} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
         <Card>
           <SectionTitle title="Accounts" hint={`${state.accounts.length} total`} />
           <div className="divide-y divide-border">
             {state.accounts.length === 0 && <Empty label="No accounts yet" />}
             {state.accounts.map((a) => (
-              <div key={a.id} className="flex items-center justify-between py-3">
-                <div>
-                  <div className="font-bold">{a.name}</div>
+              <div key={a.id} className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3">
+                <div className="min-w-0 flex-1 break-words">
+                  <div className="font-bold break-words">{a.name}</div>
                   {a.availableForSpending === false && (
                     <div className="text-xs text-[color:var(--warn)]">
                       Reserved{a.savingsPurpose ? ` for ${a.savingsPurpose}` : ""}
@@ -268,7 +268,7 @@ export function Dashboard() {
                     {a.type}
                   </div>
                 </div>
-                <div className={`font-black ${a.balance < 0 ? "text-[color:var(--bad)]" : ""}`}>
+                <div className={`ml-auto break-words text-right font-black ${a.balance < 0 ? "text-[color:var(--bad)]" : ""}`}>
                   {m(a.balance)}
                 </div>
               </div>
@@ -492,8 +492,8 @@ function CashFlowFormulaCard({
   return (
     <Card className="!p-4 sm:!p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-black tracking-tight">{periodLabel} Cash Flow</h2>
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="min-w-0 break-words text-lg font-black tracking-tight">{periodLabel} Cash Flow</h2>
           <Info size={15} className="text-muted-foreground" aria-hidden="true" />
         </div>
         <Select
@@ -575,7 +575,7 @@ function CashFlowFormulaCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-5">
+      <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-5">
         <FlowDetail
           tone="green"
           label="Have now"
@@ -619,7 +619,7 @@ function CashFlowFormulaCard({
           helper={`Protected ${SPENDABLE_TODAY_HORIZON_DAYS} days`}
           badge="Safe now"
           icon={Wallet}
-          className="col-span-2 xl:col-span-1"
+          className="min-[480px]:col-span-2 xl:col-span-1"
           onClick={() => onOpenBreakdown("spendable_today")}
         />
       </div>
@@ -759,7 +759,7 @@ function FlowDetail({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-2xl border bg-muted/25 p-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].detail} ${className ?? ""}`}
+      className={`min-w-0 w-full rounded-2xl border bg-muted/25 p-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].detail} ${className ?? ""}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div className={`text-xs font-extrabold ${flowTone[tone].text}`}>{label}</div>
@@ -769,7 +769,7 @@ function FlowDetail({
           <Icon size={16} />
         </div>
       </div>
-      <div className="mt-1 text-lg font-black">{value}</div>
+      <div className="mt-1 break-words text-lg font-black">{value}</div>
       <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
       <div
         className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-extrabold ${flowTone[tone].badge}`}
@@ -2401,10 +2401,10 @@ function Row({
   bold?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between py-2">
-      <span className="text-sm text-muted-foreground">{label}</span>
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
+      <span className="min-w-0 flex-1 break-words text-sm text-muted-foreground">{label}</span>
       <span
-        className={`${bold ? "text-lg font-black" : "font-bold"} ${
+        className={`ml-auto break-words text-right ${bold ? "text-lg font-black" : "font-bold"} ${
           tone === "good" ? "text-[color:var(--good)]" : ""
         }`}
       >
