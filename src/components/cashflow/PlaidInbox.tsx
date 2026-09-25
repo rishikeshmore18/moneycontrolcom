@@ -3,11 +3,13 @@ import { useServerFn } from "@tanstack/react-start";
 import { Inbox } from "lucide-react";
 import { Button } from "./Button";
 import { Sheet } from "./Sheet";
-import { Select } from "./Field";
+import { Field, Input, Select } from "./Field";
 import { toast } from "./Toast";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import { todayISO } from "@/lib/cashflow/dates";
+import { matchingPlannedExpenses, type ReviewExpense } from "@/lib/cashflow/plannedReview";
+import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import {
   plaidListConnections,
   plaidListInbox,
@@ -81,11 +83,11 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
 
   return (
     <>
-      <Button variant={variant} onClick={() => setOpen(true)}>
+      <Button variant={variant} onClick={() => setOpen(true)} className="min-w-0 shrink-0 whitespace-nowrap !px-3 sm:!px-4">
         <Inbox size={16} />
-        Review
+        <span>Review</span>
         {count > 0 && (
-          <span className="ml-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-[color:var(--primary)] px-1.5 text-[10px] font-black text-[color:var(--primary-foreground)]">
+          <span className="ml-1 inline-flex min-h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[color:var(--primary)] px-1.5 text-[10px] font-black text-[color:var(--primary-foreground)] tabular-nums">
             {count}
           </span>
         )}
@@ -131,6 +133,7 @@ function InboxSheet({
   const resolve = useServerFn(plaidResolveInbox);
   const [busy, setBusy] = useState<string | null>(null);
   const [catFor, setCatFor] = useState<Record<string, string>>({});
+  const [otherCategoryFor, setOtherCategoryFor] = useState<Record<string, string>>({});
   const [payFrom, setPayFrom] = useState<Record<string, string>>({});
   const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
   const { unmatched, rest } = useMemo(
@@ -163,6 +166,33 @@ function InboxSheet({
     );
   };
 
+  const plannedFor = (item: InboxItem): CashFlowBreakdownItem[] => {
+    const map = mappingFor(item.plaidAccountId);
+    if (item.amount <= 0 || !map?.linkedLocalId) return [];
+    const expense: ReviewExpense = {
+      name: item.merchantName || item.name,
+      amount: item.amount,
+      date: item.date,
+      ...(map.linkedLocalKind === "card"
+        ? { cardId: map.linkedLocalId }
+        : { accountId: map.linkedLocalId }),
+    };
+    return matchingPlannedExpenses(state, expense);
+  };
+
+  const markPlannedPaid = (planned: CashFlowBreakdownItem) => {
+    if (planned.sourceType !== "recurring_bill" && planned.sourceType !== "one_time") return;
+    dispatch({
+      type: "MARK_PLANNED_EXPENSE_PAID",
+      payload: {
+        sourceType: planned.sourceType,
+        sourceId: planned.sourceId,
+        overrideId: planned.overrideId,
+        month: (planned.dueDate ?? "").slice(0, 7),
+      },
+    });
+  };
+
   const finish = async (
     ids: string[],
     status: "accepted" | "dismissed" | "merged",
@@ -172,7 +202,7 @@ function InboxSheet({
     await onResolved();
   };
 
-  const accept = async (item: InboxItem, chosenCategory?: string) => {
+  const accept = async (item: InboxItem, chosenCategory?: string, planned?: CashFlowBreakdownItem) => {
     const map = mappingFor(item.plaidAccountId);
     if (!map?.linkedLocalId) {
       toast("Link this bank account to one of your accounts or cards first.");
@@ -191,11 +221,13 @@ function InboxSheet({
             description: label,
             date,
             method: map.linkedLocalKind === "card" ? "credit_card" : "debit",
+            balanceAlreadySynced: !item.pending,
             ...(map.linkedLocalKind === "card"
               ? { cardId: map.linkedLocalId }
               : { sourceAccountId: map.linkedLocalId }),
           },
         });
+        if (planned) markPlannedPaid(planned);
       } else if (map.linkedLocalKind === "account") {
         dispatch({
           type: "ADD_INCOME",
@@ -205,6 +237,7 @@ function InboxSheet({
             category: "Income",
             description: label,
             date,
+            balanceAlreadySynced: !item.pending,
           },
         });
       } else {
@@ -213,7 +246,7 @@ function InboxSheet({
         return;
       }
       await finish([item.id], "accepted");
-      toast("Added to your numbers.");
+      toast(planned ? "Expense recorded and upcoming bill marked paid." : "Added to your numbers.");
     } catch (err) {
       toast(`Couldn't add that: ${errText(err)}`);
     } finally {
@@ -221,11 +254,12 @@ function InboxSheet({
     }
   };
 
-  const merge = async (item: InboxItem, localId: string) => {
+  const merge = async (item: InboxItem, localId: string, planned?: CashFlowBreakdownItem) => {
     setBusy(item.id);
     try {
       await finish([item.id], "merged", localId);
-      toast("Marked as the same transaction. Nothing double-counted.");
+      if (planned) markPlannedPaid(planned);
+      toast(planned ? "Existing expense linked; upcoming bill marked paid." : "Marked as the same transaction. Nothing double-counted.");
     } catch (err) {
       toast(`Couldn't merge: ${errText(err)}`);
     } finally {
@@ -334,10 +368,12 @@ function InboxSheet({
           {sorted.map((item) => {
             const map = mappingFor(item.plaidAccountId);
             const dup = duplicateFor(item);
+            const plannedMatches = plannedFor(item);
             const chosen =
               catFor[item.id] ?? guessCategory([item.plaidCategory, item.merchantName, item.name], categories);
+            const category = chosen === "Other" ? otherCategoryFor[item.id]?.trim() || "Other" : chosen;
             return (
-              <div key={item.id} className="rounded-2xl border border-border p-3 grid gap-2">
+              <div key={item.id} className="grid min-w-0 gap-2 rounded-2xl border border-border p-3 [overflow-wrap:anywhere]">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className="font-bold">{item.merchantName || item.name}</div>
@@ -376,6 +412,23 @@ function InboxSheet({
                   </div>
                 )}
 
+                {plannedMatches.length > 0 && (
+                  <div className="grid gap-2 rounded-xl bg-muted p-3 text-sm">
+                    <p>Also in Expenses coming. If this is the same bill, mark it paid so it no longer appears as upcoming.</p>
+                    {plannedMatches.map((planned) => (
+                      <Button
+                        key={planned.id}
+                        variant="soft"
+                        className="min-w-0 justify-start whitespace-normal text-left"
+                        onClick={() => dup ? merge(item, dup.id, planned) : accept(item, category, planned)}
+                        disabled={busy === item.id}
+                      >
+                        Mark paid &amp; merge: {planned.label} · {formatMoney(planned.amount, cur)}
+                      </Button>
+                    ))}
+                  </div>
+                )}
+
                 {item.amount > 0 && map?.linkedLocalId && (
                   <div className="grid gap-1">
                     <div className="text-xs text-muted-foreground">
@@ -391,13 +444,22 @@ function InboxSheet({
                         </option>
                       ))}
                     </Select>
+                    {chosen === "Other" && (
+                      <Field label="Category name" hint="Leave blank to keep Other.">
+                        <Input
+                          value={otherCategoryFor[item.id] ?? ""}
+                          onChange={(event) => setOtherCategoryFor((previous) => ({ ...previous, [item.id]: event.target.value }))}
+                          placeholder="e.g. Parking, Laundry"
+                        />
+                      </Field>
+                    )}
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-2">
                   <Button
                     variant="primary"
-                    onClick={() => accept(item, chosen)}
+                    onClick={() => accept(item, category)}
                     disabled={busy === item.id || !map?.linkedLocalId}
                   >
                     Accept

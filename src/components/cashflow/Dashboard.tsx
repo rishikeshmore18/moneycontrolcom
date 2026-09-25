@@ -331,15 +331,15 @@ export function Dashboard() {
       )}
 
       <Card>
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3 flex min-w-0 flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
           <h3 className="text-lg font-extrabold tracking-tight">Recent activity</h3>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 w-full flex-wrap items-center justify-between gap-2 sm:w-auto sm:justify-end">
             <PlaidReviewButton variant="ghost" />
             {state.transactions.length > 0 && (
               <button
                 type="button"
                 onClick={() => setActivityOpen(true)}
-                className="text-xs font-bold text-[color:var(--primary)] hover:underline"
+                className="min-h-11 shrink-0 px-1 text-xs font-bold text-[color:var(--primary)] hover:underline"
               >
                 View all ({state.transactions.length})
               </button>
@@ -351,12 +351,12 @@ export function Dashboard() {
           {recent.map((t) => (
             <div
               key={t.id}
-              className="flex items-center gap-2 rounded-lg px-1 py-2.5 transition-colors hover:bg-muted/40 -mx-1"
+              className="flex min-w-0 items-center gap-2 rounded-lg px-1 py-2.5 transition-colors hover:bg-muted/40 -mx-1"
             >
               <button
                 type="button"
                 onClick={() => setSelectedTx(t)}
-                className="flex min-w-0 flex-1 items-center justify-between text-left"
+                className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-2 gap-y-1 text-left"
               >
                 <div className="min-w-0">
                   <div className="font-medium truncate">{t.description || t.category}</div>
@@ -365,7 +365,7 @@ export function Dashboard() {
                   </div>
                 </div>
                 <div
-                  className={`font-black shrink-0 ml-3 ${
+                  className={`ml-auto shrink-0 text-right font-black ${
                     t.type === "income"
                       ? "text-[color:var(--good)]"
                       : t.type === "expense" ||
@@ -387,7 +387,7 @@ export function Dashboard() {
                 <button
                   type="button"
                   onClick={() => setEditingTx(t)}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                  className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
                   aria-label={`Edit ${t.description || t.category}`}
                 >
                   <Pencil size={15} />
@@ -575,7 +575,7 @@ function CashFlowFormulaCard({
         </div>
       </div>
 
-      <div className="mt-4 grid min-w-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-5">
         <FlowDetail
           tone="green"
           label="Have now"
@@ -619,7 +619,7 @@ function CashFlowFormulaCard({
           helper={`Protected ${SPENDABLE_TODAY_HORIZON_DAYS} days`}
           badge="Safe now"
           icon={Wallet}
-          className="min-[480px]:col-span-2 xl:col-span-1"
+          className="col-span-2 !aspect-auto xl:col-span-1"
           onClick={() => onOpenBreakdown("spendable_today")}
         />
       </div>
@@ -759,20 +759,20 @@ function FlowDetail({
     <button
       type="button"
       onClick={onClick}
-      className={`min-w-0 w-full rounded-2xl border bg-muted/25 p-3 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] ${flowTone[tone].detail} ${className ?? ""}`}
+      className={`min-w-0 w-full min-h-[146px] rounded-2xl border bg-muted/25 p-2.5 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] min-[390px]:aspect-square min-[390px]:min-h-0 sm:p-3 xl:aspect-auto ${flowTone[tone].detail} ${className ?? ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className={`text-xs font-extrabold ${flowTone[tone].text}`}>{label}</div>
+        <div className={`min-w-0 text-[11px] font-extrabold leading-tight sm:text-xs ${flowTone[tone].text}`}>{label}</div>
         <div
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-[color:var(--card-solid)] ${flowTone[tone].text}`}
+          className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-[color:var(--card-solid)] sm:h-8 sm:w-8 sm:rounded-xl ${flowTone[tone].text}`}
         >
           <Icon size={16} />
         </div>
       </div>
-      <div className="mt-1 break-words text-lg font-black">{value}</div>
-      <div className="mt-1 text-xs text-muted-foreground">{helper}</div>
+      <div className="mt-2 break-words text-sm font-black leading-tight min-[390px]:text-base sm:text-lg">{value}</div>
+      <div className="mt-1 text-[10px] leading-tight text-muted-foreground sm:text-xs">{helper}</div>
       <div
-        className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-extrabold ${flowTone[tone].badge}`}
+        className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-extrabold leading-tight sm:text-[10px] ${flowTone[tone].badge}`}
       >
         {badge}
       </div>

@@ -43,6 +43,15 @@ export type Action =
   | { type: "ADD_PLANNED_EXPENSE_OVERRIDE"; payload: Omit<PlannedExpenseOverride, "id"> }
   | { type: "UPDATE_PLANNED_EXPENSE_OVERRIDE"; payload: PlannedExpenseOverride }
   | { type: "DELETE_PLANNED_EXPENSE_OVERRIDE"; id: string }
+  | {
+      type: "MARK_PLANNED_EXPENSE_PAID";
+      payload: {
+        sourceType: "recurring_bill" | "one_time";
+        sourceId?: string;
+        overrideId?: string;
+        month: string;
+      };
+    }
   | { type: "ADD_PLANNED_INCOME_OVERRIDE"; payload: Omit<PlannedIncomeOverride, "id"> }
   | { type: "UPDATE_PLANNED_INCOME_OVERRIDE"; payload: PlannedIncomeOverride }
   | { type: "DELETE_PLANNED_INCOME_OVERRIDE"; id: string }
@@ -77,6 +86,7 @@ export type Action =
         method: "credit_card" | "debit" | "cash" | "other";
         sourceAccountId?: string;
         cardId?: string;
+        balanceAlreadySynced?: boolean;
       };
     }
   | {
@@ -130,6 +140,7 @@ export type Action =
         description: string;
         category?: string;
         notes?: string;
+        balanceAlreadySynced?: boolean;
       };
     }
   | { type: "UPSERT_TIMESHEET"; payload: TimesheetEntry }
@@ -336,6 +347,21 @@ export function reducer(state: AppState, action: Action): AppState {
         ),
       };
 
+    case "MARK_PLANNED_EXPENSE_PAID": {
+      const { sourceType, sourceId, overrideId, month } = action.payload;
+      if (sourceType === "one_time") {
+        if (!overrideId || !state.plannedExpenseOverrides.some((override) =>
+          override.id === overrideId && override.sourceType === "one_time" && override.month === month && override.action === "add"
+        )) return state;
+        return reducer(state, { type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: overrideId });
+      }
+      if (!sourceId || !state.recurringBills.some((bill) => bill.id === sourceId)) return state;
+      return reducer(state, {
+        type: "ADD_PLANNED_EXPENSE_OVERRIDE",
+        payload: { sourceType: "recurring_bill", sourceId, month, action: "skip" },
+      });
+    }
+
     case "ADD_CATEGORY_BUDGET": {
       const category = cleanCategory(action.payload.category);
       if (!category || action.payload.amount < 0) return state;
@@ -444,7 +470,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
       let next = state;
 
-      if (existing.cardId) {
+      if (!existing.balanceAlreadySynced && existing.cardId) {
         next = {
           ...next,
           cards: next.cards.map((card) =>
@@ -456,14 +482,14 @@ export function reducer(state: AppState, action: Action): AppState {
               : card,
           ),
         };
-      } else if (existing.sourceAccountId) {
+      } else if (!existing.balanceAlreadySynced && existing.sourceAccountId) {
         next = {
           ...next,
           accounts: updateAccount(next, existing.sourceAccountId, existing.amount),
         };
       }
 
-      if (p.cardId) {
+      if (!existing.balanceAlreadySynced && p.cardId) {
         next = {
           ...next,
           cards: next.cards.map((card) =>
@@ -472,7 +498,7 @@ export function reducer(state: AppState, action: Action): AppState {
               : card,
           ),
         };
-      } else if (p.sourceAccountId) {
+      } else if (!existing.balanceAlreadySynced && p.sourceAccountId) {
         next = {
           ...next,
           accounts: updateAccount(next, p.sourceAccountId, -p.amount),
@@ -503,14 +529,14 @@ export function reducer(state: AppState, action: Action): AppState {
     case "ADD_EXPENSE": {
       const p = action.payload;
       let next = state;
-      if (p.method === "credit_card" && p.cardId) {
+      if (!p.balanceAlreadySynced && p.method === "credit_card" && p.cardId) {
         next = {
           ...next,
           cards: next.cards.map((c) =>
             c.id === p.cardId ? { ...c, currentBalance: c.currentBalance + p.amount } : c,
           ),
         };
-      } else if (p.sourceAccountId) {
+      } else if (!p.balanceAlreadySynced && p.sourceAccountId) {
         next = { ...next, accounts: updateAccount(next, p.sourceAccountId, -p.amount) };
       }
       const tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
@@ -521,6 +547,7 @@ export function reducer(state: AppState, action: Action): AppState {
         date: p.date,
         sourceAccountId: p.sourceAccountId,
         cardId: p.cardId,
+        balanceAlreadySynced: p.balanceAlreadySynced,
       };
       return {
         ...next,
@@ -746,7 +773,7 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!account || p.amount <= 0) return state;
       const next: AppState = {
         ...state,
-        accounts: updateAccount(state, p.accountId, p.amount),
+        accounts: p.balanceAlreadySynced ? state.accounts : updateAccount(state, p.accountId, p.amount),
       };
       const tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
         type: "income",
@@ -756,6 +783,7 @@ export function reducer(state: AppState, action: Action): AppState {
         date: p.date,
         targetAccountId: p.accountId,
         notes: p.notes,
+        balanceAlreadySynced: p.balanceAlreadySynced,
       };
       return { ...next, transactions: addTx(next, tx) };
     }
