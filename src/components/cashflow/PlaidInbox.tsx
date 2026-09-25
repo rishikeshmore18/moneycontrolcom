@@ -7,7 +7,8 @@ import { Field, Input, Select } from "./Field";
 import { toast } from "./Toast";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
-import { todayISO } from "@/lib/cashflow/dates";
+import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
+import { FRIEND_EXPENSE_CATEGORY, friendReturnDate, isFriendExpenseCategory } from "@/lib/cashflow/friendRepayment";
 import { matchingPlannedExpenses, type ReviewExpense } from "@/lib/cashflow/plannedReview";
 import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import {
@@ -151,6 +152,9 @@ function InboxSheet({
   }, [confirmation]);
   const [catFor, setCatFor] = useState<Record<string, string>>({});
   const [otherCategoryFor, setOtherCategoryFor] = useState<Record<string, string>>({});
+  const [friendModeFor, setFriendModeFor] = useState<Record<string, "days" | "date">>({});
+  const [friendDaysFor, setFriendDaysFor] = useState<Record<string, string>>({});
+  const [friendDateFor, setFriendDateFor] = useState<Record<string, string>>({});
   const [payFrom, setPayFrom] = useState<Record<string, string>>({});
   const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
   const { unmatched, rest } = useMemo(
@@ -159,9 +163,17 @@ function InboxSheet({
   );
   const cur = state.profile.currency;
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
-  const categories: string[] = baseCategories.includes("Miscellaneous")
-    ? baseCategories
-    : [...baseCategories, "Miscellaneous"];
+  const categories: string[] = Array.from(new Set([...baseCategories, FRIEND_EXPENSE_CATEGORY, "Miscellaneous"]));
+
+  const returnDateFor = (item: InboxItem, category: string) => {
+    if (!isFriendExpenseCategory(category)) return undefined;
+    return friendReturnDate(
+      item.date,
+      friendModeFor[item.id] === "date"
+        ? { mode: "date", date: friendDateFor[item.id] ?? "" }
+        : { mode: "days", days: Number(friendDaysFor[item.id] ?? "") },
+    );
+  };
 
   const mappingFor = (plaidAccountId: string) =>
     accounts.find((a) => a.accountId === plaidAccountId) ?? null;
@@ -225,6 +237,12 @@ function InboxSheet({
       toast("Link this bank account to one of your accounts or cards first.");
       return;
     }
+    const category = chosenCategory || item.plaidCategory || "Miscellaneous";
+    const expectedReturn = returnDateFor(item, category);
+    if (item.amount > 0 && isFriendExpenseCategory(category) && !expectedReturn) {
+      toast("Choose a valid return date before accepting money given to a friend.");
+      return;
+    }
     setBusy(item.id);
     try {
       const date = item.date || todayISO();
@@ -234,9 +252,10 @@ function InboxSheet({
           type: "ADD_EXPENSE",
           payload: {
             amount: Math.abs(item.amount),
-            category: chosenCategory || item.plaidCategory || "Miscellaneous",
+            category,
             description: label,
             date,
+            friendRepaymentDate: expectedReturn ?? undefined,
             method: map.linkedLocalKind === "card" ? "credit_card" : "debit",
             balanceAlreadySynced: !item.pending,
             ...(map.linkedLocalKind === "card"
@@ -479,6 +498,7 @@ function InboxSheet({
             const chosen =
               catFor[item.id] ?? guessCategory([item.plaidCategory, item.merchantName, item.name], categories);
             const category = chosen === "Other" ? otherCategoryFor[item.id]?.trim() || "Other" : chosen;
+            const expectedReturn = returnDateFor(item, category);
             return (
               <div key={item.id} className="grid min-w-0 gap-2 rounded-2xl border border-border p-3 [overflow-wrap:anywhere]">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -559,6 +579,46 @@ function InboxSheet({
                           placeholder="e.g. Parking, Laundry"
                         />
                       </Field>
+                    )}
+                    {isFriendExpenseCategory(category) && (
+                      <div className="grid min-w-0 gap-2 rounded-2xl border border-border bg-muted/20 p-3">
+                        <Field label="When will your friend return it?">
+                          <Select
+                            value={friendModeFor[item.id] ?? "days"}
+                            onChange={(event) => setFriendModeFor((previous) => ({
+                              ...previous, [item.id]: event.target.value as "days" | "date",
+                            }))}
+                          >
+                            <option value="days">After a number of days</option>
+                            <option value="date">On a specific date</option>
+                          </Select>
+                        </Field>
+                        {friendModeFor[item.id] === "date" ? (
+                          <Field label="Expected return date">
+                            <Input
+                              type="date" min={item.date} value={friendDateFor[item.id] ?? ""}
+                              onChange={(event) => setFriendDateFor((previous) => ({
+                                ...previous, [item.id]: event.target.value,
+                              }))}
+                            />
+                          </Field>
+                        ) : (
+                          <Field label="Days after the transaction date">
+                            <Input
+                              type="number" inputMode="numeric" min="1" max="3650" step="1"
+                              value={friendDaysFor[item.id] ?? ""} placeholder="e.g. 30"
+                              onChange={(event) => setFriendDaysFor((previous) => ({
+                                ...previous, [item.id]: event.target.value,
+                              }))}
+                            />
+                          </Field>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {expectedReturn
+                            ? `Expected ${formatDisplayDate(expectedReturn)} in Income coming.`
+                            : "Choose a return time before accepting this expense."}
+                        </p>
+                      </div>
                     )}
                   </div>
                 )}

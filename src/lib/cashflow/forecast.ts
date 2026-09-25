@@ -63,6 +63,8 @@ export interface CashFlowBreakdownItem {
   payDate?: string;
   incomeSourceType?: "salary_paycheck" | "work_paycheck" | "one_time";
   incomeConfidence?: "confirmed" | "projected";
+  incomeKind?: "friend_repayment";
+  linkedExpenseId?: string;
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
   isOverdue?: boolean;
@@ -880,7 +882,11 @@ function paycheckDetail(payDate: string, entries: TimesheetEntry[]): string {
   return `Payday ${formatDisplayDate(payDate)} - ${shiftLabel}, ${source} work ${dateSpan}`;
 }
 
-function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlowBreakdownItem[] {
+function incomeItemsForRange(
+  state: AppState,
+  range: ForecastDateRange,
+  referenceDate: string,
+): CashFlowBreakdownItem[] {
   const jobsById = new Map(state.jobs.map((job) => [job.id, job]));
   const incomeOverrides = state.plannedIncomeOverrides ?? [];
   // Same entry list the income tab renders, so the two screens can never disagree.
@@ -1016,20 +1022,34 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
       (override) =>
         override.action === "add" &&
         (override.amount ?? 0) > 0 &&
-        override.payDate >= range.start &&
+        (override.payDate >= range.start ||
+          (override.kind === "friend_repayment" &&
+            range.start <= referenceDate &&
+            referenceDate <= range.end &&
+            override.payDate < referenceDate)) &&
         override.payDate <= range.end,
     )
     .map((override) => ({
       id: override.id,
       label: override.label ?? "One-time income",
-      detail: `One-time income - ${formatDisplayDate(override.payDate)}`,
+      detail:
+        override.kind === "friend_repayment"
+          ? `Expected repayment ${formatDisplayDate(override.payDate)}${override.payDate < referenceDate ? " - overdue" : " - not received"}`
+          : `One-time income - ${formatDisplayDate(override.payDate)}`,
       amount: override.amount ?? 0,
-      periodDate: override.payDate,
+      periodDate:
+        override.kind === "friend_repayment" && override.payDate < referenceDate
+          ? referenceDate
+          : override.payDate,
       payDate: override.payDate,
       overrideId: override.id,
       accountId: override.accountId,
       incomeSourceType: "one_time" as const,
-      incomeConfidence: "confirmed" as const,
+      incomeConfidence:
+        override.kind === "friend_repayment" ? ("projected" as const) : ("confirmed" as const),
+      incomeKind: override.kind,
+      linkedExpenseId: override.linkedExpenseId,
+      isOverdue: override.kind === "friend_repayment" && override.payDate < referenceDate,
     }));
 
   return sortByDueDate([...items, ...oneTimeIncomeItems]);
@@ -1041,7 +1061,7 @@ function incomeItemsForRange(state: AppState, range: ForecastDateRange): CashFlo
  * "mark paid" flow in sync with the dashboard's "Income coming" list.
  */
 export function paydayItemsOnDate(state: AppState, date: string): CashFlowBreakdownItem[] {
-  return incomeItemsForRange(state, { start: date, end: date });
+  return incomeItemsForRange(state, { start: date, end: date }, date);
 }
 
 /** The date a given timesheet entry is expected to actually be paid out. */
@@ -1063,7 +1083,9 @@ function unpaidPendingIncomeItems(
   period: CashFlowPeriod = "this_month",
   customRange?: ForecastDateRange,
 ): CashFlowBreakdownItem[] {
-  return incomeItemsForRange(state, cashFlowPeriodRange(period, monthDate, customRange));
+  return incomeItemsForRange(
+    state, cashFlowPeriodRange(period, monthDate, customRange), toISO(monthDate),
+  );
 }
 
 export function pendingIncomeBreakdown(
@@ -1073,7 +1095,12 @@ export function pendingIncomeBreakdown(
   customRange?: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
   const incomeItems = unpaidPendingIncomeItems(state, monthDate, period, customRange);
-  return incomeItems.length > 0 ? [{ title: "Upcoming paydays", items: incomeItems }] : [];
+  const repayments = incomeItems.filter((item) => item.incomeKind === "friend_repayment");
+  const otherIncome = incomeItems.filter((item) => item.incomeKind !== "friend_repayment");
+  return [
+    ...(otherIncome.length ? [{ title: "Upcoming paydays", items: otherIncome }] : []),
+    ...(repayments.length ? [{ title: "Expected repayments", items: repayments }] : []),
+  ];
 }
 
 export function pendingIncome(
@@ -1328,7 +1355,8 @@ function nextUnpaidIncomeDate(state: AppState, ref: Date = new Date()): string |
     start: today,
     end: toISO(new Date(ref.getFullYear(), ref.getMonth() + 6, ref.getDate())),
   };
-  const entries = incomeItemsForRange(state, range)
+  const entries = incomeItemsForRange(state, range, today)
+    .filter((entry) => entry.incomeKind !== "friend_repayment")
     .map((entry) => entry.periodDate ?? entry.dueDate)
     .filter((date): date is string => !!date && date >= today)
     .sort((a, b) => a.localeCompare(b));
@@ -1394,6 +1422,7 @@ export interface ForecastCashProjection {
   events: CashFlowTimelineEvent[];
   projectedIncome: number;
   projectedPartTimeIncome: number;
+  expectedRepaymentIncome: number;
   totalExpenses: number;
   runwayDate?: string;
   runwayDays?: number;
@@ -1419,7 +1448,7 @@ function spendableTodayProjection(
         start: selectedRange.start < today ? today : selectedRange.start,
         end: selectedRange.end < today ? today : selectedRange.end,
       };
-  const forecastIncomeEvents = incomeItemsForRange(state, range).map((item) => ({
+  const forecastIncomeEvents = incomeItemsForRange(state, range, today).map((item) => ({
     id: `income-${item.id}`,
     label: item.label,
     detail: item.detail ? `Income - ${item.detail}` : "Income",
@@ -1427,9 +1456,13 @@ function spendableTodayProjection(
     amount: item.amount,
     accountId: item.accountId,
     incomeConfidence: item.incomeConfidence,
+    incomeKind: item.incomeKind,
   }));
   const projectedPartTimeIncome = forecastIncomeEvents
-    .filter((event) => event.incomeConfidence === "projected")
+    .filter((event) => event.incomeConfidence === "projected" && event.incomeKind !== "friend_repayment")
+    .reduce((sum, event) => sum + event.amount, 0);
+  const expectedRepaymentIncome = forecastIncomeEvents
+    .filter((event) => event.incomeKind === "friend_repayment")
     .reduce((sum, event) => sum + event.amount, 0);
   const incomeEvents = forecastIncomeEvents.filter(
     (event) => options.includeProjectedIncome || event.incomeConfidence !== "projected",
@@ -1537,6 +1570,7 @@ function spendableTodayProjection(
     events,
     projectedIncome,
     projectedPartTimeIncome,
+    expectedRepaymentIncome,
     totalExpenses,
     runwayDate: runwayEvent?.date,
     runwayDays,
@@ -1730,12 +1764,21 @@ export function spendableTodayBreakdown(
         id: "spendable-today-forecast-income",
         label: "Income included",
         detail:
-          projection.projectedPartTimeIncome > 0
-            ? `${formatMoney(
-                projection.projectedPartTimeIncome,
-                state.profile.currency,
-              )} of auto-planned part-time income is excluded until the work is entered.`
-            : "Only scheduled salary and entered work are counted as protected income.",
+          [
+            projection.projectedPartTimeIncome > 0
+              ? `${formatMoney(
+                  projection.projectedPartTimeIncome,
+                  state.profile.currency,
+                )} of auto-planned part-time income is excluded until the work is entered.`
+              : "",
+            projection.expectedRepaymentIncome > 0
+              ? `${formatMoney(
+                  projection.expectedRepaymentIncome,
+                  state.profile.currency,
+                )} of expected repayments is excluded until received.`
+              : "",
+          ].filter(Boolean).join(" ") ||
+          "Only scheduled salary and entered work are counted as protected income.",
         amount: projection.projectedIncome,
       },
     ],

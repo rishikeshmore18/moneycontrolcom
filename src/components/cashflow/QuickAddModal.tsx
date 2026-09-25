@@ -4,7 +4,12 @@ import { Field, Input, Select } from "./Field";
 import { Button } from "./Button";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
-import { todayISO } from "@/lib/cashflow/dates";
+import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
+import {
+  FRIEND_EXPENSE_CATEGORY,
+  friendReturnDate,
+  isFriendExpenseCategory,
+} from "@/lib/cashflow/friendRepayment";
 import {
   recommendCardForCategory,
   availableCredit,
@@ -31,6 +36,9 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [debtId, setDebtId] = useState<string>("");
   const [sourceAccountId, setSourceAccountId] = useState<string>("");
   const [matchedItemId, setMatchedItemId] = useState<string>("");
+  const [returnMode, setReturnMode] = useState<"days" | "date">("days");
+  const [returnDays, setReturnDays] = useState("");
+  const [returnDate, setReturnDate] = useState("");
 
   const amt = toNumber(amount);
   const cur = state.profile.currency;
@@ -38,12 +46,21 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const cashAccount = state.accounts.find((a) => a.type === "cash" && isSpendableAccount(a));
   const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash" && isSpendableAccount(a));
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
-  const categories = baseCategories.includes("Miscellaneous")
-    ? baseCategories
-    : [...baseCategories, "Miscellaneous"];
+  const categories = Array.from(
+    new Set([...baseCategories, FRIEND_EXPENSE_CATEGORY, "Miscellaneous"]),
+  );
 
   const selectedCategory =
     category === "Other" && otherCategory.trim() ? otherCategory.trim() : category;
+  const isFriendExpense = isFriendExpenseCategory(selectedCategory);
+  const expectedReturn = isFriendExpense
+    ? friendReturnDate(
+        date,
+        returnMode === "days"
+          ? { mode: "days", days: Number(returnDays) }
+          : { mode: "date", date: returnDate },
+      )
+    : null;
   const activeDebts = state.debts.filter((d) => d.status === "active" && d.balance > 0);
   const chosenDebt = state.debts.find((d) => d.id === debtId);
 
@@ -137,7 +154,13 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   function submit() {
     if (amt <= 0) return toast("Enter an amount");
+    if (isFriendExpense && !expectedReturn) {
+      return toast("Choose a valid return date on or after the date you gave the money.");
+    }
     if (!method) return toast("Choose a payment method");
+    if (isFriendExpense && (method === "other" || method === "debt_payment")) {
+      return toast("Choose a bank account, cash, or a card so the money given is recorded.");
+    }
     if (method === "credit_card" && !cardId) return toast("Select a card");
     if ((method === "debit" || method === "debt_payment") && !sourceAccountId)
       return toast("Select an account");
@@ -196,6 +219,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         cardId: method === "credit_card" ? cardId : undefined,
         sourceAccountId:
           method === "debit" ? sourceAccountId : method === "cash" ? cashAccount?.id : undefined,
+        friendRepaymentDate: expectedReturn ?? undefined,
       },
     });
     // Link this expense to a matched upcoming bill (recurring / one-time)
@@ -205,7 +229,11 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
     ) {
       skipMatchedPlannedItem(matchedItem);
     }
-    toast(`Expense logged · ${formatMoney(amt, cur)}`);
+    toast(
+      isFriendExpense && expectedReturn
+        ? `Money given recorded · ${formatMoney(amt, cur)} expected back ${formatDisplayDate(expectedReturn)}. View it in Income coming for that period.`
+        : `Expense logged · ${formatMoney(amt, cur)}`,
+    );
     onDone();
   }
 
@@ -275,13 +303,47 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           />
         </Field>
       )}
-      <Field label="Description (optional)">
+      <Field label={isFriendExpense ? "Friend's name or note (optional)" : "Description (optional)"}>
         <Input
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          placeholder="What was it?"
+          placeholder={isFriendExpense ? "e.g. Alex" : "What was it?"}
         />
       </Field>
+      {isFriendExpense && (
+        <div className="grid min-w-0 gap-3 rounded-2xl border border-border bg-muted/20 p-3">
+          <Field label="When will they return it?">
+            <Select
+              value={returnMode}
+              onChange={(e) => setReturnMode(e.target.value as "days" | "date")}
+            >
+              <option value="days">After a number of days</option>
+              <option value="date">On a specific date</option>
+            </Select>
+          </Field>
+          {returnMode === "days" ? (
+            <Field label="Days after you gave the money">
+              <Input
+                type="number" inputMode="numeric" min="1" max="3650" step="1"
+                value={returnDays} onChange={(e) => setReturnDays(e.target.value)}
+                placeholder="e.g. 30"
+              />
+            </Field>
+          ) : (
+            <Field label="Expected return date">
+              <Input
+                type="date" min={date} value={returnDate}
+                onChange={(e) => setReturnDate(e.target.value)}
+              />
+            </Field>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {expectedReturn
+              ? `Expected ${formatDisplayDate(expectedReturn)}. Edit it in Income coming. If it's after this month, select a longer dashboard period to see it.`
+              : "Enter a valid return date to track the repayment."}
+          </p>
+        </div>
+      )}
       <Field label="Payment method">
         <div className="grid gap-3">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -293,7 +355,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
                 ["debt_payment", "Debt payment"],
                 ["other", "Other"],
               ] as const
-            ).map(([id, label]) => (
+            ).filter(([id]) => !isFriendExpense || (id !== "other" && id !== "debt_payment")).map(([id, label]) => (
               <button
                 key={id}
                 type="button"

@@ -18,6 +18,7 @@ import { clampNonNegative } from "./money";
 import { newId, todayISO } from "./dates";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
 import { upcomingCardBillItems } from "./forecast";
+import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 
 export type Action =
   | { type: "HYDRATE"; state: AppState }
@@ -74,6 +75,8 @@ export type Action =
         notes?: string;
         sourceAccountId?: string;
         cardId?: string;
+        /** Null removes a linked expectation; undefined leaves its date alone. */
+        friendRepaymentDate?: string | null;
       };
     }
   | {
@@ -87,6 +90,7 @@ export type Action =
         sourceAccountId?: string;
         cardId?: string;
         balanceAlreadySynced?: boolean;
+        friendRepaymentDate?: string;
       };
     }
   | {
@@ -467,6 +471,12 @@ export function reducer(state: AppState, action: Action): AppState {
       const p = action.payload;
       const existing = state.transactions.find((transaction) => transaction.id === p.id);
       if (!existing || existing.type !== "expense") return state;
+      const linkedRepayment = (state.plannedIncomeOverrides ?? []).find(
+        (override) => override.kind === "friend_repayment" && override.linkedExpenseId === p.id,
+      );
+      if (p.friendRepaymentDate &&
+        (!isFriendExpenseCategory(p.category) || !validISODate(p.friendRepaymentDate) ||
+          !validISODate(p.date) || p.friendRepaymentDate < p.date)) return state;
 
       let next = state;
 
@@ -505,9 +515,38 @@ export function reducer(state: AppState, action: Action): AppState {
         };
       }
 
+      const editedRepayments = (next.plannedIncomeOverrides ?? [])
+        .filter((override) => p.friendRepaymentDate !== null || override.linkedExpenseId !== p.id)
+        .map((override) =>
+          override.linkedExpenseId === p.id && override.kind === "friend_repayment"
+            ? {
+                ...override,
+                payDate: p.friendRepaymentDate ?? override.payDate,
+                amount: override.amount === existing.amount ? p.amount : override.amount,
+                label:
+                  override.label === `Repayment: ${existing.description.trim() || "friend"}`
+                    ? `Repayment: ${p.description.trim() || "friend"}`
+                    : override.label,
+              }
+            : override,
+        );
+      if (p.friendRepaymentDate && !linkedRepayment) {
+        editedRepayments.push({
+          id: newId(),
+          sourceId: `friend-repayment-${p.id}`,
+          linkedExpenseId: p.id,
+          kind: "friend_repayment",
+          payDate: p.friendRepaymentDate,
+          action: "add",
+          label: `Repayment: ${p.description.trim() || "friend"}`,
+          amount: p.amount,
+          accountId: p.sourceAccountId,
+        });
+      }
       return {
         ...next,
         categories: mergeCategories(next.categories, [p.category]),
+        plannedIncomeOverrides: editedRepayments,
         transactions: next.transactions.map((transaction) =>
           transaction.id === p.id
             ? {
@@ -528,6 +567,19 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "ADD_EXPENSE": {
       const p = action.payload;
+      if (
+        p.friendRepaymentDate &&
+        (!isFriendExpenseCategory(p.category) ||
+          p.method === "other" ||
+          !validISODate(p.friendRepaymentDate) ||
+          !validISODate(p.date) ||
+          p.friendRepaymentDate < p.date ||
+          !Number.isFinite(p.amount) ||
+          p.amount <= 0 ||
+          (p.method === "credit_card"
+            ? !state.cards.some((card) => card.id === p.cardId)
+            : !state.accounts.some((account) => account.id === p.sourceAccountId)))
+      ) return state;
       let next = state;
       if (!p.balanceAlreadySynced && p.method === "credit_card" && p.cardId) {
         next = {
@@ -549,10 +601,31 @@ export function reducer(state: AppState, action: Action): AppState {
         cardId: p.cardId,
         balanceAlreadySynced: p.balanceAlreadySynced,
       };
+      const transactionId = newId();
+      const timestamp = now();
+      const repayment: PlannedIncomeOverride[] = p.friendRepaymentDate
+        ? [
+            {
+              id: newId(),
+              sourceId: `friend-repayment-${transactionId}`,
+              linkedExpenseId: transactionId,
+              kind: "friend_repayment",
+              payDate: p.friendRepaymentDate,
+              action: "add",
+              label: `Repayment: ${p.description?.trim() || "friend"}`,
+              amount: p.amount,
+              accountId: p.sourceAccountId,
+            },
+          ]
+        : [];
       return {
         ...next,
         categories: mergeCategories(next.categories, [p.category]),
-        transactions: addTx(next, tx),
+        plannedIncomeOverrides: [...(next.plannedIncomeOverrides ?? []), ...repayment],
+        transactions: [
+          { ...tx, id: transactionId, createdAt: timestamp, updatedAt: timestamp },
+          ...next.transactions,
+        ],
       };
     }
 

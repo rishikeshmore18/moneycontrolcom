@@ -1849,10 +1849,10 @@ function ForecastPanels({
           )}
           <label className="flex min-h-14 items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
             <span>
-              <span className="block text-sm font-black">Include planned part-time income</span>
+              <span className="block text-sm font-black">Include projected income and repayments</span>
               <span className="mt-1 block text-xs text-muted-foreground">
-                Forecast totals may include future scheduled shifts. Safe to spend never relies on
-                them.
+                Forecast totals may include scheduled shifts and expected repayments. Safe to spend
+                excludes both until confirmed.
               </span>
             </span>
             <input

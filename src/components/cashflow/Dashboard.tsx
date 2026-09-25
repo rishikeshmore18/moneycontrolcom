@@ -50,6 +50,11 @@ import {
   utilization,
 } from "@/lib/cashflow/cardLogic";
 import { formatDisplayDate, newId, todayISO } from "@/lib/cashflow/dates";
+import {
+  FRIEND_EXPENSE_CATEGORY,
+  isFriendExpenseCategory,
+  validISODate,
+} from "@/lib/cashflow/friendRepayment";
 import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 
@@ -1527,24 +1532,40 @@ function PlannedIncomeSheet({
 }) {
   const { state, dispatch } = useApp();
   const cur = state.profile.currency;
+  const existingOverride = state.plannedIncomeOverrides.find(
+    (override) => override.id === item?.overrideId,
+  );
+  const isRepayment = existingOverride?.kind === "friend_repayment";
+  const linkedExpense = state.transactions.find(
+    (transaction) => transaction.id === existingOverride?.linkedExpenseId,
+  );
   const [label, setLabel] = useState(item?.label ?? "");
   const [amount, setAmount] = useState(item ? String(item.amount) : "");
   const [date, setDate] = useState(item?.payDate ?? item?.periodDate ?? todayISO());
   const [accountId, setAccountId] = useState(item?.accountId ?? state.accounts[0]?.id ?? "");
-  const [notes, setNotes] = useState("");
+  const [notes, setNotes] = useState(existingOverride?.notes ?? "");
 
   function save() {
     const amt = toNumber(amount);
-    if (!label.trim()) return toast("Name the income");
+    if (!label.trim()) return toast(isRepayment ? "Name the repayment" : "Name the income");
     if (amt <= 0) return toast("Enter an amount");
+    if (!validISODate(date) || (isRepayment && linkedExpense && date < linkedExpense.date)) {
+      return toast(
+        isRepayment
+          ? "Choose a valid return date on or after you gave the money."
+          : "Choose a valid expected date.",
+      );
+    }
     const payload = {
-      sourceId: item?.overrideId ?? `one-time-income-${newId()}`,
+      sourceId: existingOverride?.sourceId ?? `one-time-income-${newId()}`,
       payDate: date,
       action: "add" as const,
       label: label.trim(),
       amount: amt,
       accountId: accountId || undefined,
       notes: notes.trim() || undefined,
+      kind: existingOverride?.kind,
+      linkedExpenseId: existingOverride?.linkedExpenseId,
     };
     if (item?.overrideId) {
       dispatch({
@@ -1563,7 +1584,9 @@ function PlannedIncomeSheet({
     <Sheet
       open
       onClose={onClose}
-      title={item ? "Edit upcoming income" : "Add upcoming income"}
+      title={isRepayment
+        ? "Edit expected repayment"
+        : item ? "Edit upcoming income" : "Add upcoming income"}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -1576,11 +1599,14 @@ function PlannedIncomeSheet({
       }
     >
       <div className="grid gap-3">
-        <Field label="Income name" hint="e.g. Bonus, Tax refund, Side gig payment">
+        <Field
+          label={isRepayment ? "Repayment name" : "Income name"}
+          hint={isRepayment ? "e.g. Repayment: Alex" : "e.g. Bonus, Tax refund, Side gig payment"}
+        >
           <Input
             value={label}
             onChange={(event) => setLabel(event.target.value)}
-            placeholder="Bonus"
+            placeholder={isRepayment ? "Repayment: Alex" : "Bonus"}
           />
         </Field>
         <Field label="Amount expected">
@@ -1592,9 +1618,15 @@ function PlannedIncomeSheet({
             placeholder="0.00"
           />
         </Field>
-        <Field label="Expected date">
+        <Field label={isRepayment ? "Expected return date" : "Expected date"}>
           <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
         </Field>
+        {isRepayment && (
+          <p className="text-sm text-muted-foreground">
+            This is expected money, not a confirmed deposit. Edit the date or amount here;
+            mark it received only when your friend pays you back.
+          </p>
+        )}
         <Field label="Deposit to" hint="Where the money will land when it arrives">
           <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
             {state.accounts.map((account) => (
@@ -1628,14 +1660,17 @@ function MarkIncomeReceivedSheet({
     item.accountId || job?.defaultDepositAccountId || state.accounts[0]?.id || "";
   const [accountId, setAccountId] = useState(defaultAccountId);
   const [amount, setAmount] = useState(String(item.amount));
-  const [date, setDate] = useState(payDate);
+  const [date, setDate] = useState(
+    item.incomeKind === "friend_repayment" && payDate < todayISO() ? todayISO() : payDate,
+  );
+  const [alreadyInBankBalance, setAlreadyInBankBalance] = useState(false);
   const expectedTotal = entries.reduce(
     (sum, entry) => sum + (entry.actualAmount ?? entry.expectedAmount),
     0,
   );
 
   function markReceived() {
-    const actualTotal = toNumber(amount) || item.amount;
+    const actualTotal = toNumber(amount);
     if (actualTotal <= 0) return toast("Enter an amount");
     if (!accountId) return toast("Choose an account");
 
@@ -1647,7 +1682,8 @@ function MarkIncomeReceivedSheet({
           amount: actualTotal,
           date,
           description: item.label,
-          category: "Income",
+          category: item.incomeKind === "friend_repayment" ? "Friend repayment" : "Income",
+          balanceAlreadySynced: item.incomeKind === "friend_repayment" && alreadyInBankBalance,
         },
       });
       if (item.overrideId) {
@@ -1715,7 +1751,8 @@ function MarkIncomeReceivedSheet({
     <Sheet
       open
       onClose={onClose}
-      title="Mark pay received"
+      title={item.incomeKind === "friend_repayment"
+        ? "Mark repayment received" : "Mark pay received"}
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -1749,6 +1786,19 @@ function MarkIncomeReceivedSheet({
             ))}
           </Select>
         </Field>
+        {item.incomeKind === "friend_repayment" && (
+          <label className="flex items-start gap-3 rounded-2xl border border-border bg-muted/20 p-3 text-sm">
+            <input
+              type="checkbox" checked={alreadyInBankBalance}
+              onChange={(event) => setAlreadyInBankBalance(event.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
+            />
+            <span>
+              This deposit is already included in my connected bank balance. Check this to avoid
+              adding it twice.
+            </span>
+          </label>
+        )}
       </div>
     </Sheet>
   );
@@ -2615,6 +2665,9 @@ function EditTransactionSheet({
   onSaved: (tx: Transaction) => void;
 }) {
   const { state, dispatch } = useApp();
+  const linkedReturn = state.plannedIncomeOverrides.find(
+    (override) => override.kind === "friend_repayment" && override.linkedExpenseId === tx?.id,
+  );
   const [amount, setAmount] = useState(tx ? String(tx.amount) : "");
   const [date, setDate] = useState(tx?.date ?? todayISO());
   const [category, setCategory] = useState(tx?.category ?? "Groceries");
@@ -2624,6 +2677,7 @@ function EditTransactionSheet({
   const [sourceType, setSourceType] = useState<"account" | "card">(tx?.cardId ? "card" : "account");
   const [sourceAccountId, setSourceAccountId] = useState(tx?.sourceAccountId ?? "");
   const [cardId, setCardId] = useState(tx?.cardId ?? "");
+  const [repaymentDate, setRepaymentDate] = useState(linkedReturn?.payDate ?? "");
 
   useEffect(() => {
     setAmount(tx ? String(tx.amount) : "");
@@ -2635,22 +2689,27 @@ function EditTransactionSheet({
     setSourceType(tx?.cardId ? "card" : "account");
     setSourceAccountId(tx?.sourceAccountId ?? "");
     setCardId(tx?.cardId ?? "");
-  }, [tx]);
+    setRepaymentDate(linkedReturn?.payDate ?? "");
+  }, [tx, linkedReturn?.payDate]);
 
   if (!tx || !canEditTransaction(tx)) return null;
   const currentTx = tx;
 
-  const categories = state.categories?.length ? state.categories : ["Groceries", "Other"];
+  const categories = Array.from(new Set([...(state.categories ?? ["Groceries", "Other"]), FRIEND_EXPENSE_CATEGORY]));
   const accountOptions = state.accounts.filter(isSpendableAccount);
   const amountNumber = toNumber(amount);
   const selectedCategory =
     category === "Other" && newCategory.trim() ? newCategory.trim() : category;
+  const friendSelected = isFriendExpenseCategory(selectedCategory);
 
   function save() {
     if (amountNumber <= 0) return toast("Enter an amount");
     if (!selectedCategory) return toast("Choose a category");
     if (sourceType === "account" && !sourceAccountId) return toast("Choose an account");
     if (sourceType === "card" && !cardId) return toast("Choose a card");
+    if (friendSelected && (!validISODate(repaymentDate) || !validISODate(date) || repaymentDate < date)) {
+      return toast("Choose a valid return date on or after the expense date.");
+    }
     if (category === "Other" && newCategory.trim()) {
       dispatch({ type: "ADD_CATEGORY", category: newCategory.trim() });
     }
@@ -2678,6 +2737,7 @@ function EditTransactionSheet({
         notes,
         sourceAccountId: sourceType === "account" ? sourceAccountId : undefined,
         cardId: sourceType === "card" ? cardId : undefined,
+        friendRepaymentDate: friendSelected ? repaymentDate : linkedReturn ? null : undefined,
       },
     });
 
@@ -2722,6 +2782,22 @@ function EditTransactionSheet({
           <Field label="New category" hint="Leave blank to keep Other.">
             <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
           </Field>
+        )}
+        {friendSelected && (
+          <Field
+            label="Expected return date"
+            hint="Also editable in Income coming. This is an estimate until the money arrives."
+          >
+            <Input
+              type="date" min={date} value={repaymentDate}
+              onChange={(event) => setRepaymentDate(event.target.value)}
+            />
+          </Field>
+        )}
+        {!friendSelected && linkedReturn && (
+          <p className="self-center text-sm text-muted-foreground">
+            Changing the category will remove the expected repayment from Income coming.
+          </p>
         )}
         <Field label="Description" hint="Shown as the expense title.">
           <Input value={description} onChange={(e) => setDescription(e.target.value)} />
