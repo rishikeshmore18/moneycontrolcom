@@ -140,8 +140,17 @@ export async function syncTransactionsForItem(db: AdminClient, item: ItemRow) {
         // Never resurrect something the user already resolved.
         await db.from("plaid_transactions").update(row).eq("id", existing.id);
       } else {
-        // A settled transaction replaces its pending twin if still untouched.
+        // Carry a user's review decision forward when a pending transaction settles.
+        // Otherwise the same cleared transaction would return to Review under a new Plaid id.
+        let resolvedPending: { status: string; local_transaction_id: string | null } | null = null;
         if (tx.pending_transaction_id) {
+          const { data: pendingTwin } = await db
+            .from("plaid_transactions")
+            .select("status, local_transaction_id")
+            .eq("user_id", item.user_id)
+            .eq("transaction_id", tx.pending_transaction_id)
+            .maybeSingle();
+          if (pendingTwin && pendingTwin.status !== "inbox") resolvedPending = pendingTwin;
           await db
             .from("plaid_transactions")
             .delete()
@@ -149,7 +158,11 @@ export async function syncTransactionsForItem(db: AdminClient, item: ItemRow) {
             .eq("transaction_id", tx.pending_transaction_id)
             .eq("status", "inbox");
         }
-        await db.from("plaid_transactions").insert({ ...row, status: "inbox" });
+        await db.from("plaid_transactions").insert({
+          ...row,
+          status: resolvedPending?.status ?? "inbox",
+          local_transaction_id: resolvedPending?.local_transaction_id ?? null,
+        });
         added += 1;
       }
     }

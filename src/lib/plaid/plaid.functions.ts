@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { validateClearRange } from "./reviewClear";
+export type { ClearInboxRange } from "./reviewClear";
 
 export interface ConnectionAccount {
   id: string;
@@ -270,6 +272,38 @@ export const plaidListInbox = createServerFn({ method: "GET" })
       plaidCategory: t.plaid_category,
       paymentChannel: t.payment_channel,
     }));
+  });
+
+/** Count every pending inbox row matching a requested date range, including rows beyond the review list. */
+export const plaidPreviewClearInbox = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(validateClearRange)
+  .handler(async ({ data, context }) => {
+    let query = context.supabase.from("plaid_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", context.userId)
+      .eq("status", "inbox");
+    if (data.mode === "before") query = query.lt("date", data.before);
+    if (data.mode === "between") query = query.gte("date", data.start).lte("date", data.end);
+    const { count, error } = await query;
+    if (error) throw new Error(error.message);
+    return { count: count ?? 0 };
+  });
+
+/** Dismiss the selected inbox rows without changing balances or recorded activity. */
+export const plaidClearInbox = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(validateClearRange)
+  .handler(async ({ data, context }) => {
+    let query = context.supabase.from("plaid_transactions")
+      .update({ status: "dismissed" }, { count: "exact" })
+      .eq("user_id", context.userId)
+      .eq("status", "inbox");
+    if (data.mode === "before") query = query.lt("date", data.before);
+    if (data.mode === "between") query = query.gte("date", data.start).lte("date", data.end);
+    const { count, error } = await query;
+    if (error) throw new Error(error.message);
+    return { count: count ?? 0 };
   });
 
 /** Mark an inbox item accepted, merged, or dismissed. */
