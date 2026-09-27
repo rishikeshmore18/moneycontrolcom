@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import {
   CalendarClock,
   Eye,
@@ -57,6 +58,8 @@ import {
 } from "@/lib/cashflow/friendRepayment";
 import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
+import { canMergeExpenses } from "@/lib/cashflow/transactionMerge";
+import { plaidRelinkActivity } from "@/lib/plaid/plaid.functions";
 
 type BreakdownKey =
   "have_now" | "income_coming" | "expenses_coming" | "left_to_spend" | "spendable_today";
@@ -429,6 +432,10 @@ export function Dashboard() {
         onSaved={(tx) => {
           setEditingTx(null);
           setSelectedTx(tx);
+        }}
+        onRemoved={() => {
+          setEditingTx(null);
+          setSelectedTx(null);
         }}
       />
 
@@ -2659,12 +2666,15 @@ function EditTransactionSheet({
   tx,
   onClose,
   onSaved,
+  onRemoved,
 }: {
   tx: Transaction | null;
   onClose: () => void;
   onSaved: (tx: Transaction) => void;
+  onRemoved: () => void;
 }) {
   const { state, dispatch } = useApp();
+  const relinkActivity = useServerFn(plaidRelinkActivity);
   const linkedReturn = state.plannedIncomeOverrides.find(
     (override) => override.kind === "friend_repayment" && override.linkedExpenseId === tx?.id,
   );
@@ -2678,6 +2688,9 @@ function EditTransactionSheet({
   const [sourceAccountId, setSourceAccountId] = useState(tx?.sourceAccountId ?? "");
   const [cardId, setCardId] = useState(tx?.cardId ?? "");
   const [repaymentDate, setRepaymentDate] = useState(linkedReturn?.payDate ?? "");
+  const [actionView, setActionView] = useState<"edit" | "merge" | "confirmMerge" | "confirmDelete">("edit");
+  const [targetId, setTargetId] = useState("");
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setAmount(tx ? String(tx.amount) : "");
@@ -2690,6 +2703,8 @@ function EditTransactionSheet({
     setSourceAccountId(tx?.sourceAccountId ?? "");
     setCardId(tx?.cardId ?? "");
     setRepaymentDate(linkedReturn?.payDate ?? "");
+    setActionView("edit");
+    setTargetId("");
   }, [tx, linkedReturn?.payDate]);
 
   if (!tx || !canEditTransaction(tx)) return null;
@@ -2701,6 +2716,25 @@ function EditTransactionSheet({
   const selectedCategory =
     category === "Other" && newCategory.trim() ? newCategory.trim() : category;
   const friendSelected = isFriendExpenseCategory(selectedCategory);
+  const candidates = state.transactions.filter((candidate) => canMergeExpenses(currentTx, candidate));
+  const target = candidates.find((candidate) => candidate.id === targetId);
+
+  async function remove(keptId?: string) {
+    if (busy || (keptId && !candidates.some((candidate) => candidate.id === keptId))) return;
+    setBusy(true);
+    try {
+      await relinkActivity({ data: { removedId: currentTx.id, keptId } });
+      dispatch(keptId
+        ? { type: "MERGE_TRANSACTIONS", sourceId: currentTx.id, targetId: keptId }
+        : { type: "DELETE_TRANSACTION", id: currentTx.id });
+      toast(keptId ? "Expenses merged. One transaction remains." : "Expense deleted.");
+      onRemoved();
+    } catch (error) {
+      toast(`Couldn't ${keptId ? "merge" : "delete"} the expense: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function save() {
     if (amountNumber <= 0) return toast("Enter an amount");
@@ -2748,20 +2782,51 @@ function EditTransactionSheet({
   return (
     <Sheet
       open={!!tx}
-      onClose={onClose}
-      title="Edit expense"
+      onClose={() => { if (!busy) onClose(); }}
+      title={actionView === "edit" ? "Edit expense" : actionView === "confirmDelete" ? "Delete expense?" : "Merge expenses"}
       footer={
-        <>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button variant="primary" onClick={save}>
-            Save
-          </Button>
-        </>
+        actionView === "edit" ? (
+          <>
+            <Button variant="ghost" onClick={onClose}>Cancel</Button>
+            <Button variant="soft" disabled={candidates.length === 0} onClick={() => { setTargetId(candidates[0]?.id ?? ""); setActionView("merge"); }}>Merge</Button>
+            <Button variant="ghost" onClick={() => setActionView("confirmDelete")}>Delete</Button>
+            <Button variant="primary" onClick={save}>Save</Button>
+          </>
+        ) : actionView === "merge" ? (
+          <>
+            <Button variant="ghost" onClick={() => setActionView("edit")}>Back</Button>
+            <Button variant="primary" disabled={!target} onClick={() => setActionView("confirmMerge")}>Review merge</Button>
+          </>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => setActionView(actionView === "confirmDelete" ? "edit" : "merge")}>
+              {actionView === "confirmDelete" ? "Cancel" : "Keep both"}
+            </Button>
+            <Button variant="primary" disabled={busy} onClick={() => void remove(actionView === "confirmMerge" ? targetId : undefined)}>
+              {busy ? "Working…" : actionView === "confirmDelete" ? "Delete expense" : "Merge expenses"}
+            </Button>
+          </>
+        )
       }
     >
-      <div className="grid gap-3 sm:grid-cols-2">
+      {actionView === "confirmDelete" ? (
+        <p className="text-sm text-foreground">Delete <strong>{currentTx.description || currentTx.category} · {formatMoney(currentTx.amount, state.profile.currency)}</strong> from your activity? Its linked expected friend repayment will also be removed. This cannot be undone.</p>
+      ) : actionView === "confirmMerge" ? (
+        <p className="text-sm text-foreground">Keep <strong>{target?.description || target?.category} · {target ? formatMoney(target.amount, state.profile.currency) : ""}</strong> and remove <strong>{currentTx.description || currentTx.category}</strong>? The amount will be counted once, and any bank-review link will point to the kept expense. This cannot be undone.</p>
+      ) : actionView === "merge" ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">Choose the expense to keep. Only the same amount and payment source within four days can be merged. Unsaved edits to this expense are not included.</p>
+          <Field label="Keep this expense">
+            <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+              {candidates.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.description || candidate.category} · {formatDisplayDate(candidate.date)} · {formatMoney(candidate.amount, state.profile.currency)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+      ) : <><div className="grid gap-3 sm:grid-cols-2">
         <Field label="Amount">
           <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </Field>
@@ -2844,6 +2909,7 @@ function EditTransactionSheet({
           </Field>
         </div>
       </div>
+      {candidates.length === 0 && <p className="mt-3 text-xs text-muted-foreground">Merge is available when another expense has the same amount and payment source within four days.</p>}</>}
     </Sheet>
   );
 }

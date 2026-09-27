@@ -328,6 +328,27 @@ export const plaidResolveInbox = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+/** Keep resolved bank-review links pointing at the surviving activity row. */
+export const plaidRelinkActivity = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { removedId: string; keptId?: string }) => {
+    if (!input || typeof input.removedId !== "string" || !input.removedId.trim() ||
+        (input.keptId !== undefined &&
+          (typeof input.keptId !== "string" || !input.keptId.trim() || input.keptId === input.removedId))) {
+      throw new Error("Choose distinct transactions to merge or delete.");
+    }
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    const { error } = await context.supabase
+      .from("plaid_transactions")
+      .update({ local_transaction_id: data.keptId ?? null })
+      .eq("user_id", context.userId)
+      .eq("local_transaction_id", data.removedId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
 /** Disconnect a bank. History stays; syncing stops. */
 export const plaidUnlinkItem = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

@@ -19,6 +19,7 @@ import { newId, todayISO } from "./dates";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
 import { upcomingCardBillItems } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
+import { canMergeExpenses } from "./transactionMerge";
 
 export type Action =
   | { type: "HYDRATE"; state: AppState }
@@ -79,6 +80,8 @@ export type Action =
         friendRepaymentDate?: string | null;
       };
     }
+  | { type: "DELETE_TRANSACTION"; id: string }
+  | { type: "MERGE_TRANSACTIONS"; sourceId: string; targetId: string }
   | {
       type: "ADD_EXPENSE";
       payload: {
@@ -562,6 +565,70 @@ export function reducer(state: AppState, action: Action): AppState {
               }
             : transaction,
         ),
+      };
+    }
+
+    case "DELETE_TRANSACTION": {
+      const expense = state.transactions.find((tx) => tx.id === action.id);
+      if (!expense || expense.type !== "expense" || expense.reconciledByPaymentId) return state;
+      let next = state;
+      if (!expense.balanceAlreadySynced && expense.cardId) {
+        next = {
+          ...next,
+          cards: next.cards.map((card) => card.id === expense.cardId
+            ? { ...card, currentBalance: clampNonNegative(card.currentBalance - expense.amount) }
+            : card),
+        };
+      } else if (!expense.balanceAlreadySynced && expense.sourceAccountId) {
+        next = { ...next, accounts: updateAccount(next, expense.sourceAccountId, expense.amount) };
+      }
+      return {
+        ...next,
+        transactions: next.transactions.filter((tx) => tx.id !== expense.id),
+        plannedIncomeOverrides: (next.plannedIncomeOverrides ?? []).filter(
+          (override) => override.linkedExpenseId !== expense.id,
+        ),
+      };
+    }
+
+    case "MERGE_TRANSACTIONS": {
+      const source = state.transactions.find((tx) => tx.id === action.sourceId);
+      const target = state.transactions.find((tx) => tx.id === action.targetId);
+      if (!source || !target || !canMergeExpenses(source, target)) return state;
+      // Reverse the duplicate's local impact. If the duplicate is bank-synced,
+      // the remaining record must also be bank-synced, so reverse its manual impact instead.
+      const toReverse = source.balanceAlreadySynced ? (target.balanceAlreadySynced ? null : target) : source;
+      let next = state;
+      if (toReverse?.cardId) {
+        next = {
+          ...next,
+          cards: next.cards.map((card) => card.id === toReverse.cardId
+            ? { ...card, currentBalance: clampNonNegative(card.currentBalance - toReverse.amount) }
+            : card),
+        };
+      } else if (toReverse?.sourceAccountId) {
+        next = { ...next, accounts: updateAccount(next, toReverse.sourceAccountId, toReverse.amount) };
+      }
+      const linked = (next.plannedIncomeOverrides ?? []).filter(
+        (override) => override.linkedExpenseId === target.id,
+      );
+      return {
+        ...next,
+        transactions: next.transactions.filter((tx) => tx.id !== source.id).map((tx) => tx.id === target.id
+          ? { ...tx, balanceAlreadySynced: Boolean(source.balanceAlreadySynced || target.balanceAlreadySynced), updatedAt: now() }
+          : tx),
+        plannedIncomeOverrides: (next.plannedIncomeOverrides ?? [])
+          .filter((override) => override.linkedExpenseId !== source.id || linked.length === 0)
+          .map((override) => override.linkedExpenseId === source.id
+            ? {
+                ...override,
+                linkedExpenseId: target.id,
+                sourceId: `friend-repayment-${target.id}`,
+                label: override.label === `Repayment: ${source.description.trim() || "friend"}`
+                  ? `Repayment: ${target.description.trim() || "friend"}`
+                  : override.label,
+              }
+            : override),
       };
     }
 
