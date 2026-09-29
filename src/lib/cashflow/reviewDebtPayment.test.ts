@@ -140,3 +140,40 @@ describe("reviewed debt payment", () => {
     expect(reviewPayment(before, { date: "2026-09-31" })).toBe(before);
   });
 });
+
+describe("deleting a debt payment", () => {
+  it("removes only the older manual payment and restores its loan and account amounts", () => {
+    const before = loanState("not_started");
+    const manual = reducer(before, {
+      type: "PAY_DEBT",
+      payload: {
+        debtId: "student",
+        amount: 2_650,
+        sourceAccountId: "checking",
+        date: "2026-09-29",
+      },
+    });
+    const duplicate = reviewPayment(manual);
+    expect(duplicate.debts[0].balance).toBe(37_700);
+    expect(duplicate.accounts[0].balance).toBe(5_350);
+
+    const deleted = reducer(duplicate, { type: "DELETE_TRANSACTION", id: manual.transactions[0].id });
+    expect(deleted.transactions).toEqual([duplicate.transactions[0]]);
+    expect(deleted.transactions[0]).toMatchObject({ amount: 2_611, debtPrincipalAmount: 2_000 });
+    expect(deleted.debts[0]).toMatchObject({ balance: 40_350, status: "not_started" });
+    expect(deleted.accounts[0].balance).toBe(8_000);
+    expect(reducer(deleted, { type: "DELETE_TRANSACTION", id: manual.transactions[0].id })).toBe(deleted);
+  });
+
+  it("restores only principal for a bank-synced payment and reopens a fully repaid loan", () => {
+    const before = loanState("not_started");
+    before.debts[0].balance = 2_000;
+    const paid = reviewPayment(before);
+    expect(paid.debts[0]).toMatchObject({ balance: 0, status: "paid_off" });
+
+    const deleted = reducer(paid, { type: "DELETE_TRANSACTION", id: paid.transactions[0].id });
+    expect(deleted.debts[0]).toMatchObject({ balance: 2_000, status: "not_started" });
+    expect(deleted.accounts[0].balance).toBe(8_000);
+    expect(deleted.transactions).toHaveLength(0);
+  });
+});
