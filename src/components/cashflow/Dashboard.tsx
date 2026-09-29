@@ -2641,6 +2641,9 @@ function TransactionDetailSheet({
             <Row label="To" value={`${targetAccount.bankName} · ${targetAccount.name}`} />
           )}
           {debt && <Row label="Debt" value={debt.name} />}
+          {tx.type === "debt_payment" && tx.debtPrincipalAmount !== undefined && (
+            <Row label="Applied to debt balance" value={fm(tx.debtPrincipalAmount)} />
+          )}
           {tx.cycleStart && tx.cycleEnd && (
             <Row
               label="Billing cycle"

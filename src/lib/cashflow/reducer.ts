@@ -17,7 +17,7 @@ import {
 import { clampNonNegative } from "./money";
 import { newId, todayISO } from "./dates";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
-import { upcomingCardBillItems } from "./forecast";
+import { expensesComingBreakdown, upcomingCardBillItems } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 import { canMergeExpenses } from "./transactionMerge";
 
@@ -114,6 +114,20 @@ export type Action =
         amount: number;
         sourceAccountId: string;
         date: string;
+        notes?: string;
+        principalAmount?: number;
+        balanceAlreadySynced?: boolean;
+      };
+    }
+  | {
+      type: "REVIEW_DEBT_PAYMENT";
+      payload: {
+        debtId: string;
+        amount: number;
+        principalAmount: number;
+        sourceAccountId: string;
+        date: string;
+        balanceAlreadySynced: boolean;
         notes?: string;
       };
     }
@@ -812,9 +826,12 @@ export function reducer(state: AppState, action: Action): AppState {
       const p = action.payload;
       const debt = state.debts.find((d) => d.id === p.debtId);
       if (!debt) return state;
-      const pay = Math.min(p.amount, debt.balance);
-      if (pay <= 0) return state;
-      const nextBalance = clampNonNegative(debt.balance - pay);
+      const principal = p.principalAmount ?? Math.min(p.amount, debt.balance);
+      const pay = p.principalAmount === undefined ? principal : p.amount;
+      if (!Number.isFinite(pay) || pay <= 0 || !Number.isFinite(principal) ||
+          principal < 0 || principal > pay || principal > debt.balance ||
+          !state.accounts.some((account) => account.id === p.sourceAccountId)) return state;
+      const nextBalance = clampNonNegative(debt.balance - principal);
       const next: AppState = {
         ...state,
         debts: state.debts.map((d) =>
@@ -826,7 +843,9 @@ export function reducer(state: AppState, action: Action): AppState {
               }
             : d,
         ),
-        accounts: updateAccount(state, p.sourceAccountId, -pay),
+        accounts: p.balanceAlreadySynced
+          ? state.accounts
+          : updateAccount(state, p.sourceAccountId, -pay),
       };
       const tx: Omit<Transaction, "id" | "createdAt" | "updatedAt"> = {
         type: "debt_payment",
@@ -837,8 +856,34 @@ export function reducer(state: AppState, action: Action): AppState {
         sourceAccountId: p.sourceAccountId,
         debtId: p.debtId,
         notes: p.notes,
+        debtPrincipalAmount: p.principalAmount,
+        balanceAlreadySynced: p.balanceAlreadySynced,
       };
       return { ...next, transactions: addTx(next, tx) };
+    }
+
+    case "REVIEW_DEBT_PAYMENT": {
+      const p = action.payload;
+      const cents = (value: number) => Math.abs(value * 100 - Math.round(value * 100)) < 0.00001;
+      if (!validISODate(p.date) || !cents(p.amount) || !cents(p.principalAmount) ||
+          !Number.isFinite(p.amount) || !Number.isFinite(p.principalAmount)) return state;
+      const planned = expensesComingBreakdown(state, new Date(`${p.date}T12:00:00`), "this_month")
+        .flatMap((section) => section.items)
+        .find((item) => item.sourceType === "debt_plan" && item.sourceId === p.debtId &&
+          item.dueDate?.slice(0, 7) === p.date.slice(0, 7));
+      const paid = reducer(state, { type: "PAY_DEBT", payload: p });
+      if (paid === state || !planned) return paid;
+      const remaining = Math.round((planned.amount - p.amount) * 100) / 100;
+      return reducer(paid, {
+        type: "ADD_PLANNED_EXPENSE_OVERRIDE",
+        payload: {
+          sourceType: "debt_plan",
+          sourceId: p.debtId,
+          month: p.date.slice(0, 7),
+          action: remaining <= 0 ? "skip" : "override",
+          ...(remaining > 0 ? { amount: remaining } : {}),
+        },
+      });
     }
 
     case "ADD_TRANSFER": {
