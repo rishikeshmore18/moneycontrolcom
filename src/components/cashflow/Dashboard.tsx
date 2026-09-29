@@ -417,6 +417,7 @@ export function Dashboard() {
       <TransactionDetailSheet
         tx={selectedTx}
         onClose={() => setSelectedTx(null)}
+        onDeleted={() => setSelectedTx(null)}
         onEdit={(t) => {
           setSelectedTx(null);
           setEditingTx(t);
@@ -2583,6 +2584,7 @@ function AllActivitySheet({
 function TransactionDetailSheet({
   tx,
   onClose,
+  onDeleted,
   onEdit,
   accounts,
   cards,
@@ -2591,13 +2593,21 @@ function TransactionDetailSheet({
 }: {
   tx: Transaction | null;
   onClose: () => void;
+  onDeleted: () => void;
   onEdit: (t: Transaction) => void;
   accounts: { id: string; name: string; bankName: string }[];
   cards: { id: string; name: string }[];
   debts: { id: string; name: string }[];
   formatMoney: (n: number) => string;
 }) {
+  const { state, dispatch } = useApp();
+  const relinkActivity = useServerFn(plaidRelinkActivity);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setConfirmDelete(false), [tx?.id]);
+
   if (!tx) return null;
+  const currentTx = tx;
   const account = accounts.find((a) => a.id === tx.sourceAccountId);
   const targetAccount = accounts.find((a) => a.id === tx.targetAccountId);
   const card = cards.find((c) => c.id === tx.cardId);
@@ -2609,9 +2619,52 @@ function TransactionDetailSheet({
   else if (tx.type === "income" && targetAccount)
     method = `${targetAccount.bankName} · ${targetAccount.name}`;
 
+  async function removeDebtPayment() {
+    if (busy || currentTx.type !== "debt_payment") return;
+    if (!state.debts.some((item) => item.id === currentTx.debtId)) {
+      toast("This debt is no longer available. The payment could not be deleted.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await relinkActivity({ data: { removedId: currentTx.id } });
+      dispatch({ type: "DELETE_TRANSACTION", id: currentTx.id });
+      toast("Debt payment deleted.");
+      onDeleted();
+    } catch (error) {
+      toast(`Couldn't delete the payment: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <Sheet open={!!tx} onClose={onClose} title={tx.description || tx.category || "Transaction"}>
-      <div className="space-y-4">
+    <Sheet
+      open={!!tx}
+      onClose={() => { if (!busy) onClose(); }}
+      title={confirmDelete ? "Delete debt payment?" : tx.description || tx.category || "Transaction"}
+      footer={tx.type === "debt_payment" ? confirmDelete ? (
+        <>
+          <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</Button>
+          <Button variant="danger" disabled={busy} onClick={() => void removeDebtPayment()}>
+            {busy ? "Deleting…" : "Delete payment"}
+          </Button>
+        </>
+      ) : (
+        <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
+          <Trash2 size={16} /> Delete payment
+        </Button>
+      ) : undefined}
+    >
+      {confirmDelete ? (
+        <p className="text-sm text-foreground" role="alert">
+          Delete <strong>{currentTx.description} · {fm(currentTx.amount)} · {formatDisplayDate(currentTx.date)}</strong>?
+          {currentTx.balanceAlreadySynced
+            ? " The amount applied to this debt will be restored. Your synced bank balance will stay as it is."
+            : " The amount applied to this debt and the payment from your account will be reversed."}
+          {" "}This cannot be undone.
+        </p>
+      ) : <div className="space-y-4">
         <div className="flex items-start justify-between gap-3 py-2">
           <div className="min-w-0 flex-1 text-center">
             <div className={`text-4xl font-black tracking-tight ${txToneClass(tx)}`}>
@@ -2660,7 +2713,7 @@ function TransactionDetailSheet({
             {tx.notes?.trim() ? tx.notes : "Nil"}
           </div>
         </div>
-      </div>
+      </div>}
     </Sheet>
   );
 }

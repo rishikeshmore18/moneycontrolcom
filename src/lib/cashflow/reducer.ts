@@ -583,7 +583,30 @@ export function reducer(state: AppState, action: Action): AppState {
     }
 
     case "DELETE_TRANSACTION": {
-      const expense = state.transactions.find((tx) => tx.id === action.id);
+      const transaction = state.transactions.find((tx) => tx.id === action.id);
+      if (transaction?.type === "debt_payment") {
+        const principal = transaction.debtPrincipalAmount ?? transaction.amount;
+        const debt = state.debts.find((item) => item.id === transaction.debtId);
+        if (!debt || !Number.isFinite(principal) || principal < 0) return state;
+        const nextBalance = Math.round((debt.balance + principal) * 100) / 100;
+        return {
+          ...state,
+          debts: state.debts.map((item) => item.id === debt.id
+            ? {
+                ...item,
+                balance: nextBalance,
+                status: item.status === "paid_off" && nextBalance > 0
+                  ? transaction.debtStatusBeforePayment ?? "active"
+                  : item.status,
+              }
+            : item),
+          accounts: transaction.balanceAlreadySynced || !transaction.sourceAccountId
+            ? state.accounts
+            : updateAccount(state, transaction.sourceAccountId, transaction.amount),
+          transactions: state.transactions.filter((tx) => tx.id !== transaction.id),
+        };
+      }
+      const expense = transaction;
       if (!expense || expense.type !== "expense" || expense.reconciledByPaymentId) return state;
       let next = state;
       if (!expense.balanceAlreadySynced && expense.cardId) {
@@ -857,6 +880,7 @@ export function reducer(state: AppState, action: Action): AppState {
         debtId: p.debtId,
         notes: p.notes,
         debtPrincipalAmount: p.principalAmount,
+        debtStatusBeforePayment: debt.status,
         balanceAlreadySynced: p.balanceAlreadySynced,
       };
       return { ...next, transactions: addTx(next, tx) };

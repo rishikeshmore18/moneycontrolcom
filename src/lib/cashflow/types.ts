@@ -135,6 +135,8 @@ export interface Transaction {
   debtId?: string;
   /** For reviewed loan payments, only this portion reduces the debt balance. */
   debtPrincipalAmount?: number;
+  /** Status to restore if this payment closed the debt and is later deleted. */
+  debtStatusBeforePayment?: DebtStatus;
   date: string;
   createdAt: string;
   updatedAt: string;
