@@ -8,7 +8,7 @@ import { toast } from "./Toast";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
-import { FRIEND_EXPENSE_CATEGORY, friendReturnDate, isFriendExpenseCategory } from "@/lib/cashflow/friendRepayment";
+import { FRIEND_EXPENSE_CATEGORY, friendReturnDate, isFriendExpenseCategory, validISODate } from "@/lib/cashflow/friendRepayment";
 import { matchingPlannedExpenses, type ReviewExpense } from "@/lib/cashflow/plannedReview";
 import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import {
@@ -38,6 +38,10 @@ function formatDate(iso: string): string {
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+function isDebtReviewCategory(category: string): boolean {
+  return /^(debt|debt payment)$/i.test(category.trim());
 }
 
 export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "primary" | "ghost" }) {
@@ -152,6 +156,8 @@ function InboxSheet({
   }, [confirmation]);
   const [catFor, setCatFor] = useState<Record<string, string>>({});
   const [otherCategoryFor, setOtherCategoryFor] = useState<Record<string, string>>({});
+  const [debtFor, setDebtFor] = useState<Record<string, string>>({});
+  const [principalFor, setPrincipalFor] = useState<Record<string, string>>({});
   const [friendModeFor, setFriendModeFor] = useState<Record<string, "days" | "date">>({});
   const [friendDaysFor, setFriendDaysFor] = useState<Record<string, string>>({});
   const [friendDateFor, setFriendDateFor] = useState<Record<string, string>>({});
@@ -163,7 +169,8 @@ function InboxSheet({
   );
   const cur = state.profile.currency;
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
-  const categories: string[] = Array.from(new Set([...baseCategories, FRIEND_EXPENSE_CATEGORY, "Miscellaneous"]));
+  const categories: string[] = Array.from(new Set([...baseCategories, FRIEND_EXPENSE_CATEGORY, "Debt", "Miscellaneous"]));
+  const payableDebts = state.debts.filter((debt) => debt.balance > 0 && debt.status !== "paid_off");
 
   const returnDateFor = (item: InboxItem, category: string) => {
     if (!isFriendExpenseCategory(category)) return undefined;
@@ -238,6 +245,55 @@ function InboxSheet({
       return;
     }
     const category = chosenCategory || item.plaidCategory || "Miscellaneous";
+    if (item.amount > 0 && isDebtReviewCategory(category)) {
+      if (map.linkedLocalKind !== "account" || !state.accounts.some((account) => account.id === map.linkedLocalId)) {
+        toast("Choose a linked bank account to record a debt payment.");
+        return;
+      }
+      if (!validISODate(item.date) || !Number.isFinite(item.amount) ||
+          Math.abs(item.amount * 100 - Math.round(item.amount * 100)) > 0.00001) {
+        return toast("This bank payment has an invalid date or amount. It was not recorded.");
+      }
+      const debt = payableDebts.find((candidate) => candidate.id === debtFor[item.id]);
+      if (!debt) return toast("Choose the debt this payment belongs to.");
+      const enteredPrincipal = principalFor[item.id]?.trim() ?? "";
+      if (!/^\d+(?:\.\d{1,2})?$/.test(enteredPrincipal)) {
+        return toast("Enter the principal amount from your loan statement, including 0 if none was applied.");
+      }
+      const principalAmount = Number(enteredPrincipal);
+      if (principalAmount > Math.min(item.amount, debt.balance)) {
+        return toast("Principal cannot exceed the payment or the remaining debt balance.");
+      }
+      setBusy(item.id);
+      try {
+        // Resolve the bank item first so a failed request cannot record a second local payment.
+        await resolve({ data: { ids: [item.id], status: "accepted" } });
+        dispatch({
+          type: "REVIEW_DEBT_PAYMENT",
+          payload: {
+            debtId: debt.id,
+            amount: item.amount,
+            principalAmount,
+            sourceAccountId: map.linkedLocalId,
+            date: item.date,
+            balanceAlreadySynced: !item.pending,
+            notes: item.merchantName || item.name,
+          },
+        });
+        toast(`Payment recorded for ${debt.name}. ${formatMoney(principalAmount, cur)} applied to the debt balance.`);
+        try {
+          await onResolved();
+        } catch (error) {
+          console.error("[plaid] review refresh failed after recording debt payment", error);
+          toast("Payment saved, but Review did not refresh. Reopen Review to update the list.");
+        }
+      } catch (err) {
+        toast(`Couldn't record the debt payment: ${errText(err)}`);
+      } finally {
+        setBusy(null);
+      }
+      return;
+    }
     const expectedReturn = returnDateFor(item, category);
     if (item.amount > 0 && isFriendExpenseCategory(category) && !expectedReturn) {
       toast("Choose a valid return date before accepting money given to a friend.");
@@ -498,6 +554,8 @@ function InboxSheet({
             const chosen =
               catFor[item.id] ?? guessCategory([item.plaidCategory, item.merchantName, item.name], categories);
             const category = chosen === "Other" ? otherCategoryFor[item.id]?.trim() || "Other" : chosen;
+            const debtCategory = item.amount > 0 && isDebtReviewCategory(category);
+            const selectedDebt = payableDebts.find((debt) => debt.id === debtFor[item.id]);
             const expectedReturn = returnDateFor(item, category);
             return (
               <div key={item.id} className="grid min-w-0 gap-2 rounded-2xl border border-border p-3 [overflow-wrap:anywhere]">
@@ -524,7 +582,7 @@ function InboxSheet({
                   </div>
                 )}
 
-                {dup && (
+                {dup && (!debtCategory || (dup.type === "debt_payment" && dup.debtId === selectedDebt?.id)) && (
                   <div className="rounded-xl bg-muted p-2 text-xs">
                     Looks like one you already entered:{" "}
                     <strong>
@@ -539,7 +597,13 @@ function InboxSheet({
                   </div>
                 )}
 
-                {plannedMatches.length > 0 && (
+                {dup && debtCategory && (dup.type !== "debt_payment" || dup.debtId !== selectedDebt?.id) && (
+                  <p className="text-xs text-[color:var(--warn)]">
+                    A matching activity item already exists ({dup.description || dup.category}). Check it before recording this as a debt payment to avoid counting the bank outflow twice.
+                  </p>
+                )}
+
+                {!debtCategory && plannedMatches.length > 0 && (
                   <div className="grid gap-2 rounded-xl bg-muted p-3 text-sm">
                     <p>Also in Expenses coming. If this is the same bill, mark it paid so it no longer appears as upcoming.</p>
                     {plannedMatches.map((planned) => (
@@ -579,6 +643,34 @@ function InboxSheet({
                           placeholder="e.g. Parking, Laundry"
                         />
                       </Field>
+                    )}
+                    {debtCategory && (
+                      <div className="grid min-w-0 gap-3 rounded-2xl border border-border bg-muted/20 p-3">
+                        {map?.linkedLocalKind !== "account" && (
+                          <p className="text-xs text-[color:var(--warn)]">Debt payments must come from a linked bank account.</p>
+                        )}
+                        {payableDebts.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">Add a debt with a balance in Profile before accepting this payment.</p>
+                        ) : (
+                          <>
+                            <Field label="Apply payment to debt">
+                              <Select value={debtFor[item.id] ?? ""} onChange={(event) => setDebtFor((previous) => ({ ...previous, [item.id]: event.target.value }))}>
+                                <option value="">Choose a debt…</option>
+                                {payableDebts.map((debt) => (
+                                  <option key={debt.id} value={debt.id}>
+                                    {debt.name} · {formatMoney(debt.balance, cur)} remaining
+                                  </option>
+                                ))}
+                              </Select>
+                            </Field>
+                            {selectedDebt && (
+                              <Field label="Amount reducing debt balance" hint="Enter the principal shown by your lender. The rest of the bank payment may be interest or fees. Use the full amount only if all of it reduces the debt.">
+                                <Input type="number" inputMode="decimal" min="0" max={Math.min(item.amount, selectedDebt.balance)} step="0.01" placeholder="Principal from loan statement" value={principalFor[item.id] ?? ""} onChange={(event) => setPrincipalFor((previous) => ({ ...previous, [item.id]: event.target.value }))} />
+                              </Field>
+                            )}
+                          </>
+                        )}
+                      </div>
                     )}
                     {isFriendExpenseCategory(category) && (
                       <div className="grid min-w-0 gap-2 rounded-2xl border border-border bg-muted/20 p-3">
@@ -627,7 +719,7 @@ function InboxSheet({
                   <Button
                     variant="primary"
                     onClick={() => accept(item, category)}
-                    disabled={busy === item.id || !map?.linkedLocalId}
+                    disabled={busy === item.id || !map?.linkedLocalId || (debtCategory && (map?.linkedLocalKind !== "account" || payableDebts.length === 0))}
                   >
                     Accept
                   </Button>

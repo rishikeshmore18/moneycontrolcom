@@ -133,6 +133,8 @@ export interface Transaction {
   targetAccountId?: string;
   cardId?: string;
   debtId?: string;
+  /** For reviewed loan payments, only this portion reduces the debt balance. */
+  debtPrincipalAmount?: number;
   date: string;
   createdAt: string;
   updatedAt: string;
