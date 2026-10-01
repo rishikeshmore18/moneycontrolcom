@@ -333,6 +333,10 @@ function DayDetailSheet({
                         onClick={() => {
                           if (e.paid) {
                             if (e.auto) return;
+                            if (state.transactions.some((tx) => tx.id === e.linkedTransactionId && tx.balanceAlreadySynced)) {
+                              toast("This payday is linked to Activity. Edit or delete that income there to undo the match.");
+                              return;
+                            }
                             dispatch({ type: "UNMARK_TIMESHEET_PAID", payload: { id: e.id } });
                             toast("Unmarked paid");
                           } else {
