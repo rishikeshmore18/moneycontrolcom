@@ -7,7 +7,7 @@ import { Field, Input, Select } from "./Field";
 import { toast } from "./Toast";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
-import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
+import { formatDisplayDate, newId, todayISO } from "@/lib/cashflow/dates";
 import { FRIEND_EXPENSE_CATEGORY, friendReturnDate, isFriendExpenseCategory, validISODate } from "@/lib/cashflow/friendRepayment";
 import { matchingPlannedExpenses, type ReviewExpense } from "@/lib/cashflow/plannedReview";
 import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
@@ -321,9 +321,14 @@ function InboxSheet({
         });
         if (planned) markPlannedPaid(planned);
       } else if (map.linkedLocalKind === "account") {
+        const transactionId = newId();
+        // Resolve first and keep the bank row linked to the new activity ID.
+        // A failed request must not create a second local deposit on retry.
+        await resolve({ data: { ids: [item.id], status: "accepted", localTransactionId: transactionId } });
         dispatch({
           type: "ADD_INCOME",
           payload: {
+            transactionId,
             accountId: map.linkedLocalId,
             amount: Math.abs(item.amount),
             category: "Income",
@@ -332,6 +337,13 @@ function InboxSheet({
             balanceAlreadySynced: !item.pending,
           },
         });
+        try {
+          await onResolved();
+        } catch (error) {
+          console.error("[plaid] income review refresh failed after recording", error);
+        }
+        toast("Bank deposit added. You can match it to a payday or merge a duplicate in Activity.");
+        return;
       } else {
         toast("Money coming into a card is a card payment — record it from Quick add, then merge.");
         setBusy(null);

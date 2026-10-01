@@ -118,6 +118,7 @@ export interface TimesheetEntry {
   updatedAt: string;
   userEdited: boolean;
   auto?: boolean; // synthesized from job schedule
+  linkedTransactionId?: string; // accepted bank income that settled this entry
 }
 
 export type TransactionType =
@@ -143,6 +144,22 @@ export interface Transaction {
   notes?: string;
   /** Posted bank transactions already reflected in the linked balance must not move it twice. */
   balanceAlreadySynced?: boolean;
+  /** The unpaid item this accepted transaction settled, for safe undo and audit. */
+  linkedPlannedIncome?: {
+    itemId: string;
+    label: string;
+    originalOverride?: PlannedIncomeOverride;
+    originalEntries?: TimesheetEntry[];
+    addedEntryIds?: string[];
+  };
+  linkedPlannedExpense?: {
+    label: string;
+    sourceType: "recurring_bill" | "one_time";
+    sourceId?: string;
+    month: string;
+    createdOverrideId?: string;
+    originalOverride?: PlannedExpenseOverride;
+  };
   // Cycle reconciliation (card payments + the expenses they cover)
   cycleStart?: string; // ISO date — start of billing cycle (exclusive)
   cycleEnd?: string; // ISO date — statement / cycle close date (inclusive)
