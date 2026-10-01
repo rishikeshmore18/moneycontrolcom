@@ -15,11 +15,12 @@ import {
   emptyState,
 } from "./types";
 import { clampNonNegative } from "./money";
-import { addDays, fromISODate, newId, todayISO, toISODate } from "./dates";
+import { newId, todayISO } from "./dates";
 import { cycleForDate, expensesInCycle } from "./cardLogic";
-import { expensesComingBreakdown, pendingIncomeBreakdown, upcomingCardBillItems } from "./forecast";
+import { expensesComingBreakdown, upcomingCardBillItems } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 import { canMergeExpenses, canMergeIncome } from "./transactionMerge";
+import { assignablePlannedExpenses, assignablePlannedIncome } from "./activityAssignment";
 
 export type Action =
   | { type: "HYDRATE"; state: AppState }
@@ -85,7 +86,8 @@ export type Action =
   | { type: "UPDATE_INCOME_TRANSACTION"; id: string; description: string; category: string; date: string; notes?: string }
   | { type: "MERGE_INCOME_TRANSACTIONS"; sourceId: string; targetId: string; bankBalanceAuthoritative: boolean }
   | { type: "LINK_INCOME_TRANSACTION"; id: string; itemId: string }
-  | { type: "LINK_EXPENSE_TRANSACTION"; id: string; itemId: string }
+  | { type: "LINK_EXPENSE_TRANSACTION"; id: string; itemId: string; updateFutureBillAmount?: boolean }
+  | { type: "UNLINK_PLANNED_TRANSACTION"; id: string }
   | { type: "MERGE_TRANSACTIONS"; sourceId: string; targetId: string; bankBalanceAuthoritative?: boolean }
   | {
       type: "ADD_EXPENSE";
@@ -249,8 +251,13 @@ function undoExpenseLink(state: AppState, tx: Transaction): AppState {
       !state.plannedExpenseOverrides.some((override) => override.id === link.createdOverrideId)) return state;
   return {
     ...state,
+    recurringBills: link.priorRecurringAmount === undefined ? state.recurringBills :
+      state.recurringBills.map((bill) => bill.id === link.sourceId &&
+        bill.amount === link.matchedRecurringAmount
+        ? { ...bill, amount: link.priorRecurringAmount! } : bill),
     plannedExpenseOverrides: [
-      ...state.plannedExpenseOverrides.filter((override) => override.id !== link.createdOverrideId),
+      ...state.plannedExpenseOverrides.filter((override) => override.id !== link.createdOverrideId &&
+        override.id !== link.originalOverride?.id),
       ...(link.originalOverride ? [link.originalOverride] : []),
     ],
   };
@@ -710,6 +717,18 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case "UNLINK_PLANNED_TRANSACTION": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || (!tx.linkedPlannedExpense && !tx.linkedPlannedIncome)) return state;
+      const restored = tx.linkedPlannedIncome ? undoIncomeLink(state, tx) : undoExpenseLink(state, tx);
+      return {
+        ...restored,
+        transactions: restored.transactions.map((item) => item.id === tx.id
+          ? { ...item, linkedPlannedIncome: undefined, linkedPlannedExpense: undefined, updatedAt: now() }
+          : item),
+      };
+    }
+
     case "MERGE_INCOME_TRANSACTIONS": {
       const source = state.transactions.find((item) => item.id === action.sourceId);
       const target = state.transactions.find((item) => item.id === action.targetId);
@@ -736,14 +755,8 @@ export function reducer(state: AppState, action: Action): AppState {
       const tx = state.transactions.find((item) => item.id === action.id);
       if (!tx || tx.type !== "income" || !tx.targetAccountId || tx.linkedPlannedIncome ||
           !validISODate(tx.date)) return state;
-      const reference = fromISODate(tx.date);
-      const range = {
-        start: toISODate(addDays(reference, -15)),
-        end: toISODate(addDays(reference, 15)),
-      };
-      const item = pendingIncomeBreakdown(state, reference, "custom", range)
-        .flatMap((section) => section.items).find((candidate) => candidate.id === action.itemId);
-      if (!item || (item.accountId && item.accountId !== tx.targetAccountId)) return state;
+      const item = assignablePlannedIncome(state, tx).find((candidate) => candidate.id === action.itemId);
+      if (!item) return state;
       if (item.incomeSourceType === "one_time") {
         const override = state.plannedIncomeOverrides.find((candidate) => candidate.id === item.overrideId);
         if (!override) return state;
@@ -792,24 +805,30 @@ export function reducer(state: AppState, action: Action): AppState {
     case "LINK_EXPENSE_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
       if (!tx || tx.type !== "expense" || tx.linkedPlannedExpense || !validISODate(tx.date)) return state;
-      const reference = fromISODate(tx.date);
-      const range = { start: toISODate(addDays(reference, -31)), end: toISODate(addDays(reference, 45)) };
-      const item = expensesComingBreakdown(state, reference, "custom", range)
-        .flatMap((section) => section.items).find((candidate) => candidate.id === action.itemId);
-      if (!item || (item.sourceType !== "one_time" && item.sourceType !== "recurring_bill") ||
-          (item.paymentMethod === "card" ? item.cardId !== tx.cardId : item.accountId !== tx.sourceAccountId)) return state;
-      const month = (item.dueDate ?? item.periodDate ?? "").slice(0, 7);
+      const item = assignablePlannedExpenses(state, tx).find((candidate) => candidate.id === action.itemId);
+      if (!item || (item.sourceType !== "one_time" && item.sourceType !== "recurring_bill")) return state;
+      // A monthly bill can have a due-date override in the following month.
+      // The occurrence key, not the displayed due date, controls which month is paid.
+      const month = item.sourceType === "recurring_bill" ? item.id.slice(-7)
+        : state.plannedExpenseOverrides.find((override) => override.id === item.overrideId)?.month ?? "";
       const original = state.plannedExpenseOverrides.find((override) =>
         item.sourceType === "one_time" ? override.id === item.overrideId
           : override.sourceType === "recurring_bill" && override.sourceId === item.sourceId && override.month === month);
       if (item.sourceType === "one_time" && !original) return state;
       const createdOverrideId = item.sourceType === "recurring_bill" ? newId() : undefined;
+      const recurringBill = item.sourceType === "recurring_bill"
+        ? state.recurringBills.find((bill) => bill.id === item.sourceId) : undefined;
+      if (item.sourceType === "recurring_bill" && !recurringBill) return state;
       const link: NonNullable<Transaction["linkedPlannedExpense"]> = {
         label: item.label, sourceType: item.sourceType, sourceId: item.sourceId,
         month, createdOverrideId, originalOverride: original,
+        ...(action.updateFutureBillAmount && recurringBill && recurringBill.amount !== tx.amount
+          ? { priorRecurringAmount: recurringBill.amount, matchedRecurringAmount: tx.amount } : {}),
       };
       return {
         ...state,
+        recurringBills: link.priorRecurringAmount === undefined ? state.recurringBills :
+          state.recurringBills.map((bill) => bill.id === recurringBill?.id ? { ...bill, amount: tx.amount } : bill),
         plannedExpenseOverrides: [
           ...state.plannedExpenseOverrides.filter((override) => override.id !== original?.id),
           ...(createdOverrideId ? [{ id: createdOverrideId, sourceType: "recurring_bill" as const,

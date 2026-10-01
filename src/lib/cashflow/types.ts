@@ -159,6 +159,9 @@ export interface Transaction {
     month: string;
     createdOverrideId?: string;
     originalOverride?: PlannedExpenseOverride;
+    /** Only restore the estimate if it has not been independently edited since this match. */
+    priorRecurringAmount?: number;
+    matchedRecurringAmount?: number;
   };
   // Cycle reconciliation (card payments + the expenses they cover)
   cycleStart?: string; // ISO date — start of billing cycle (exclusive)
