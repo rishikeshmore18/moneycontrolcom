@@ -714,7 +714,7 @@ function CardPaymentForm({ onDone, initialCardId }: { onDone: () => void; initia
       type: "PAY_CREDIT_CARD",
       payload: { cardId: card.id, amount: payAmount, sourceAccountId, date },
     });
-    toast(`Paid ${formatMoney(payAmount, cur)} to ${card.name}`);
+    toast(`Recorded ${formatMoney(payAmount, cur)} to ${card.name}. Awaiting card confirmation.`);
     onDone();
   }
 
@@ -729,6 +729,7 @@ function CardPaymentForm({ onDone, initialCardId }: { onDone: () => void; initia
           ))}
         </Select>
       </Field>
+      <p className="text-sm text-muted-foreground">Recording a payment reserves the money now. The card balance stays unchanged until posting is confirmed. You can edit or delete the payment in Activity.</p>
 
       {card && cycle && (
         <div className="rounded-2xl border border-border bg-muted/40 p-3 text-xs">

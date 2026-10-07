@@ -13,11 +13,14 @@ import {
   plaidExchangeToken,
   plaidLinkAccount,
   plaidListConnections,
+  plaidListInbox,
   plaidSyncAll,
   plaidUnlinkItem,
   type Connection,
 } from "@/lib/plaid/plaid.functions";
 import { applyBankBalances } from "@/lib/plaid/bankBalances";
+import { reconcilePayments } from "@/lib/plaid/reconcilePayments";
+import { reducer, type Action } from "@/lib/cashflow/reducer";
 
 const PlaidLinkButton = lazy(() => import("./PlaidLinkButton"));
 
@@ -38,6 +41,7 @@ export function PlaidConnectionsCard() {
   const cur = state.profile.currency;
 
   const listConnections = useServerFn(plaidListConnections);
+  const listInbox = useServerFn(plaidListInbox);
   const createLinkToken = useServerFn(plaidCreateLinkToken);
   const exchangeToken = useServerFn(plaidExchangeToken);
   const syncAll = useServerFn(plaidSyncAll);
@@ -49,20 +53,24 @@ export function PlaidConnectionsCard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [linkToken, setLinkToken] = useState<string | null>(null);
 
-  const stateRef = useRef({ accounts: state.accounts, cards: state.cards, dispatch });
-  stateRef.current = { accounts: state.accounts, cards: state.cards, dispatch };
+  const stateRef = useRef({ state, dispatch });
+  stateRef.current = { state, dispatch };
 
   const refresh = useCallback(async () => {
     try {
       const c = await listConnections();
+      const inbox = await listInbox();
       setConnections(c);
-      applyBankBalances(c, stateRef.current.accounts, stateRef.current.cards, stateRef.current.dispatch);
+      let working = stateRef.current.state;
+      const apply = (action: Action) => { working = reducer(working, action); stateRef.current.dispatch(action); };
+      applyBankBalances(c, working.accounts, working.cards, apply);
+      reconcilePayments(working, inbox, c).forEach(apply);
     } catch (err) {
       console.error("[plaid] load failed", err);
     } finally {
       setLoading(false);
     }
-  }, [listConnections]);
+  }, [listConnections, listInbox]);
 
   useEffect(() => {
     void refresh();
@@ -264,4 +272,3 @@ export function PlaidConnectionsCard() {
     </Card>
   );
 }
-

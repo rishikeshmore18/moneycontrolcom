@@ -16,11 +16,11 @@ import {
 } from "./types";
 import { clampNonNegative } from "./money";
 import { newId, todayISO } from "./dates";
-import { cycleForDate, expensesInCycle } from "./cardLogic";
-import { expensesComingBreakdown, upcomingCardBillItems } from "./forecast";
+import { expensesComingBreakdown } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 import { canMergeExpenses, canMergeIncome } from "./transactionMerge";
 import { assignablePlannedExpenses, assignablePlannedIncome } from "./activityAssignment";
+import { recordCardPayment, removeCardPayment, validCardPayment, type CardPaymentInput } from "./cardPaymentLedger";
 
 export type Action =
   | { type: "HYDRATE"; state: AppState }
@@ -32,6 +32,11 @@ export type Action =
   | { type: "DELETE_ACCOUNT"; id: string }
   | { type: "ADD_CARD"; payload: Omit<Card, "id"> }
   | { type: "UPDATE_CARD"; payload: Card }
+  | { type: "SYNC_ACCOUNT_BALANCE"; id: string; balance: number }
+  | { type: "SYNC_CARD_BALANCE"; id: string; balance: number; limit: number }
+  | { type: "UPDATE_CARD_PAYMENT"; id: string; payload: CardPaymentInput }
+  | { type: "RECONCILE_CARD_PAYMENT"; id: string; leg: "cash" | "card"; bankId: string }
+  | { type: "CONVERT_CARD_PAYMENT"; id: string; payload: CardPaymentInput; mergeIntoId?: string }
   | { type: "DELETE_CARD"; id: string }
   | { type: "ADD_DEBT"; payload: Omit<Debt, "id"> }
   | { type: "UPDATE_DEBT"; payload: Debt }
@@ -105,14 +110,7 @@ export type Action =
     }
   | {
       type: "PAY_CREDIT_CARD";
-      payload: {
-        cardId: string;
-        amount: number;
-        sourceAccountId: string;
-        date: string;
-        notes?: string;
-        plannedExpenseItemId?: string;
-      };
+      payload: CardPaymentInput;
     }
   | {
       type: "PAY_DEBT";
@@ -183,10 +181,6 @@ export type Action =
 
 function now(): string {
   return new Date().toISOString();
-}
-
-function monthFromISO(date: string): string {
-  return date.slice(0, 7);
 }
 
 function updateAccount(state: AppState, id: string, delta: number): Account[] {
@@ -293,7 +287,13 @@ function normalizeState(state: AppState): AppState {
       state.cards?.flatMap((c) => c.preferredCategories),
       state.plannedExpenseOverrides?.map((p) => p.category ?? ""),
     ),
-    plannedExpenseOverrides: state.plannedExpenseOverrides ?? [],
+    // Older payment entry code hid whole card obligations, including partial payments.
+    // Recompute these from the remaining balance; retain explicit amount/date overrides.
+    plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter((override) =>
+      !(override.sourceType === "card_due" && override.action === "skip" &&
+        state.transactions.some((tx) => tx.type === "card_payment" && tx.cardId &&
+          !tx.cardPayment && override.month === tx.date.slice(0, 7) &&
+          (override.sourceId === tx.cardId || override.sourceId?.startsWith(`${tx.cardId}:`))))),
     plannedIncomeOverrides: state.plannedIncomeOverrides ?? [],
     categoryBudgets: state.categoryBudgets ?? [],
     categoryBudgetOverrides: state.categoryBudgetOverrides ?? [],
@@ -310,6 +310,13 @@ export function reducer(state: AppState, action: Action): AppState {
       return normalizeState({ ...state, ...action.payload, onboarded: true });
     case "UPDATE_PROFILE":
       return { ...state, profile: { ...state.profile, ...action.payload } };
+
+    case "SYNC_ACCOUNT_BALANCE":
+      return { ...state, accounts: state.accounts.map((account) => account.id === action.id
+        ? { ...account, balance: action.balance, bankLinked: true, updatedAt: now() } : account) };
+    case "SYNC_CARD_BALANCE":
+      return { ...state, cards: state.cards.map((card) => card.id === action.id
+        ? { ...card, currentBalance: action.balance, limit: action.limit, bankLinked: true } : card) };
 
     case "ADD_ACCOUNT": {
       const acc: Account = {
@@ -648,6 +655,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "DELETE_TRANSACTION": {
       const transaction = state.transactions.find((tx) => tx.id === action.id);
+      if (transaction?.type === "card_payment") return removeCardPayment(state, transaction);
       if (transaction?.type === "debt_payment") {
         const principal = transaction.debtPrincipalAmount ?? transaction.amount;
         const debt = state.debts.find((item) => item.id === transaction.debtId);
@@ -946,116 +954,71 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
 
-    case "PAY_CREDIT_CARD": {
-      const p = action.payload;
-      const card = state.cards.find((c) => c.id === p.cardId);
-      if (!card) return state;
-      const pay = Math.min(p.amount, card.currentBalance);
+    case "PAY_CREDIT_CARD":
+      return recordCardPayment(state, action.payload);
 
-      // Figure out which billing cycle this payment settles.
-      const cycle = cycleForDate(card, p.date);
-      const cycleExpenses = expensesInCycle(state.transactions, card.id, cycle);
-      const cycleTotal = cycleExpenses.reduce((s, t) => s + t.amount, 0);
+    case "UPDATE_CARD_PAYMENT": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || tx.type !== "card_payment" || !validCardPayment(state, action.payload)) return state;
+      // Bank-linked evidence is immutable: correcting metadata must not invent a different transfer.
+      if ((tx.cardPayment?.bankCreditId || tx.cardPayment?.bankDebitId) &&
+          (action.payload.amount !== tx.amount || action.payload.cardId !== tx.cardId ||
+           action.payload.sourceAccountId !== tx.sourceAccountId)) return state;
+      const undone = removeCardPayment(state, tx);
+      const result = recordCardPayment(undone, { ...action.payload, transactionId: tx.id,
+        cashPosted: tx.cardPayment?.bankDebitId ? true : action.payload.cashPosted,
+        cardPosted: tx.cardPayment?.bankCreditId ? true : action.payload.cardPosted,
+        bankDebitId: tx.cardPayment?.bankDebitId, bankCreditId: tx.cardPayment?.bankCreditId,
+        cashAlreadySynced: Boolean(tx.cardPayment?.bankDebitId),
+        cardAlreadySynced: Boolean(tx.cardPayment?.bankCreditId) });
+      return { ...result, transactions: result.transactions.map((item) => item.id === tx.id
+        ? { ...item, createdAt: tx.createdAt } : item) };
+    }
 
-      // Reconcile expenses up to the amount actually paid (oldest first).
-      let remaining = pay;
-      const reconciledIds: string[] = [];
-      const ordered = [...cycleExpenses].sort((a, b) => a.date.localeCompare(b.date));
-      for (const ex of ordered) {
-        if (remaining <= 0) break;
-        if (ex.amount <= remaining + 0.001) {
-          reconciledIds.push(ex.id);
-          remaining -= ex.amount;
-        }
+    case "RECONCILE_CARD_PAYMENT": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || tx.type !== "card_payment") return state;
+      const prior = tx.cardPayment ?? { version: 2 as const,
+        cashPosted: !state.accounts.find((account) => account.id === tx.sourceAccountId)?.bankLinked, cardPosted: false,
+        cashLocalApplied: tx.amount, cardLocalApplied: tx.amount, statementLocalApplied: 0 };
+      const key = action.leg === "cash" ? "bankDebitId" : "bankCreditId";
+      if (prior[key] && prior[key] !== action.bankId) return state;
+      if (state.transactions.some((item) => item.id !== tx.id && item.cardPayment?.[key] === action.bankId)) return state;
+      return { ...state, transactions: state.transactions.map((item) => item.id === tx.id
+        ? { ...item, cardPayment: { ...prior, [key]: action.bankId,
+            ...(action.leg === "cash" ? { cashPosted: true, cashLocalApplied: 0 }
+              : { cardPosted: true, cardLocalApplied: 0, statementLocalApplied: 0 }) },
+            updatedAt: now() } : item) };
+    }
+
+    case "CONVERT_CARD_PAYMENT": {
+      const expense = state.transactions.find((item) => item.id === action.id);
+      if (!expense || expense.type !== "expense" || expense.cardId || expense.linkedPlannedExpense ||
+          expense.reconciledByPaymentId || !validCardPayment(state, action.payload)) return state;
+      const kept = action.mergeIntoId ? state.transactions.find((item) => item.id === action.mergeIntoId) : undefined;
+      if (action.mergeIntoId && (!kept || kept.type !== "card_payment" ||
+          kept.cardId !== action.payload.cardId || kept.sourceAccountId !== expense.sourceAccountId ||
+          Math.round(kept.amount * 100) !== Math.round(expense.amount * 100))) return state;
+      const account = state.accounts.find((item) => item.id === expense.sourceAccountId);
+      // Undo the local expense, then replace it with one transfer, never a second expense.
+      const undone = { ...state,
+        accounts: !expense.balanceAlreadySynced && account && !account.bankLinked
+          ? updateAccountCents(state, account.id, expense.amount) : state.accounts,
+        transactions: state.transactions.filter((item) => item.id !== expense.id) };
+      if (kept) {
+        const applyCash = kept.cardPayment?.cashPosted === false && !account?.bankLinked && !expense.balanceAlreadySynced;
+        return { ...undone,
+          accounts: applyCash ? updateAccountCents(undone, expense.sourceAccountId!, -expense.amount) : undone.accounts,
+          transactions: undone.transactions.map((item) => item.id === kept.id
+          ? { ...item, cardPayment: { ...(item.cardPayment ?? { version: 2 as const,
+              cardPosted: false, cardLocalApplied: item.amount, statementLocalApplied: 0, cashLocalApplied: item.amount }),
+              ...(applyCash ? { cashLocalApplied: expense.amount } : {}),
+              cashPosted: !!expense.balanceAlreadySynced || !account?.bankLinked }, updatedAt: now() } : item) };
       }
-      const paymentId = newId();
-      const transactionsAfterRecon = state.transactions.map((t) =>
-        reconciledIds.includes(t.id)
-          ? { ...t, reconciledByPaymentId: paymentId, updatedAt: now() }
-          : t,
-      );
-
-      const next: AppState = {
-        ...state,
-        cards: state.cards.map((c) =>
-          c.id === p.cardId
-            ? {
-                ...c,
-                currentBalance: clampNonNegative(c.currentBalance - pay),
-                statementBalance: clampNonNegative(c.statementBalance - pay),
-              }
-            : c,
-        ),
-        accounts: updateAccount(state, p.sourceAccountId, -pay),
-        transactions: transactionsAfterRecon,
-      };
-      const forecastMonth = monthFromISO(p.date);
-      const monthRef = new Date(`${forecastMonth}-01T00:00:00`);
-      const plannedCardItems = upcomingCardBillItems(state, monthRef)
-        .filter((item) => item.sourceId === p.cardId)
-        .sort((a, b) => {
-          const dueDateOrder = (a.dueDate ?? "").localeCompare(b.dueDate ?? "");
-          if (dueDateOrder !== 0) return dueDateOrder;
-          return a.id.localeCompare(b.id);
-        });
-      const skipItemIds = new Set<string>();
-      if (p.plannedExpenseItemId) {
-        skipItemIds.add(p.plannedExpenseItemId);
-      } else {
-        let remainingForPlanning = pay;
-        for (const item of plannedCardItems) {
-          if (remainingForPlanning + 0.001 < item.amount) continue;
-          skipItemIds.add(item.id);
-          remainingForPlanning -= item.amount;
-        }
-      }
-      const plannedExpenseOverrides =
-        skipItemIds.size === 0
-          ? next.plannedExpenseOverrides
-          : [
-              ...(next.plannedExpenseOverrides ?? []).filter(
-                (override) =>
-                  !(
-                    override.sourceType === "card_due" &&
-                    override.month === forecastMonth &&
-                    skipItemIds.has(override.sourceId ?? "")
-                  ),
-              ),
-              ...[...skipItemIds].map((itemId) => ({
-                id: newId(),
-                sourceType: "card_due" as const,
-                sourceId: itemId,
-                month: forecastMonth,
-                action: "skip" as const,
-              })),
-            ];
-      const noteSummary =
-        reconciledIds.length > 0
-          ? `Reconciled ${reconciledIds.length} expense${reconciledIds.length === 1 ? "" : "s"} from ${cycle.cycleStart} → ${cycle.cycleEnd}`
-          : `No matching cycle expenses for ${cycle.cycleStart} → ${cycle.cycleEnd}`;
-      const fullPayment: Transaction = {
-        id: paymentId,
-        type: "card_payment",
-        amount: pay,
-        category: "Credit card bill",
-        description: `Payment to ${card.name}`,
-        date: p.date,
-        sourceAccountId: p.sourceAccountId,
-        cardId: p.cardId,
-        notes: p.notes ? `${p.notes} · ${noteSummary}` : noteSummary,
-        cycleStart: cycle.cycleStart,
-        cycleEnd: cycle.cycleEnd,
-        reconciledExpenseIds: reconciledIds,
-        createdAt: now(),
-        updatedAt: now(),
-      };
-      // Suppress unused warning
-      void cycleTotal;
-      return {
-        ...next,
-        plannedExpenseOverrides,
-        transactions: [fullPayment, ...next.transactions],
-      };
+      return recordCardPayment(undone, { ...action.payload, amount: expense.amount,
+        sourceAccountId: expense.sourceAccountId!, transactionId: expense.id,
+        cashPosted: !!expense.balanceAlreadySynced || !account?.bankLinked,
+        cashAlreadySynced: expense.balanceAlreadySynced || account?.bankLinked });
     }
 
     case "PAY_DEBT": {

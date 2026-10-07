@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Card, KPI } from "./Card";
 import { Sheet } from "./Sheet";
+import { CardPaymentEditor } from "./CardPaymentEditor";
 import { Button } from "./Button";
 import { Field, Input, Select, Textarea } from "./Field";
 import { PlaidReviewButton } from "./PlaidInbox";
@@ -111,6 +112,7 @@ export function Dashboard() {
   const [activityOpen, setActivityOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [convertingPayment, setConvertingPayment] = useState<Transaction | null>(null);
   const [matchOnOpen, setMatchOnOpen] = useState(false);
   function openEdit(tx: Transaction, match = false) {
     setMatchOnOpen(match);
@@ -241,6 +243,13 @@ export function Dashboard() {
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
+      {state.transactions.some((tx) => tx.type === "card_payment" &&
+        (!tx.cardPayment || !tx.cardPayment.cashPosted || !tx.cardPayment.cardPosted)) &&
+        <p className="rounded-xl border border-border p-3 text-sm leading-relaxed" role="status">
+          Some card payments need posting confirmation. Spendable Today keeps a conservative reserve until they clear;
+          this may temporarily protect the same money on both sides. Older payments need a status check.
+          Open the payment in Activity to edit its source, confirm posting, or delete an incorrect entry.
+        </p>}
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <KPI
@@ -447,6 +456,7 @@ export function Dashboard() {
       <EditTransactionSheet
         tx={editingTx?.type === "expense" ? editingTx : null}
         initialView={matchOnOpen ? "link" : "edit"}
+        onConvertPayment={(tx) => { setEditingTx(null); setConvertingPayment(tx); }}
         onClose={() => setEditingTx(null)}
         onSaved={(tx) => {
           setEditingTx(null);
@@ -463,6 +473,9 @@ export function Dashboard() {
         onClose={() => setEditingTx(null)}
         onDone={() => { setEditingTx(null); setSelectedTx(null); }}
       />
+      {(editingTx?.type === "card_payment" || convertingPayment) && <CardPaymentEditor
+        key={(convertingPayment ?? editingTx)!.id} tx={(convertingPayment ?? editingTx)!}
+        onClose={() => { setEditingTx(null); setConvertingPayment(null); setSelectedTx(null); }} />}
 
       <BreakdownSheet
         open={!!activeBreakdownData}
@@ -2250,7 +2263,7 @@ function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose:
         plannedExpenseItemId: item.id,
       },
     });
-    toast(`Paid ${formatMoney(amt, cur)} to ${item.label}`);
+    toast(`Recorded ${formatMoney(amt, cur)} to ${item.label}. Awaiting card confirmation.`);
     onClose();
   }
 
@@ -2481,10 +2494,10 @@ function Row({
   bold?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
-      <span className="min-w-0 flex-1 break-words text-sm text-muted-foreground">{label}</span>
+    <div className="grid min-w-0 grid-cols-1 gap-x-3 gap-y-1 py-2 sm:grid-cols-[minmax(8rem,1fr)_minmax(0,2fr)]">
+      <span className="min-w-0 break-words text-sm text-muted-foreground">{label}</span>
       <span
-        className={`ml-auto break-words text-right ${bold ? "text-lg font-black" : "font-bold"} ${
+        className={`min-w-0 break-words sm:text-right ${bold ? "text-lg font-black" : "font-bold"} ${
           tone === "good" ? "text-[color:var(--good)]" : ""
         }`}
       >
@@ -2511,7 +2524,7 @@ function txToneClass(t: Transaction): string {
 }
 
 function canEditTransaction(t: Transaction): boolean {
-  return (t.type === "expense" && !t.reconciledByPaymentId) || t.type === "income";
+  return (t.type === "expense" && !t.reconciledByPaymentId) || t.type === "income" || t.type === "card_payment";
 }
 
 function AllActivitySheet({
@@ -2639,7 +2652,7 @@ function TransactionDetailSheet({
   const debt = debts.find((d) => d.id === tx.debtId);
 
   let method = "—";
-  if (card) method = `Credit card · ${card.name}`;
+  if (card && tx.type !== "card_payment") method = `Credit card · ${card.name}`;
   else if (account) method = `${account.bankName} · ${account.name}`;
   else if (tx.type === "income" && targetAccount)
     method = `${targetAccount.bankName} · ${targetAccount.name}`;
@@ -2715,6 +2728,11 @@ function TransactionDetailSheet({
           <Row label="Date" value={formatDisplayDate(tx.date)} />
           <Row label="Category" value={tx.category || "—"} />
           <Row label="Payment method" value={method} />
+          {tx.type === "card_payment" && <>
+            <Row label="Paid to" value={card?.name ?? "Card no longer available"} />
+            <Row label="Account posting" value={!tx.cardPayment ? "Not checked for this older payment" : tx.cardPayment.cashPosted ? "Reflected in account" : "Pending, money reserved"} />
+            <Row label="Card posting" value={!tx.cardPayment ? "Not checked for this older payment" : tx.cardPayment.cardPosted ? "Reflected on card" : "Awaiting card confirmation"} />
+          </>}
           {targetAccount && tx.type === "transfer" && account && (
             <Row label="To" value={`${targetAccount.bankName} · ${targetAccount.name}`} />
           )}
@@ -2911,12 +2929,14 @@ function EditTransactionSheet({
   onClose,
   onSaved,
   onRemoved,
+  onConvertPayment,
 }: {
   tx: Transaction | null;
   initialView: "edit" | "link";
   onClose: () => void;
   onSaved: (tx: Transaction) => void;
   onRemoved: () => void;
+  onConvertPayment: (tx: Transaction) => void;
 }) {
   const { state, dispatch } = useApp();
   const relinkActivity = useServerFn(plaidRelinkActivity);
@@ -3070,6 +3090,7 @@ function EditTransactionSheet({
             <Button variant="soft" disabled={planned.length === 0} onClick={() => { setPlannedId(planned[0]?.id ?? ""); setActionView("link"); }}>Assign to bill</Button>
             {currentTx.linkedPlannedExpense && <Button variant="soft" onClick={() => setActionView("confirmUnlink")}>Change match</Button>}
             <Button variant="ghost" onClick={() => setActionView("confirmDelete")}>Delete</Button>
+            {!currentTx.cardId && !currentTx.linkedPlannedExpense && !linkedReturn && <Button variant="soft" onClick={() => onConvertPayment(currentTx)}>This is a card payment</Button>}
             <Button variant="primary" onClick={save}>Save</Button>
           </>
         ) : actionView === "merge" || actionView === "link" ? (

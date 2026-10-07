@@ -2394,7 +2394,7 @@ function ExtraPaymentSheet({ card, onClose }: { card: CardType; onClose: () => v
         notes: "Extra payment from Forecast",
       },
     });
-    toast("Card payment recorded");
+    toast("Card payment recorded. Awaiting card confirmation.");
     onClose();
   }
 

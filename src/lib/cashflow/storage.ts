@@ -34,5 +34,5 @@ export async function saveUserState(userId: string, state: AppState): Promise<vo
   const { error } = await supabase
     .from("user_data")
     .upsert({ user_id: userId, data: state as never }, { onConflict: "user_id" });
-  if (error) console.error("[storage] save error", error);
+  if (error) throw error;
 }
