@@ -55,6 +55,9 @@ export interface Card {
   dueDate: number; // day of month
   apr: number;
   zeroAprEndDate?: string;
+  zeroAprPaymentMode?: "utilization" | "fixed";
+  zeroAprMonthlyPayment?: number;
+  zeroAprExpectedMonthlySpend?: number;
   targetUtilizationPercent: number;
   preferredCategories: string[];
   defaultPaymentAccountId?: string;

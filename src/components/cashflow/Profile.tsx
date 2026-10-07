@@ -8,10 +8,13 @@ import { useApp } from "@/lib/cashflow/AppContext";
 import { WEEKDAY_SHORT } from "@/lib/cashflow/dates";
 import {
   isSpendableAccount,
+  plannedCardChargesForRange,
   plannedDebtPayment,
   recurringBillScheduleLabel,
 } from "@/lib/cashflow/forecast";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
+import { isZeroAprCard } from "@/lib/cashflow/cardLogic";
+import { zeroAprPayoffPlan } from "@/lib/cashflow/forecastView";
 import type {
   Account,
   AccountType,
@@ -113,6 +116,13 @@ export function Profile() {
               <div className="text-xs text-muted-foreground">
                 limit {formatMoney(c.limit, cur)} · {c.apr}% APR
               </div>
+              {isZeroAprCard(c) && (
+                <div className="text-xs text-muted-foreground">
+                  {c.zeroAprPaymentMode === "fixed" && (c.zeroAprMonthlyPayment ?? 0) > 0
+                    ? `${formatMoney(Math.max(c.minimumDue, c.zeroAprMonthlyPayment!), cur)}/month payoff plan`
+                    : `${c.targetUtilizationPercent}% utilization plan`}
+                </div>
+              )}
             </div>
             <div className="font-black">{formatMoney(c.currentBalance, cur)}</div>
           </>
@@ -437,6 +447,16 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
   }
   function save() {
     if (!c.name.trim()) return toast("Name the card");
+    if (isZeroAprCard(c as CardT) && c.zeroAprPaymentMode === "fixed") {
+      if (!c.zeroAprEndDate) return toast("Set the 0% APR end date to check the payoff plan");
+      if (!Number.isFinite(c.zeroAprMonthlyPayment) || (c.zeroAprMonthlyPayment ?? 0) <= 0)
+        return toast("Enter a monthly payoff amount above zero");
+      if (
+        !Number.isFinite(c.zeroAprExpectedMonthlySpend ?? 0) ||
+        (c.zeroAprExpectedMonthlySpend ?? 0) < 0
+      )
+        return toast("Expected monthly card spending cannot be negative");
+    }
     if (initial) dispatch({ type: "UPDATE_CARD", payload: { ...initial, ...c } });
     else dispatch({ type: "ADD_CARD", payload: c });
     toast("Saved");
@@ -523,20 +543,106 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
             onChange={(e) => up("apr", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="Target utilization %">
+        <Field
+          label="Target utilization %"
+          hint={
+            isZeroAprCard(c as CardT) && c.zeroAprPaymentMode === "fixed"
+              ? "Saved for later. The fixed monthly plan is used in the forecast instead."
+              : undefined
+          }
+        >
           <Input
             type="number"
             value={c.targetUtilizationPercent}
             onChange={(e) => up("targetUtilizationPercent", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="0% APR end (optional)">
+        <Field label={c.zeroAprPaymentMode === "fixed" ? "0% APR end" : "0% APR end (optional)"}>
           <Input
             type="date"
             value={c.zeroAprEndDate ?? ""}
             onChange={(e) => up("zeroAprEndDate", e.target.value || undefined)}
           />
         </Field>
+        {isZeroAprCard(c as CardT) && (
+          <div className="sm:col-span-2 rounded-2xl border border-border p-4 space-y-3">
+            <Field
+              label="0% APR payment plan"
+              hint="Choose one plan for upcoming card payments. The minimum due is included in its amount."
+            >
+              <Select
+                value={c.zeroAprPaymentMode ?? "utilization"}
+                onChange={(e) =>
+                  up("zeroAprPaymentMode", e.target.value as "fixed" | "utilization")
+                }
+              >
+                <option value="utilization">Keep utilization at target (or pay minimum)</option>
+                <option value="fixed">Pay a set amount each month</option>
+              </Select>
+            </Field>
+            {c.zeroAprPaymentMode === "fixed" && (
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field
+                    label="Monthly payment"
+                    hint="If below the minimum due, the minimum is used instead."
+                  >
+                    <Input
+                      type="number"
+                      min={0.01}
+                      step={0.01}
+                      value={c.zeroAprMonthlyPayment ?? ""}
+                      onChange={(e) =>
+                        up(
+                          "zeroAprMonthlyPayment",
+                          e.target.value === "" ? undefined : Number(e.target.value),
+                        )
+                      }
+                    />
+                  </Field>
+                  <Field
+                    label="Expected new card spending per month"
+                    hint="Include purchases you expect to keep making. Planned card bills count toward this estimate."
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={c.zeroAprExpectedMonthlySpend ?? 0}
+                      onChange={(e) => up("zeroAprExpectedMonthlySpend", Number(e.target.value))}
+                    />
+                  </Field>
+                </div>
+                {(c.zeroAprMonthlyPayment ?? 0) > 0 && c.zeroAprEndDate && (
+                  <p className="text-sm text-muted-foreground">
+                    {(() => {
+                      const plan = zeroAprPayoffPlan(
+                        { ...c, id: initial?.id ?? "preview" },
+                        [],
+                        new Date(),
+                        initial?.id
+                          ? plannedCardChargesForRange(
+                              state,
+                              initial.id,
+                              new Date(),
+                              c.zeroAprEndDate!,
+                            )
+                          : [],
+                      );
+                      return plan.projectedBalanceAtDeadline === 0
+                        ? `At this pace, the card is projected to be paid by ${plan.payoffDate ? new Date(`${plan.payoffDate}T12:00:00`).toLocaleDateString() : "the promo deadline"}.`
+                        : `Projected balance at the promo end: ${formatMoney(plan.projectedBalanceAtDeadline ?? 0, state.profile.currency)}. ${plan.requiredMonthlyPayment ? `Pay ${formatMoney(plan.requiredMonthlyPayment, state.profile.currency)}/month instead, or plan a ${formatMoney(plan.lumpSumNeeded ?? 0, state.profile.currency)} extra payment by then.` : `Plan a ${formatMoney(plan.lumpSumNeeded ?? 0, state.profile.currency)} extra payment by then.`}`;
+                    })()}
+                  </p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  This projection assumes the balance earns no interest. New purchases can have
+                  different APR terms; check your card agreement.
+                </p>
+              </>
+            )}
+          </div>
+        )}
         <Field label="Preferred categories (comma)">
           <Input
             value={c.preferredCategories.join(", ")}
@@ -919,7 +1025,6 @@ export function DebtSheet({ onClose, initial }: { onClose: () => void; initial?:
     </Sheet>
   );
 }
-
 
 export function RecurringSheet({
   onClose,

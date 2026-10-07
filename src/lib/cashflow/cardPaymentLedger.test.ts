@@ -121,7 +121,9 @@ describe("card transfer ledger and delayed posting", () => {
     ];
     const after = reducer(state, { type: "HYDRATE", state });
     expect(after.plannedExpenseOverrides.map((item) => item.id)).toEqual(["edit"]);
-    expect(expensesComingTotal(after, ref)).toBeGreaterThan(expensesComingTotal(state, ref));
+    // The old skip ID cannot hide the new single-payment schedule.
+    expect(expensesComingTotal(after, ref)).toBe(expensesComingTotal(state, ref));
+    expect(upcomingCardBillItems(after, ref)[0].dueDate).toBe("2026-10-09");
   });
 
   it("reclassifies an imported account expense without charging the account again", () => {
