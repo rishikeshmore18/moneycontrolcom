@@ -8,6 +8,9 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
+import { plaidResolveInbox } from "@/lib/plaid/plaid.functions";
+import { toast } from "@/components/cashflow/Toast";
 import { supabase } from "@/integrations/supabase/client";
 import { reducer, type Action } from "./reducer";
 import { useBankAutoSync } from "@/lib/plaid/bankBalances";
@@ -44,6 +47,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const hydratedFor = useRef<string | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const acknowledged = useRef(new Set<string>());
+  const resolveInbox = useServerFn(plaidResolveInbox);
 
   // Auth subscription
   useEffect(() => {
@@ -90,12 +96,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (hydratedFor.current !== userId) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      saveUserState(userId, state);
+      // Serialize snapshots. Bank inbox acknowledgments must follow a successful ledger save.
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+        await saveUserState(userId, state);
+        for (const tx of state.transactions) {
+          const ids = [tx.cardPayment?.bankDebitId, tx.cardPayment?.bankCreditId]
+            .filter((id): id is string => !!id && !acknowledged.current.has(id));
+          if (!ids.length) continue;
+          await resolveInbox({ data: { ids, status: "merged", localTransactionId: tx.id } });
+          ids.forEach((id) => acknowledged.current.add(id));
+        }
+      }).catch((error) => {
+        console.error("[storage] save/reconciliation failed", error);
+        toast("Changes could not finish saving. Keep this page open and retry your change or bank sync.");
+      });
     }, 400);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [state, userId, ready]);
+  }, [state, userId, ready, resolveInbox]);
 
   // theme
   useEffect(() => {

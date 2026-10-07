@@ -26,6 +26,7 @@ import {
 import { formatMoney } from "./money";
 import { timesheetEntryAmount, visibleIncomeEntriesForMonth } from "./timesheetLogic";
 import { monthlyBudgetSummary } from "./budget";
+import { pendingCashForAccount, pendingCardPayments } from "./cardPaymentLedger";
 
 export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months" | "custom";
 
@@ -98,15 +99,17 @@ export function isSpendableAccount(account: AppState["accounts"][number]): boole
 }
 
 export function spendableCash(state: AppState): number {
-  return state.accounts.filter(isSpendableAccount).reduce((s, a) => s + a.balance, 0);
+  return state.accounts.filter(isSpendableAccount).reduce((s, a) => s + a.balance - pendingCashForAccount(state, a.id), 0);
 }
 
 export function spendableCashBreakdown(state: AppState): CashFlowBreakdownSection[] {
   const spendableAccounts = state.accounts.filter(isSpendableAccount).map((account) => ({
     id: account.id,
     label: account.name,
-    detail: account.bankName ? `${account.bankName} - ${account.type}` : account.type,
-    amount: account.balance,
+    detail: pendingCashForAccount(state, account.id) > 0
+      ? `${account.bankName || account.type} - ${formatMoney(pendingCashForAccount(state, account.id), state.profile.currency)} reserved for card payments awaiting withdrawal`
+      : account.bankName ? `${account.bankName} - ${account.type}` : account.type,
+    amount: account.balance - pendingCashForAccount(state, account.id),
   }));
   const reservedAccounts = state.accounts
     .filter((account) => !isSpendableAccount(account))
@@ -491,9 +494,10 @@ function cardCashFlowItemsForRange(
       overrideId: override?.id,
       dueDate: rawDueDate,
       periodDate: rawDueDate,
-      detail: override?.dueDate
+      detail: (override?.dueDate
         ? `${item.detail} - payment date changed to ${formatDisplayDate(rawDueDate)}`
-        : item.detail,
+        : item.detail) + (item.sourceId && pendingCardPayments(state, item.sourceId) > 0
+          ? ` - ${formatMoney(pendingCardPayments(state, item.sourceId), state.profile.currency)} payment awaiting card confirmation; remaining bank-reported debt is still protected` : ""),
     });
   }
 
@@ -1517,7 +1521,7 @@ function spendableTodayProjection(
   const accountBalances = new Map(
     state.accounts
       .filter(isSpendableAccount)
-      .map((account) => [account.id, { account, balance: account.balance }]),
+      .map((account) => [account.id, { account, balance: account.balance - pendingCashForAccount(state, account.id) }]),
   );
   const accountFundingWarnings: AccountFundingWarning[] = [];
   const events = orderedEvents.map((event) => {

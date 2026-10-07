@@ -23,10 +23,12 @@ import {
 } from "@/lib/plaid/plaid.functions";
 import { guessCategory } from "@/lib/plaid/categoryGuess";
 import {
-  cardPaymentAlreadyRecorded,
+  existingCardPayment,
+  paymentForBankItem,
   scanCardPayments,
   type CardPaymentMatch,
 } from "@/lib/plaid/cardPayments";
+import { applyBankBalances } from "@/lib/plaid/bankBalances";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -46,6 +48,8 @@ function isDebtReviewCategory(category: string): boolean {
 
 export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "primary" | "ghost" }) {
   const { state, dispatch } = useApp();
+  const stateRef = useRef(state);
+  stateRef.current = state;
   const listConnections = useServerFn(plaidListConnections);
   const listInbox = useServerFn(plaidListInbox);
 
@@ -59,6 +63,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
     try {
       const [c, i] = await Promise.all([listConnections(), listInbox()]);
       setConnections(c);
+      applyBankBalances(c, stateRef.current.accounts, stateRef.current.cards, dispatch);
       setInbox(
         [...i].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)),
       );
@@ -68,7 +73,7 @@ export function PlaidReviewButton({ variant = "soft" }: { variant?: "soft" | "pr
     } finally {
       setLoading(false);
     }
-  }, [listConnections, listInbox]);
+  }, [listConnections, listInbox, dispatch]);
 
   useEffect(() => {
     if (!open) return;
@@ -163,10 +168,13 @@ function InboxSheet({
   const [friendDateFor, setFriendDateFor] = useState<Record<string, string>>({});
   const [payFrom, setPayFrom] = useState<Record<string, string>>({});
   const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
-  const { unmatched, rest } = useMemo(
+  const { unmatched: unpaired, matched, rest } = useMemo(
     () => scanCardPayments(items, connections),
     [items, connections],
   );
+  const recordedBankIds = new Set(state.transactions.flatMap((tx) =>
+    [tx.cardPayment?.bankCreditId, tx.cardPayment?.bankDebitId].filter(Boolean)));
+  const unmatched = [...matched, ...unpaired].filter((match) => !recordedBankIds.has(match.cardItem.id));
   const cur = state.profile.currency;
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
   const categories: string[] = Array.from(new Set([...baseCategories, FRIEND_EXPENSE_CATEGORY, "Debt", "Miscellaneous"]));
@@ -186,12 +194,15 @@ function InboxSheet({
     accounts.find((a) => a.accountId === plaidAccountId) ?? null;
 
   const duplicateFor = (item: InboxItem) => {
+    const payment = paymentForBankItem(state, item, connections);
+    if (payment) return payment.transaction;
     const map = mappingFor(item.plaidAccountId);
     if (!map?.linkedLocalId) return null;
     const target = Math.abs(item.amount);
     const itemTime = new Date(item.date).getTime();
     return (
       state.transactions.find((t) => {
+        if (t.type === "card_payment") return false;
         if (Math.abs(Math.abs(t.amount) - target) > 0.02) return false;
         const days = Math.abs(new Date(t.date).getTime() - itemTime) / 86_400_000;
         if (days > 4) return false;
@@ -361,6 +372,12 @@ function InboxSheet({
   const merge = async (item: InboxItem, localId: string, planned?: CashFlowBreakdownItem) => {
     setBusy(item.id);
     try {
+      const payment = paymentForBankItem(state, item, connections);
+      if (payment?.transaction.id === localId) {
+        dispatch({ type: "RECONCILE_CARD_PAYMENT", id: localId, leg: payment.leg, bankId: item.id });
+        toast("Payment confirmed. No second balance change.");
+        return;
+      }
       await finish([item.id], "merged", localId);
       if (planned) markPlannedPaid(planned);
       toast(planned ? "Existing expense linked; upcoming bill marked paid." : "Marked as the same transaction. Nothing double-counted.");
@@ -382,23 +399,35 @@ function InboxSheet({
 
   const acceptCardPayment = async (match: CardPaymentMatch) => {
     const key = match.cardItem.id;
-    const source = payFrom[key] ?? "cash";
+    const existing = existingCardPayment(state, match.cardId, match.amount, match.date);
+    const source = payFrom[key] ?? existing?.sourceAccountId ?? match.sourceAccountId ?? "";
+    if (!source) return toast("Choose the account or cash wallet that paid this bill.");
+    if (existing && source !== existing.sourceAccountId) return toast("This payment has a different source. Correct it in Activity first.");
     setBusy(key);
     try {
-      if (!cardPaymentAlreadyRecorded(state, match.cardId, match.amount, match.date)) {
+      if (existing) {
+        dispatch({ type: "RECONCILE_CARD_PAYMENT", id: existing.id, leg: "card", bankId: key });
+        if (match.bankItem && source === match.sourceAccountId) {
+          dispatch({ type: "RECONCILE_CARD_PAYMENT", id: existing.id, leg: "cash", bankId: match.bankItem.id });
+        }
+      } else {
         dispatch({
           type: "PAY_CREDIT_CARD",
           payload: {
             cardId: match.cardId,
             amount: match.amount,
-            sourceAccountId: source === "cash" ? "" : source,
+            sourceAccountId: source,
             date: match.date,
-            notes: source === "cash" ? "Paid with cash" : "Card bill payment",
+            transactionId: `bank-card-${key}`,
+            cardPosted: true, cardAlreadySynced: true, bankCreditId: key,
+            cashPosted: !!match.bankItem || !state.accounts.find((account) => account.id === source)?.bankLinked,
+            cashAlreadySynced: !!match.bankItem,
+            bankDebitId: match.bankItem?.id,
+            notes: "Card payment confirmed by bank",
           },
         });
       }
-      await finish([key], "accepted");
-      toast("Card payment recorded.");
+      toast("Card payment linked. Bank-confirmed balances stay unchanged.");
     } catch (err) {
       toast(`Couldn't record that: ${errText(err)}`);
     } finally {
@@ -406,7 +435,7 @@ function InboxSheet({
     }
   };
 
-  const sorted = [...rest].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  const sorted = rest.filter((item) => !recordedBankIds.has(item.id)).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   const nothing = unmatched.length === 0 && sorted.length === 0;
 
   const requestedRange = (): ClearInboxRange => {
@@ -521,7 +550,7 @@ function InboxSheet({
                       Card bill payment · {card?.name ?? "Card"}
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      {formatDate(match.date)} · we couldn't find this leaving any linked account
+                      {formatDate(match.date)} · {match.bankItem ? "Both bank entries found" : "Card credit received; confirm the payment source"}
                     </div>
                   </div>
                   <div className="font-black">{formatMoney(match.amount, cur)}</div>
@@ -529,10 +558,11 @@ function InboxSheet({
                 <div className="grid gap-1">
                   <div className="text-xs text-muted-foreground">How was this paid?</div>
                   <Select
-                    value={payFrom[key] ?? "cash"}
+                    value={payFrom[key] ?? existingCardPayment(state, match.cardId, match.amount, match.date)?.sourceAccountId ?? match.sourceAccountId ?? ""}
+                    disabled={!!match.bankItem}
                     onChange={(e) => setPayFrom((p) => ({ ...p, [key]: e.target.value }))}
                   >
-                    <option value="cash">Cash</option>
+                    <option value="">Choose account or cash wallet</option>
                     {state.accounts.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name}

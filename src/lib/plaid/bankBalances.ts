@@ -1,15 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import type { Action } from "@/lib/cashflow/reducer";
+import { reducer, type Action } from "@/lib/cashflow/reducer";
 import type { Account, AppState, Card } from "@/lib/cashflow/types";
 import {
   plaidListConnections,
   plaidListInbox,
-  plaidResolveInbox,
   plaidSyncAll,
   type Connection,
 } from "./plaid.functions";
-import { cardPaymentAlreadyRecorded, scanCardPayments } from "./cardPayments";
+import { reconcilePayments } from "./reconcilePayments";
 
 /**
  * The bank is the source of truth for any account/card that is linked to a
@@ -30,15 +29,15 @@ export function applyBankBalances(
       if (pa.linkedLocalKind === "account") {
         const acc = accounts.find((a) => a.id === pa.linkedLocalId);
         if (!acc) continue;
-        if (Math.abs(acc.balance - live) < 0.005) continue;
-        dispatch({ type: "UPDATE_ACCOUNT", payload: { ...acc, balance: live } });
+        if (Math.abs(acc.balance - live) < 0.005 && acc.bankLinked) continue;
+        dispatch({ type: "SYNC_ACCOUNT_BALANCE", id: acc.id, balance: live });
       } else if (pa.linkedLocalKind === "card") {
         const card = cards.find((c) => c.id === pa.linkedLocalId);
         if (!card) continue;
-        const owed = Math.abs(live);
+        const owed = Math.max(0, live);
         const limit = pa.limitAmount != null ? Math.abs(Number(pa.limitAmount)) : card.limit;
-        if (Math.abs(card.currentBalance - owed) < 0.005 && limit === card.limit) continue;
-        dispatch({ type: "UPDATE_CARD", payload: { ...card, currentBalance: owed, limit } });
+        if (Math.abs(card.currentBalance - owed) < 0.005 && limit === card.limit && card.bankLinked) continue;
+        dispatch({ type: "SYNC_CARD_BALANCE", id: card.id, balance: owed, limit });
       }
     }
   }
@@ -57,7 +56,6 @@ export function useBankAutoSync(
   const syncAll = useServerFn(plaidSyncAll);
   const listConnections = useServerFn(plaidListConnections);
   const listInbox = useServerFn(plaidListInbox);
-  const resolveInbox = useServerFn(plaidResolveInbox);
   const ran = useRef(false);
   const latest = useRef({ state, dispatch });
   latest.current = { state, dispatch };
@@ -81,31 +79,15 @@ export function useBankAutoSync(
         const after = await listConnections();
         mirror(after);
 
-        // Auto-settle matched card payments.
+        // Reconcile each posted leg independently. Acknowledgment happens after persistence.
         const inbox = await listInbox();
-        const { matched } = scanCardPayments(inbox, after);
-        for (const match of matched) {
-          const { state: s, dispatch: d } = latest.current;
-          const card = s.cards.find((c) => c.id === match.cardId);
-          if (!card) continue;
-          if (!cardPaymentAlreadyRecorded(s, match.cardId, match.amount, match.date)) {
-            d({
-              type: "PAY_CREDIT_CARD",
-              payload: {
-                cardId: match.cardId,
-                amount: match.amount,
-                sourceAccountId: match.sourceAccountId ?? "",
-                date: match.date,
-                notes: "Matched automatically from your bank",
-              },
-            });
-          }
-          const ids = [match.cardItem.id, ...(match.bankItem ? [match.bankItem.id] : [])];
-          await resolveInbox({ data: { ids, status: "accepted" } });
-        }
+        let working = latest.current.state;
+        const apply = (action: Action) => { working = reducer(working, action); latest.current.dispatch(action); };
+        applyBankBalances(after, working.accounts, working.cards, apply);
+        reconcilePayments(working, inbox, after).forEach(apply);
       } catch (err) {
         console.error("[plaid] auto sync failed", err);
       }
     })();
-  }, [enabled, listConnections, syncAll, listInbox, resolveInbox]);
+  }, [enabled, listConnections, syncAll, listInbox]);
 }

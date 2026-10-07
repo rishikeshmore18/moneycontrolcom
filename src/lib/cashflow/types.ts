@@ -33,6 +33,7 @@ export interface Account {
   name: string;
   type: AccountType;
   balance: number;
+  bankLinked?: boolean;
   availableForSpending?: boolean;
   savingsPurpose?: string;
   createdAt: string;
@@ -47,6 +48,7 @@ export interface Card {
   type: CardType;
   limit: number;
   currentBalance: number;
+  bankLinked?: boolean;
   statementBalance: number;
   minimumDue: number;
   billingDate: number; // day of month
@@ -144,6 +146,17 @@ export interface Transaction {
   notes?: string;
   /** Posted bank transactions already reflected in the linked balance must not move it twice. */
   balanceAlreadySynced?: boolean;
+  /** One transfer, with independently confirmed cash and card legs. */
+  cardPayment?: {
+    version: 2;
+    cashPosted: boolean;
+    cardPosted: boolean;
+    cashLocalApplied: number;
+    cardLocalApplied: number;
+    statementLocalApplied: number;
+    bankDebitId?: string;
+    bankCreditId?: string;
+  };
   /** The unpaid item this accepted transaction settled, for safe undo and audit. */
   linkedPlannedIncome?: {
     itemId: string;

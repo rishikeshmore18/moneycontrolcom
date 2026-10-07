@@ -1,4 +1,4 @@
-import type { AppState } from "@/lib/cashflow/types";
+import type { AppState, Transaction } from "@/lib/cashflow/types";
 import type { Connection, ConnectionAccount, InboxItem } from "./plaid.functions";
 
 /** Wording banks use for a credit-card bill payment. */
@@ -6,7 +6,7 @@ const PAYMENT_RE =
   /payment|autopay|auto[- ]?pay|\bpmt\b|thank you|bill ?pay|epay|card payment|online transfer/i;
 
 const AMOUNT_TOLERANCE = 0.02;
-const DAY_TOLERANCE = 5;
+const DAY_TOLERANCE = 14;
 
 export function accountMapFor(
   connections: Connection[],
@@ -60,13 +60,14 @@ export function scanCardPayments(items: InboxItem[], connections: Connection[]):
 
   const bankCandidates = items.filter((item) => {
     const map = mapOf(item.plaidAccountId);
-    return map?.linkedLocalKind === "account" && !!map.linkedLocalId && item.amount > 0;
+    return !item.pending && map?.linkedLocalKind === "account" && !!map.linkedLocalId && item.amount > 0 &&
+      PAYMENT_RE.test(`${item.name} ${item.merchantName ?? ""}`);
   });
 
   const cardCredits = items
     .filter((item) => {
       const map = mapOf(item.plaidAccountId);
-      return map?.linkedLocalKind === "card" && !!map.linkedLocalId && item.amount < 0;
+      return !item.pending && map?.linkedLocalKind === "card" && !!map.linkedLocalId && item.amount < 0;
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 
@@ -76,16 +77,22 @@ export function scanCardPayments(items: InboxItem[], connections: Connection[]):
     if (!cardId) continue;
     const amount = Math.abs(cardItem.amount);
 
-    const bankItem =
-      bankCandidates.find(
+    const possibleBanks =
+      bankCandidates.filter(
         (b) =>
           !used.has(b.id) &&
-          Math.abs(b.amount - amount) <= AMOUNT_TOLERANCE &&
+          Math.round(b.amount * 100) === Math.round(amount * 100) &&
           daysApart(b.date, cardItem.date) <= DAY_TOLERANCE,
-      ) ?? null;
+      );
+    const possibleBank = possibleBanks.length === 1 ? possibleBanks[0] : null;
+    // Both directions must be unique. Two same-amount card credits cannot claim one debit.
+    const bankItem = possibleBank && cardCredits.filter((credit) =>
+      PAYMENT_RE.test(`${credit.name} ${credit.merchantName ?? ""}`) &&
+      Math.round(Math.abs(credit.amount) * 100) === Math.round(possibleBank.amount * 100) &&
+      daysApart(credit.date, possibleBank.date) <= DAY_TOLERANCE).length === 1 ? possibleBank : null;
 
     const looksLikePayment = PAYMENT_RE.test(`${cardItem.name} ${cardItem.merchantName ?? ""}`);
-    if (!bankItem && !looksLikePayment) continue; // probably a refund — review normally
+    if (!looksLikePayment) continue; // a credit may be a refund, even if an unrelated debit matches
 
     used.add(cardItem.id);
     const match: CardPaymentMatch = {
@@ -105,6 +112,29 @@ export function scanCardPayments(items: InboxItem[], connections: Connection[]):
   }
 
   return { matched, unmatched, rest: items.filter((item) => !used.has(item.id)) };
+}
+
+/** A unique posted bank leg can confirm an existing transfer, even when the other leg arrives days later. */
+export function paymentForBankItem(
+  state: AppState, item: InboxItem, connections: Connection[],
+): { transaction: Transaction; leg: "cash" | "card" } | null {
+  if (item.pending || !PAYMENT_RE.test(`${item.name} ${item.merchantName ?? ""}`)) return null;
+  const map = accountMapFor(connections, item.plaidAccountId);
+  const leg = map?.linkedLocalKind === "card" && item.amount < 0 ? "card"
+    : map?.linkedLocalKind === "account" && item.amount > 0 ? "cash" : null;
+  if (!leg || !map?.linkedLocalId) return null;
+  const matches = state.transactions.filter((tx) => tx.type === "card_payment" &&
+    (leg === "card" ? tx.cardId : tx.sourceAccountId) === map.linkedLocalId &&
+    Math.round(tx.amount * 100) === Math.round(Math.abs(item.amount) * 100) &&
+    daysApart(tx.date, item.date) <= DAY_TOLERANCE &&
+    !(leg === "card" ? tx.cardPayment?.bankCreditId : tx.cardPayment?.bankDebitId));
+  return matches.length === 1 ? { transaction: matches[0], leg } : null;
+}
+
+export function existingCardPayment(state: AppState, cardId: string, amount: number, date: string): Transaction | null {
+  const matches = state.transactions.filter((tx) => tx.type === "card_payment" && tx.cardId === cardId &&
+    Math.round(tx.amount * 100) === Math.round(amount * 100) && daysApart(tx.date, date) <= DAY_TOLERANCE);
+  return matches.length === 1 ? matches[0] : null;
 }
 
 /** True when this card payment is already recorded in the app. */
