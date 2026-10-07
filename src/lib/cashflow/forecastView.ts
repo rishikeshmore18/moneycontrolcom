@@ -2,6 +2,7 @@ import type { AppState, Card, Transaction } from "./types";
 import type { ForecastProjectionOptions } from "./forecast";
 import { currentOpenCycle } from "./cardLogic";
 import { addDays, fromISODate } from "./dates";
+import { projectPromoPayoff, type PlannedCardCharge } from "./promoPayoff";
 
 export type ForecastScenario = "best" | "expected" | "worst" | "custom";
 
@@ -57,6 +58,13 @@ export interface ZeroAprPayoffPlan {
   recommendedMonthlyPayment: number;
   recordedPayments: number;
   progressPercent: number;
+  paymentMode?: "fixed" | "utilization";
+  plannedMonthlyPayment?: number;
+  projectedBalanceAtDeadline?: number;
+  additionalMonthlyNeeded?: number;
+  lumpSumNeeded?: number;
+  requiredMonthlyPayment?: number;
+  payoffDate?: string;
 }
 
 function paymentsForCard(transactions: Transaction[], cardId: string): number {
@@ -69,6 +77,7 @@ export function zeroAprPayoffPlan(
   card: Card,
   transactions: Transaction[],
   ref: Date = new Date(),
+  charges: PlannedCardCharge[] = [],
 ): ZeroAprPayoffPlan {
   const recordedPayments = paymentsForCard(transactions, card.id);
   const trackedStartingBalance = card.currentBalance + recordedPayments;
@@ -115,12 +124,38 @@ export function zeroAprPayoffPlan(
     Math.max(card.minimumDue, cyclePayment),
   );
 
+  const fixed = card.zeroAprPaymentMode === "fixed" && (card.zeroAprMonthlyPayment ?? 0) > 0;
+  const targetPayment = Math.max(
+    card.minimumDue,
+    card.currentBalance - (card.limit * card.targetUtilizationPercent) / 100,
+  );
+  const projection = projectPromoPayoff(
+    card,
+    ref,
+    card.zeroAprEndDate,
+    charges,
+    fixed ? card.zeroAprMonthlyPayment : targetPayment,
+    fixed
+      ? undefined
+      : (_index, balance) =>
+          Math.max(card.minimumDue, balance - (card.limit * card.targetUtilizationPercent) / 100),
+  );
+
   return {
     daysRemaining,
     statementCyclesRemaining,
     recommendedMonthlyPayment,
     recordedPayments,
     progressPercent,
+    paymentMode: fixed ? "fixed" : "utilization",
+    plannedMonthlyPayment: fixed
+      ? Math.max(card.minimumDue, card.zeroAprMonthlyPayment!)
+      : targetPayment,
+    projectedBalanceAtDeadline: projection.projectedBalanceAtDeadline,
+    additionalMonthlyNeeded: projection.additionalMonthlyNeeded,
+    lumpSumNeeded: projection.lumpSumNeeded,
+    requiredMonthlyPayment: projection.requiredMonthlyPayment,
+    payoffDate: projection.payoffDate,
   };
 }
 

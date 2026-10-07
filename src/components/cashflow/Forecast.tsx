@@ -49,6 +49,7 @@ import {
   cashFlowPeriodRange,
   expensesComingBreakdown,
   forecastCashProjection,
+  plannedCardChargesForRange,
   spendableCash,
   type CashFlowBreakdownItem,
   type CashFlowPeriod,
@@ -73,6 +74,15 @@ import { CardSheet, DebtSheet, RecurringSheet } from "./Profile";
 import { Sheet } from "./Sheet";
 import { toast } from "./Toast";
 import { CategoryBudgetForecastCard } from "./MonthlyBudget";
+
+function payoffPlanForCard(card: CardType, state: AppState, ref = new Date()) {
+  return zeroAprPayoffPlan(
+    card,
+    state.transactions,
+    ref,
+    card.zeroAprEndDate ? plannedCardChargesForRange(state, card.id, ref, card.zeroAprEndDate) : [],
+  );
+}
 
 type Panel =
   | { type: "summary"; metric: SummaryMetric }
@@ -1280,7 +1290,7 @@ function ZeroAprPanel({
         ) : (
           <div className="divide-y divide-border">
             {cards.map((card) => {
-              const plan = zeroAprPayoffPlan(card, state.transactions);
+              const plan = payoffPlanForCard(card, state);
               return (
                 <button
                   key={card.id}
@@ -1302,8 +1312,13 @@ function ZeroAprPanel({
                               : "Promo end date not set"}
                           </div>
                           <div className="mt-0.5 text-xs text-muted-foreground">
-                            Recommended {formatMoney(plan.recommendedMonthlyPayment, currency)}
-                            /cycle
+                            {plan.paymentMode === "fixed"
+                              ? "Planned monthly"
+                              : "Next utilization payment"}{" "}
+                            {formatMoney(
+                              plan.plannedMonthlyPayment ?? plan.recommendedMonthlyPayment,
+                              currency,
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
@@ -1327,16 +1342,15 @@ function ZeroAprPanel({
                           )}
                         </div>
                       </div>
-                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
-                        <div
-                          className="h-full rounded-full bg-primary transition-[width]"
-                          style={{ width: `${plan.progressPercent}%` }}
-                        />
-                      </div>
-                      <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
-                        <span>{Math.round(plan.progressPercent)}% paid</span>
-                        <span>Remaining {formatMoney(card.currentBalance, currency)}</span>
-                      </div>
+                      <p
+                        className={`mt-3 text-xs ${plan.projectedBalanceAtDeadline ? "text-warn" : "text-good"}`}
+                      >
+                        {card.zeroAprEndDate
+                          ? plan.projectedBalanceAtDeadline
+                            ? `${formatMoney(plan.projectedBalanceAtDeadline, currency)} projected to remain at promo end. ${plan.requiredMonthlyPayment ? `${plan.paymentMode === "fixed" ? "Raise to" : "Switch to"} ${formatMoney(plan.requiredMonthlyPayment, currency)}/month or` : "Plan"} ${formatMoney(plan.lumpSumNeeded ?? 0, currency)} extra by then.`
+                            : `On track to pay off by ${formatDisplayDate(card.zeroAprEndDate)} at this pace.`
+                          : "Set a promo end date to check payoff timing."}
+                      </p>
                     </div>
                   </div>
                 </button>
@@ -1584,18 +1598,18 @@ function buildAlerts(
     });
   });
   zeroAprCards.forEach((card) => {
-    const plan = zeroAprPayoffPlan(card, state.transactions);
-    if (plan.daysRemaining == null || plan.daysRemaining > 90) return;
+    const plan = payoffPlanForCard(card, state);
+    if (plan.daysRemaining == null || (plan.daysRemaining > 90 && !plan.projectedBalanceAtDeadline))
+      return;
     alerts.push({
       id: `promo-${card.id}`,
       severity: plan.daysRemaining <= 30 ? "critical" : "warning",
       title: `${card.name} promo deadline`,
       detail:
         plan.daysRemaining > 0
-          ? `${plan.daysRemaining} days remain. Recommended ${formatMoney(
-              plan.recommendedMonthlyPayment,
-              state.profile.currency,
-            )} per statement cycle.`
+          ? plan.projectedBalanceAtDeadline
+            ? `${formatMoney(plan.projectedBalanceAtDeadline, state.profile.currency)} may remain at promo end. ${plan.requiredMonthlyPayment ? `${plan.paymentMode === "fixed" ? "Raise the monthly payment" : "Switch to a fixed monthly payment"} of ${formatMoney(plan.requiredMonthlyPayment, state.profile.currency)}, or` : "Plan"} make an extra payment of ${formatMoney(plan.lumpSumNeeded ?? 0, state.profile.currency)} by then.`
+            : `${plan.daysRemaining} days remain. Current plan is on track at this pace.`
           : "The promotional period has ended. Review the full balance now.",
       target: "cards",
     });
@@ -1690,7 +1704,9 @@ function ForecastTransactionDetailsSheet({
         </div>
 
         <div className="rounded-2xl border border-border bg-[color:var(--card-solid)] p-4">
-          <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Note</div>
+          <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+            Note
+          </div>
           <div className="mt-1 whitespace-pre-wrap text-sm text-foreground">
             {transaction.notes?.trim() || "No note"}
           </div>
@@ -1760,7 +1776,13 @@ function ForecastPanels({
   if (!panel) return null;
 
   if (panel.type === "transaction") {
-    return <ForecastTransactionDetailsSheet transaction={panel.transaction} state={state} onClose={onClose} />;
+    return (
+      <ForecastTransactionDetailsSheet
+        transaction={panel.transaction}
+        state={state}
+        onClose={onClose}
+      />
+    );
   }
 
   if (panel.type === "edit-bill") {
@@ -1849,7 +1871,9 @@ function ForecastPanels({
           )}
           <label className="flex min-h-14 items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
             <span>
-              <span className="block text-sm font-black">Include projected income and repayments</span>
+              <span className="block text-sm font-black">
+                Include projected income and repayments
+              </span>
               <span className="mt-1 block text-xs text-muted-foreground">
                 Forecast totals may include scheduled shifts and expected repayments. Safe to spend
                 excludes both until confirmed.
@@ -1970,7 +1994,7 @@ function ForecastPanels({
     );
   }
   if (panel.type === "card") {
-    const plan = zeroAprPayoffPlan(panel.card, state.transactions);
+    const plan = payoffPlanForCard(panel.card, state);
     return (
       <Sheet
         open
@@ -2001,8 +2025,11 @@ function ForecastPanels({
             value={formatMoney(panel.card.currentBalance, currency)}
           />
           <MiniMetric
-            label="Recommended per cycle"
-            value={formatMoney(plan.recommendedMonthlyPayment, currency)}
+            label={plan.paymentMode === "fixed" ? "Planned monthly" : "Next utilization payment"}
+            value={formatMoney(
+              plan.plannedMonthlyPayment ?? plan.recommendedMonthlyPayment,
+              currency,
+            )}
           />
           <MiniMetric
             label="Recorded payments"
@@ -2015,9 +2042,34 @@ function ForecastPanels({
             }
           />
         </div>
+        {panel.card.zeroAprEndDate && (
+          <div className="mt-4 rounded-2xl border border-border p-4 space-y-2 text-sm">
+            <p className="font-bold">
+              {plan.projectedBalanceAtDeadline
+                ? `${formatMoney(plan.projectedBalanceAtDeadline, currency)} projected to remain at promo end`
+                : `Projected to pay off by ${plan.payoffDate ? formatDisplayDate(plan.payoffDate) : formatDisplayDate(panel.card.zeroAprEndDate)}`}
+            </p>
+            {!!plan.projectedBalanceAtDeadline && (
+              <p>
+                To pay off by then:{" "}
+                {plan.requiredMonthlyPayment
+                  ? `${plan.paymentMode === "fixed" ? `raise the payment to ${formatMoney(plan.requiredMonthlyPayment, currency)} per month (${formatMoney(plan.additionalMonthlyNeeded ?? 0, currency)} more)` : `switch to a fixed ${formatMoney(plan.requiredMonthlyPayment, currency)} per month`}, or keep the current plan and make a ${formatMoney(plan.lumpSumNeeded ?? 0, currency)} extra payment by the deadline.`
+                  : `There are no due dates left before the deadline. Make an extra payment of ${formatMoney(plan.lumpSumNeeded ?? 0, currency)} by then.`}
+              </p>
+            )}
+            <p className="text-muted-foreground">
+              Expected new card spending:{" "}
+              {formatMoney(panel.card.zeroAprExpectedMonthlySpend ?? 0, currency)}/month. Planned
+              card purchases are included in the estimate. Actual bank balances refresh this
+              projection when they sync.
+            </p>
+          </div>
+        )}
         <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-          The recommendation uses the card's remaining statement cycles and minimum payment. It does
-          not change the card until you explicitly record a payment.
+          This is a forecast based on today's card balance, planned purchases, minimum due and your
+          chosen payment plan. New purchases may carry interest even during a 0% promotion; confirm
+          their terms with the issuer. Recording a payment does not change the bank reported balance
+          until it is confirmed.
         </p>
       </Sheet>
     );
