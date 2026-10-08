@@ -58,6 +58,8 @@ export interface Card {
   zeroAprPaymentMode?: "utilization" | "fixed";
   zeroAprMonthlyPayment?: number;
   zeroAprExpectedMonthlySpend?: number;
+  /** Do not invent overdue installments from before this card was tracked. */
+  paymentScheduleStartDate?: string;
   targetUtilizationPercent: number;
   preferredCategories: string[];
   defaultPaymentAccountId?: string;
@@ -127,7 +129,12 @@ export interface TimesheetEntry {
 }
 
 export type TransactionType =
-  "expense" | "income" | "card_payment" | "debt_payment" | "transfer" | "adjustment";
+  | "expense"
+  | "income"
+  | "card_payment"
+  | "debt_payment"
+  | "transfer"
+  | "adjustment";
 
 export interface Transaction {
   id: string;
@@ -152,6 +159,7 @@ export interface Transaction {
   /** One transfer, with independently confirmed cash and card legs. */
   cardPayment?: {
     version: 2;
+    plannedExpenseItemId?: string;
     cashPosted: boolean;
     cardPosted: boolean;
     cashLocalApplied: number;
@@ -198,6 +206,8 @@ export interface RecurringBill {
   accountId: string;
   cardId?: string;
   active: boolean;
+  /** First month this bill should occur. Older records may not have this field. */
+  startMonth?: string;
 }
 
 export type PlannedExpenseSourceType = "recurring_bill" | "debt_plan" | "card_due" | "one_time";

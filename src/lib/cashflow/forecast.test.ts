@@ -46,6 +46,7 @@ function monthlyRentState(): AppState {
     recurringBills: [
       {
         id: "rent",
+        startMonth: "2026-07",
         name: "Rent",
         amount: 500,
         dueDay: 4,

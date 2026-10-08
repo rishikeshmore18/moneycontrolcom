@@ -11,6 +11,7 @@ import {
 } from "./forecast";
 import { zeroAprPayoffPlan } from "./forecastView";
 import { reducer } from "./reducer";
+import { assignablePlannedExpenses } from "./activityAssignment";
 import { emptyState, type AppState, type Card } from "./types";
 
 const ref = new Date(2026, 9, 7, 12);
@@ -112,6 +113,7 @@ describe("0% card payoff plan", () => {
     s.recurringBills = [
       {
         id: "phone",
+        startMonth: "2026-10",
         name: "Phone",
         amount: 80,
         dueDay: 7,
@@ -123,12 +125,70 @@ describe("0% card payoff plan", () => {
     ];
     const bill = expensesComingBreakdown(s, ref).flatMap((section) => section.items);
     expect(bill.filter((item) => item.sourceType === "card_due")).toHaveLength(1);
-    expect(bill.filter((item) => item.label === "Phone")).toHaveLength(0);
+    expect(
+      bill.filter((item) => item.label === "Phone" && item.includedInCardPayment),
+    ).toHaveLength(1);
+    expect(
+      bill.reduce((sum, item) => sum + (item.includedInCardPayment ? 0 : item.amount), 0),
+    ).toBe(expensesComingTotal(s, ref));
     expect(expensesComingTotal(s, ref)).toBe(500);
+    const nextDay = new Date(2026, 9, 8);
+    expect(
+      expensesComingBreakdown(s, nextDay)
+        .flatMap((section) => section.items)
+        .find((item) => item.label === "Phone")?.isOverdue,
+    ).toBe(true);
+    expect(
+      assignablePlannedExpenses(s, {
+        id: "charge",
+        type: "expense",
+        amount: 80,
+        description: "Phone",
+        date: "2026-10-08",
+        category: "Bills",
+        cardId: card.id,
+        createdAt: "2026-10-08",
+        updatedAt: "2026-10-08",
+      }).some((item) => item.label === "Phone" && item.amount === 80),
+    ).toBe(true);
     expect(leftToSpendBreakdown(s, ref)[0].items.reduce((sum, item) => sum + item.amount, 0)).toBe(
       spendableCash(s) + pendingIncome(s, ref) - expensesComingTotal(s, ref),
     );
     expect(spendableToday(s, ref)).toBeLessThan(spendableToday({ ...s, cards: [] }, ref));
+  });
+
+  it("retains an unpaid installment after its due date without reserving the balance twice", () => {
+    const s = state();
+    s.cards = [{ ...card, paymentScheduleStartDate: "2026-10-07" }];
+    const late = new Date(2026, 9, 9, 12);
+    const due = expensesComingBreakdown(s, late)
+      .flatMap((section) => section.items)
+      .filter((item) => item.sourceType === "card_due");
+    expect(due[0]).toMatchObject({ dueDate: "2026-10-08", amount: 500, isOverdue: true });
+    expect(expensesComingTotal(s, late)).toBe(500);
+    const next = expensesComingBreakdown(s, new Date(2026, 10, 7, 12))
+      .flatMap((section) => section.items)
+      .filter((item) => item.sourceType === "card_due");
+    expect(next.map((item) => [item.dueDate, item.amount])).toEqual([
+      ["2026-10-08", 500],
+      ["2026-11-08", 500],
+    ]);
+    const paid = reducer(s, {
+      type: "PAY_CREDIT_CARD",
+      payload: {
+        cardId: card.id,
+        sourceAccountId: "cash",
+        amount: 500,
+        date: "2026-10-09",
+        plannedExpenseItemId: "promo:fixed:2026-10-08",
+      },
+    });
+    expect(
+      expensesComingBreakdown(paid, late)
+        .flatMap((section) => section.items)
+        .filter((item) => item.sourceType === "card_due"),
+    ).toHaveLength(0);
+    expect(spendableToday(paid, late)).toBeCloseTo(spendableToday(s, late), 2);
   });
 
   it("includes a known bill beyond the monthly estimate and forecasts a new charge from zero", () => {
@@ -137,6 +197,7 @@ describe("0% card payoff plan", () => {
     s.recurringBills = [
       {
         id: "phone",
+        startMonth: "2026-10",
         name: "Phone",
         amount: 80,
         dueDay: 7,
