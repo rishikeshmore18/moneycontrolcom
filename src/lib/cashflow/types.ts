@@ -186,7 +186,10 @@ export interface Transaction {
     originalOverride?: PlannedIncomeOverride;
     originalEntries?: TimesheetEntry[];
     addedEntryIds?: string[];
+    linkedEntryIds?: string[];
   };
+  /** Additional expected items settled by the same real deposit. */
+  linkedPlannedIncomes?: NonNullable<Transaction["linkedPlannedIncome"]>[];
   linkedPlannedExpense?: {
     label: string;
     sourceType: "recurring_bill" | "one_time";
@@ -198,6 +201,8 @@ export interface Transaction {
     priorRecurringAmount?: number;
     matchedRecurringAmount?: number;
   };
+  /** Additional planned bills settled by the same real payment. */
+  linkedPlannedExpenses?: NonNullable<Transaction["linkedPlannedExpense"]>[];
   // Cycle reconciliation (card payments + the expenses they cover)
   cycleStart?: string; // ISO date — start of billing cycle (exclusive)
   cycleEnd?: string; // ISO date — statement / cycle close date (inclusive)

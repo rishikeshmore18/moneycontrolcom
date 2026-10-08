@@ -20,7 +20,7 @@ import { newId, todayISO, toISODate } from "./dates";
 import { expensesComingBreakdown } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 import { canMergeExpenses, canMergeIncome } from "./transactionMerge";
-import { assignablePlannedExpenses, assignablePlannedIncome } from "./activityAssignment";
+import { assignablePlannedExpenses, assignablePlannedIncome, validAssignmentSelection } from "./activityAssignment";
 import { allocatedInAccount, backedGoalInAccount, goalAvailable, goalAvailableInAccount, goalBalanceInAccount,
   goalCents, goalMoney, validGoalAmount } from "./savingsGoals";
 import {
@@ -117,7 +117,9 @@ export type Action =
       targetId: string;
       bankBalanceAuthoritative: boolean;
     }
-  | { type: "LINK_INCOME_TRANSACTION"; id: string; itemId: string }
+  | { type: "LINK_INCOME_TRANSACTION"; id: string; itemId: string; appliedAmount?: number }
+  | { type: "ASSIGN_PLANNED_ITEMS"; id: string; itemIds: string[];
+      mode: "combined" | "duplicates"; updateFutureBillAmount?: boolean }
   | {
       type: "LINK_EXPENSE_TRANSACTION";
       id: string;
@@ -255,6 +257,11 @@ function addTx(
 }
 
 function undoIncomeLink(state: AppState, tx: Transaction): AppState {
+  if (tx.linkedPlannedIncomes?.length) {
+    return [tx.linkedPlannedIncome, ...tx.linkedPlannedIncomes].filter(Boolean).reduce(
+      (next, link) => undoIncomeLink(next, { ...tx, linkedPlannedIncome: link,
+        linkedPlannedIncomes: undefined }), state);
+  }
   const link = tx.linkedPlannedIncome;
   if (!link) return state;
   const previous = new Map((link.originalEntries ?? []).map((entry) => [entry.id, entry]));
@@ -262,7 +269,8 @@ function undoIncomeLink(state: AppState, tx: Transaction): AppState {
   return {
     ...state,
     timesheet: state.timesheet.flatMap((entry) => {
-      if (entry.linkedTransactionId !== tx.id) return [entry];
+      if (entry.linkedTransactionId !== tx.id || link.originalOverride ||
+          (link.linkedEntryIds && !link.linkedEntryIds.includes(entry.id))) return [entry];
       if (added.has(entry.id))
         return [
           {
@@ -287,6 +295,11 @@ function undoIncomeLink(state: AppState, tx: Transaction): AppState {
 }
 
 function undoExpenseLink(state: AppState, tx: Transaction): AppState {
+  if (tx.linkedPlannedExpenses?.length) {
+    return [tx.linkedPlannedExpense, ...tx.linkedPlannedExpenses].filter(Boolean).reduce(
+      (next, link) => undoExpenseLink(next, { ...tx, linkedPlannedExpense: link,
+        linkedPlannedExpenses: undefined }), state);
+  }
   const link = tx.linkedPlannedExpense;
   if (!link) return state;
   if (link.sourceType === "one_time") {
@@ -980,11 +993,43 @@ export function reducer(state: AppState, action: Action): AppState {
                 ...item,
                 linkedPlannedIncome: undefined,
                 linkedPlannedExpense: undefined,
+                linkedPlannedIncomes: undefined,
+                linkedPlannedExpenses: undefined,
                 updatedAt: now(),
               }
             : item,
         ),
       };
+    }
+
+    case "ASSIGN_PLANNED_ITEMS": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || (tx.type !== "expense" && tx.type !== "income") ||
+          !validISODate(tx.date) || !action.itemIds.length ||
+          new Set(action.itemIds).size !== action.itemIds.length) return state;
+      // Restore old matches in memory, then validate every choice before changing anything.
+      const reset = tx.linkedPlannedExpense || tx.linkedPlannedIncome
+        ? reducer(state, { type: "UNLINK_PLANNED_TRANSACTION", id: tx.id }) : state;
+      const fresh = reset.transactions.find((item) => item.id === tx.id)!;
+      const candidates = tx.type === "expense"
+        ? assignablePlannedExpenses(reset, fresh) : assignablePlannedIncome(reset, fresh);
+      const selected = action.itemIds.map((id) => candidates.find((item) => item.id === id));
+      if (selected.some((item) => !item) ||
+          !validAssignmentSelection(tx.amount, selected.filter((item) => !!item), action.mode))
+        return state;
+      let next = reset;
+      for (const item of selected) {
+        if (!item) return state;
+        const updated = reducer(next, tx.type === "expense"
+          ? { type: "LINK_EXPENSE_TRANSACTION", id: tx.id, itemId: item.id,
+              updateFutureBillAmount: selected.length === 1 && action.updateFutureBillAmount }
+          : { type: "LINK_INCOME_TRANSACTION", id: tx.id, itemId: item.id,
+              appliedAmount: selected.length === 1 ? tx.amount :
+                action.mode === "duplicates" ? (item === selected[0] ? tx.amount : 0) : item.amount });
+        if (updated === next) return state;
+        next = updated;
+      }
+      return next;
     }
 
     case "MERGE_INCOME_TRANSACTIONS": {
@@ -1020,6 +1065,9 @@ export function reducer(state: AppState, action: Action): AppState {
                   balanceAlreadySynced: synced,
                   updatedAt: now(),
                   linkedPlannedIncome: item.linkedPlannedIncome ?? source.linkedPlannedIncome,
+                  linkedPlannedIncomes: item.linkedPlannedIncome
+                    ? item.linkedPlannedIncomes
+                    : source.linkedPlannedIncomes,
                 }
               : item,
           ),
@@ -1032,11 +1080,10 @@ export function reducer(state: AppState, action: Action): AppState {
         !tx ||
         tx.type !== "income" ||
         !tx.targetAccountId ||
-        tx.linkedPlannedIncome ||
         !validISODate(tx.date)
       )
         return state;
-      const item = assignablePlannedIncome(state, tx).find(
+      const item = assignablePlannedIncome(state, { ...tx, linkedPlannedIncome: undefined }).find(
         (candidate) => candidate.id === action.itemId,
       );
       if (!item) return state;
@@ -1054,11 +1101,15 @@ export function reducer(state: AppState, action: Action): AppState {
             candidate.id === tx.id
               ? {
                   ...candidate,
-                  linkedPlannedIncome: {
+                  linkedPlannedIncome: candidate.linkedPlannedIncome ?? {
                     itemId: item.id,
                     label: item.label,
                     originalOverride: override,
                   },
+                  linkedPlannedIncomes: candidate.linkedPlannedIncome
+                    ? [...(candidate.linkedPlannedIncomes ?? []), { itemId: item.id,
+                        label: item.label, originalOverride: override }]
+                    : candidate.linkedPlannedIncomes,
                   updatedAt: now(),
                 }
               : candidate,
@@ -1080,8 +1131,8 @@ export function reducer(state: AppState, action: Action): AppState {
         const id = entry.auto ? newId() : entry.id;
         const share =
           index === entries.length - 1
-            ? Math.round((tx.amount - allocated) * 100) / 100
-            : Math.round(tx.amount * ((entry.actualAmount ?? entry.expectedAmount) / total) * 100) /
+            ? Math.round(((action.appliedAmount ?? tx.amount) - allocated) * 100) / 100
+            : Math.round((action.appliedAmount ?? tx.amount) * ((entry.actualAmount ?? entry.expectedAmount) / total) * 100) /
               100;
         allocated += share;
         if (entry.auto) addedEntryIds.push(id);
@@ -1109,12 +1160,18 @@ export function reducer(state: AppState, action: Action): AppState {
           candidate.id === tx.id
             ? {
                 ...candidate,
-                linkedPlannedIncome: {
+                linkedPlannedIncome: candidate.linkedPlannedIncome ?? {
                   itemId: item.id,
                   label: item.label,
                   originalEntries,
                   addedEntryIds,
+                  linkedEntryIds: [...replacements.values()].map((entry) => entry.id),
                 },
+                linkedPlannedIncomes: candidate.linkedPlannedIncome
+                  ? [...(candidate.linkedPlannedIncomes ?? []), { itemId: item.id,
+                      label: item.label, originalEntries, addedEntryIds,
+                      linkedEntryIds: [...replacements.values()].map((entry) => entry.id) }]
+                  : candidate.linkedPlannedIncomes,
                 updatedAt: now(),
               }
             : candidate,
@@ -1124,9 +1181,9 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "LINK_EXPENSE_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
-      if (!tx || tx.type !== "expense" || tx.linkedPlannedExpense || !validISODate(tx.date))
+      if (!tx || tx.type !== "expense" || !validISODate(tx.date))
         return state;
-      const item = assignablePlannedExpenses(state, tx).find(
+      const item = assignablePlannedExpenses(state, { ...tx, linkedPlannedExpense: undefined }).find(
         (candidate) => candidate.id === action.itemId,
       );
       if (!item || (item.sourceType !== "one_time" && item.sourceType !== "recurring_bill"))
@@ -1187,7 +1244,10 @@ export function reducer(state: AppState, action: Action): AppState {
         ],
         transactions: state.transactions.map((candidate) =>
           candidate.id === tx.id
-            ? { ...candidate, linkedPlannedExpense: link, updatedAt: now() }
+            ? { ...candidate, linkedPlannedExpense: candidate.linkedPlannedExpense ?? link,
+                linkedPlannedExpenses: candidate.linkedPlannedExpense
+                  ? [...(candidate.linkedPlannedExpenses ?? []), link]
+                  : candidate.linkedPlannedExpenses, updatedAt: now() }
             : candidate,
         ),
       };
@@ -1242,6 +1302,9 @@ export function reducer(state: AppState, action: Action): AppState {
                     source.balanceAlreadySynced || target.balanceAlreadySynced,
                   ),
                   linkedPlannedExpense: tx.linkedPlannedExpense ?? source.linkedPlannedExpense,
+                  linkedPlannedExpenses: tx.linkedPlannedExpense
+                    ? tx.linkedPlannedExpenses
+                    : source.linkedPlannedExpenses,
                   savingsGoalId: tx.savingsGoalId ?? source.savingsGoalId,
                   savingsGoalAmount: tx.savingsGoalAmount ?? source.savingsGoalAmount,
                   updatedAt: now(),

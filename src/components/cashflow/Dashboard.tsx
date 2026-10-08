@@ -66,7 +66,9 @@ import { canMergeExpenses, canMergeIncome } from "@/lib/cashflow/transactionMerg
 import {
   assignablePlannedExpenses,
   assignablePlannedIncome,
+  validAssignmentSelection,
 } from "@/lib/cashflow/activityAssignment";
+import { reducer } from "@/lib/cashflow/reducer";
 import { plaidListConnections, plaidRelinkActivity } from "@/lib/plaid/plaid.functions";
 
 type BreakdownKey =
@@ -75,6 +77,12 @@ type BreakdownKey =
   | "expenses_coming"
   | "left_to_spend"
   | "spendable_today";
+
+function plannedMatchLabels(tx: Transaction): string {
+  return [tx.linkedPlannedExpense, ...(tx.linkedPlannedExpenses ?? []),
+    tx.linkedPlannedIncome, ...(tx.linkedPlannedIncomes ?? [])]
+    .filter((link) => !!link).map((link) => link.label).join(", ");
+}
 
 type ExpenseAction =
   | { type: "add_one_time" }
@@ -416,7 +424,7 @@ export function Dashboard() {
                   </div>
                   {(t.linkedPlannedExpense || t.linkedPlannedIncome) && (
                     <div className="text-xs text-[color:var(--primary)] truncate">
-                      Matched to {t.linkedPlannedExpense?.label ?? t.linkedPlannedIncome?.label}
+                      Matched to {plannedMatchLabels(t)}
                     </div>
                   )}
                 </div>
@@ -2691,7 +2699,7 @@ function AllActivitySheet({
                         {(t.linkedPlannedExpense || t.linkedPlannedIncome) && (
                           <div className="text-xs text-[color:var(--primary)] truncate">
                             Matched to{" "}
-                            {t.linkedPlannedExpense?.label ?? t.linkedPlannedIncome?.label}
+                            {plannedMatchLabels(t)}
                           </div>
                         )}
                       </div>
@@ -2905,6 +2913,51 @@ function TransactionDetailSheet({
   );
 }
 
+function AssignmentChoices({ items, selectedIds, onChange, mode, onModeChange, amount,
+  currency, kind }: {
+  items: CashFlowBreakdownItem[]; selectedIds: string[];
+  onChange: (ids: string[]) => void; mode: "combined" | "duplicates";
+  onModeChange: (mode: "combined" | "duplicates") => void;
+  amount: number; currency: string; kind: "income" | "expense";
+}) {
+  const selected = selectedIds.map((id) => items.find((item) => item.id === id)).filter((item) => !!item);
+  const valid = validAssignmentSelection(amount, selected, mode);
+  return (
+    <div className="grid gap-3">
+      <p className="text-sm text-muted-foreground">
+        Choose every upcoming {kind === "income" ? "income item" : "bill"} covered by this
+        transaction. The bank transaction stays one payment.
+      </p>
+      <div className="grid max-h-64 gap-2 overflow-y-auto" role="group" aria-label="Upcoming items">
+        {items.map((item) => (
+          <label key={item.id} className="flex min-w-0 items-start gap-3 rounded-xl border border-border p-3 text-sm">
+            <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)}
+              onChange={(event) => onChange(event.target.checked
+                ? [...selectedIds, item.id] : selectedIds.filter((id) => id !== item.id))} />
+            <span className="min-w-0 break-words">{item.label} · {formatDisplayDate(item.dueDate ?? item.payDate ?? item.periodDate)} · {formatMoney(item.amount, currency)}</span>
+          </label>
+        ))}
+      </div>
+      {selectedIds.length > 1 && (
+        <Field label="How do these items relate?">
+          <Select value={mode} onChange={(event) => onModeChange(event.target.value as typeof mode)}>
+            <option value="combined">Parts of one payment (amounts add up)</option>
+            <option value="duplicates">Duplicate plans for the same payment</option>
+          </Select>
+        </Field>
+      )}
+      <p className="rounded-xl bg-muted p-3 text-sm" role="status">
+        {mode === "combined" || selectedIds.length === 1
+          ? `Selected estimates: ${formatMoney(selected.reduce((sum, item) => sum + item.amount, 0), currency)}. Actual transaction: ${formatMoney(amount, currency)}.`
+          : `Clear ${selectedIds.length} duplicate plans with one ${formatMoney(amount, currency)} transaction.`}
+        {!valid && selectedIds.length > 1 && (mode === "combined"
+          ? " The selected estimates exceed the actual transaction. Remove an item or choose duplicate plans if they are the same payment."
+          : " Duplicate plans must have the same name and each equal the transaction amount.")}
+      </p>
+    </div>
+  );
+}
+
 function EditIncomeTransactionSheet({
   tx,
   initialView,
@@ -2929,6 +2982,8 @@ function EditIncomeTransactionSheet({
   const [notes, setNotes] = useState("");
   const [targetId, setTargetId] = useState("");
   const [plannedId, setPlannedId] = useState("");
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [assignmentMode, setAssignmentMode] = useState<"combined" | "duplicates">("combined");
 
   useEffect(() => {
     setView(initialView);
@@ -2938,6 +2993,8 @@ function EditIncomeTransactionSheet({
     setNotes(tx?.notes ?? "");
     setTargetId("");
     setPlannedId("");
+    setSelectedPlanIds([]);
+    setAssignmentMode("combined");
   }, [tx?.id, initialView]);
 
   if (!tx || tx.type !== "income") return null;
@@ -2949,9 +3006,15 @@ function EditIncomeTransactionSheet({
       canMergeIncome(tx, candidate) && !(tx.linkedPlannedIncome && candidate.linkedPlannedIncome),
   );
   const target = candidates.find((candidate) => candidate.id === targetId);
-  const planned = assignablePlannedIncome(state, tx);
-  const selectedPlan = planned.find((item) => item.id === plannedId) ?? planned[0];
-  const plannedAccount = state.accounts.find((item) => item.id === selectedPlan?.accountId);
+  const assignmentState = tx.linkedPlannedIncome
+    ? reducer(state, { type: "UNLINK_PLANNED_TRANSACTION", id: tx.id }) : state;
+  const planned = assignablePlannedIncome(assignmentState,
+    assignmentState.transactions.find((item) => item.id === tx.id) ?? tx);
+  const chosenIds = selectedPlanIds.length ? selectedPlanIds : plannedId ? [plannedId] : [];
+  const selectedPlans = chosenIds.map((id) => planned.find((item) => item.id === id)).filter((item) => !!item);
+  const validPlans = validAssignmentSelection(tx.amount, selectedPlans, assignmentMode);
+  const existingIds = [tx.linkedPlannedIncome, ...(tx.linkedPlannedIncomes ?? [])]
+    .filter((link) => !!link).map((link) => link.itemId);
 
   async function bankLinked() {
     const connections = await listConnections();
@@ -3011,9 +3074,10 @@ function EditIncomeTransactionSheet({
   }
 
   function link() {
-    if (!selectedPlan) return;
-    dispatch({ type: "LINK_INCOME_TRANSACTION", id: currentTx.id, itemId: selectedPlan.id });
-    toast("Deposit linked. The upcoming income is now marked received without adding cash again.");
+    if (!validPlans) return;
+    dispatch({ type: "ASSIGN_PLANNED_ITEMS", id: currentTx.id,
+      itemIds: chosenIds, mode: assignmentMode });
+    toast("Selected income marked received. The deposit was counted once.");
     onDone();
   }
 
@@ -3062,16 +3126,22 @@ function EditIncomeTransactionSheet({
               variant="soft"
               disabled={planned.length === 0}
               onClick={() => {
-                setPlannedId(planned[0]?.id ?? "");
+                setPlannedId("");
+                setSelectedPlanIds(existingIds.length ? existingIds : planned[0] ? [planned[0].id] : []);
                 setView("link");
               }}
             >
               Assign to income
             </Button>
             {tx.linkedPlannedIncome && (
-              <Button variant="soft" onClick={() => setView("confirmUnlink")}>
-                Change match
-              </Button>
+              <>
+                <Button variant="soft" onClick={() => {
+                  setPlannedId(""); setSelectedPlanIds(existingIds); setView("link");
+                }}>Edit matches</Button>
+                <Button variant="ghost" onClick={() => setView("confirmUnlink")}>
+                  Remove all matches
+                </Button>
+              </>
             )}
             <Button variant="ghost" onClick={() => setView("confirmDelete")}>
               Delete
@@ -3093,7 +3163,7 @@ function EditIncomeTransactionSheet({
             {view === "link" && (
               <Button
                 variant="primary"
-                disabled={!selectedPlan}
+                disabled={!validPlans}
                 onClick={() => setView("confirmLink")}
               >
                 Review match
@@ -3109,7 +3179,7 @@ function EditIncomeTransactionSheet({
               </Button>
             )}
             {view === "confirmLink" && (
-              <Button variant="primary" disabled={!selectedPlan} onClick={link}>
+              <Button variant="primary" disabled={!validPlans} onClick={link}>
                 Mark received and link
               </Button>
             )}
@@ -3135,7 +3205,7 @@ function EditIncomeTransactionSheet({
           </p>
           {tx.linkedPlannedIncome && (
             <p className="rounded-xl bg-muted p-3 text-sm">
-              Matched to {tx.linkedPlannedIncome.label}.
+              Matched to {plannedMatchLabels(tx)}.
             </p>
           )}
           <Field label="Name">
@@ -3174,32 +3244,10 @@ function EditIncomeTransactionSheet({
           </Field>
         </div>
       ) : view === "link" ? (
-        <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">
-            Select the expected income this deposit paid. Its amount can differ from the estimate;
-            the actual deposit stays {fm(tx.amount)}.
-          </p>
-          <Field label="Upcoming income">
-            <Select
-              value={selectedPlan?.id ?? ""}
-              onChange={(event) => setPlannedId(event.target.value)}
-            >
-              {planned.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label} · {formatDisplayDate(item.payDate ?? item.periodDate)} · expected{" "}
-                  {fm(item.amount)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {selectedPlan && (
-            <p className="rounded-xl bg-muted p-3 text-sm">
-              Expected {fm(selectedPlan.amount)} to {plannedAccount?.name ?? "an account"}. Actual{" "}
-              {fm(tx.amount)} to {account?.name ?? "an account"}. Select the right payday even if
-              the estimate or destination changed.
-            </p>
-          )}
-        </div>
+        <AssignmentChoices items={planned} selectedIds={chosenIds}
+          onChange={(ids) => { setSelectedPlanIds(ids); setPlannedId(""); }}
+          mode={assignmentMode} onModeChange={setAssignmentMode}
+          amount={tx.amount} currency={state.profile.currency} kind="income" />
       ) : (
         <p className="text-sm" role="alert">
           {view === "confirmMerge" ? (
@@ -3210,17 +3258,15 @@ function EditIncomeTransactionSheet({
             </>
           ) : view === "confirmLink" ? (
             <>
-              Mark{" "}
-              <strong>
-                {selectedPlan?.label} ·{" "}
-                {formatDisplayDate(selectedPlan?.payDate ?? selectedPlan?.periodDate)}
-              </strong>{" "}
-              as received using this {fm(tx.amount)} deposit? No new money will be added.
+              Mark <strong>{selectedPlans.map((item) => item.label).join(", ")}</strong> as received
+              using this one {fm(tx.amount)} deposit? No new money will be added.
+              {assignmentMode === "duplicates" && selectedPlans.length > 1 &&
+                " These planned items must be copies of the same deposit, not separate income."}
             </>
           ) : view === "confirmUnlink" ? (
             <>
-              Remove the match to <strong>{tx.linkedPlannedIncome?.label}</strong>? The expected
-              income will return; the {fm(tx.amount)} activity and account balance stay the same.
+              Remove the match to <strong>{plannedMatchLabels(tx)}</strong>? The expected
+              income items will return; the {fm(tx.amount)} activity and account balance stay the same.
               Then assign it to the correct item.
             </>
           ) : (
@@ -3278,6 +3324,8 @@ function EditTransactionSheet({
   const [targetId, setTargetId] = useState("");
   const [plannedId, setPlannedId] = useState("");
   const [updateFutureAmount, setUpdateFutureAmount] = useState(false);
+  const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
+  const [assignmentMode, setAssignmentMode] = useState<"combined" | "duplicates">("combined");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -3296,6 +3344,8 @@ function EditTransactionSheet({
     setTargetId("");
     setPlannedId("");
     setUpdateFutureAmount(false);
+    setSelectedPlanIds([]);
+    setAssignmentMode("combined");
   }, [tx, linkedReturn?.payDate, initialView]);
 
   if (!tx || !canEditTransaction(tx)) return null;
@@ -3313,25 +3363,31 @@ function EditTransactionSheet({
     canMergeExpenses(currentTx, candidate),
   );
   const target = candidates.find((candidate) => candidate.id === targetId);
-  const planned = assignablePlannedExpenses(state, currentTx);
-  const selectedPlan = planned.find((item) => item.id === plannedId) ?? planned[0];
-  const plannedSource =
-    selectedPlan?.paymentMethod === "card"
-      ? state.cards.find((item) => item.id === selectedPlan.cardId)?.name
-      : state.accounts.find((item) => item.id === selectedPlan?.accountId)?.name;
+  const assignmentState = currentTx.linkedPlannedExpense
+    ? reducer(state, { type: "UNLINK_PLANNED_TRANSACTION", id: currentTx.id }) : state;
+  const planned = assignablePlannedExpenses(assignmentState,
+    assignmentState.transactions.find((item) => item.id === currentTx.id) ?? currentTx);
+  const chosenIds = selectedPlanIds.length ? selectedPlanIds : plannedId ? [plannedId] : [];
+  const selectedPlans = chosenIds.map((id) => planned.find((item) => item.id === id)).filter((item) => !!item);
+  const validPlans = validAssignmentSelection(currentTx.amount, selectedPlans, assignmentMode);
+  const selectedPlan = selectedPlans[0];
+  const existingIds = [currentTx.linkedPlannedExpense, ...(currentTx.linkedPlannedExpenses ?? [])]
+    .filter((link) => !!link).map((link) => link.sourceType === "one_time"
+      ? link.originalOverride?.id ?? "" : `${link.sourceId}:${link.month}`);
   const actualSource = currentTx.cardId
     ? state.cards.find((item) => item.id === currentTx.cardId)?.name
     : state.accounts.find((item) => item.id === currentTx.sourceAccountId)?.name;
 
   function linkPlanned() {
-    if (!selectedPlan) return;
+    if (!validPlans) return;
     dispatch({
-      type: "LINK_EXPENSE_TRANSACTION",
+      type: "ASSIGN_PLANNED_ITEMS",
       id: currentTx.id,
-      itemId: selectedPlan.id,
-      updateFutureBillAmount: selectedPlan.sourceType === "recurring_bill" && updateFutureAmount,
+      itemIds: chosenIds,
+      mode: assignmentMode,
+      updateFutureBillAmount: selectedPlans.length === 1 && selectedPlan?.sourceType === "recurring_bill" && updateFutureAmount,
     });
-    toast("Bill assigned to this transaction. No second charge was added.");
+    toast("Selected bills marked paid. The transaction was counted once.");
     onRemoved();
   }
 
@@ -3468,16 +3524,22 @@ function EditTransactionSheet({
               variant="soft"
               disabled={planned.length === 0}
               onClick={() => {
-                setPlannedId(planned[0]?.id ?? "");
+                setPlannedId("");
+                setSelectedPlanIds(existingIds.length ? existingIds : planned[0] ? [planned[0].id] : []);
                 setActionView("link");
               }}
             >
               Assign to bill
             </Button>
             {currentTx.linkedPlannedExpense && (
-              <Button variant="soft" onClick={() => setActionView("confirmUnlink")}>
-                Change match
-              </Button>
+              <>
+                <Button variant="soft" onClick={() => {
+                  setPlannedId(""); setSelectedPlanIds(existingIds); setActionView("link");
+                }}>Edit matches</Button>
+                <Button variant="ghost" onClick={() => setActionView("confirmUnlink")}>
+                  Remove all matches
+                </Button>
+              </>
             )}
             <Button variant="ghost" onClick={() => setActionView("confirmDelete")}>
               Delete
@@ -3498,7 +3560,7 @@ function EditTransactionSheet({
             </Button>
             <Button
               variant="primary"
-              disabled={actionView === "merge" ? !target : !selectedPlan}
+              disabled={actionView === "merge" ? !target : !validPlans}
               onClick={() => setActionView(actionView === "merge" ? "confirmMerge" : "confirmLink")}
             >
               Review {actionView === "merge" ? "merge" : "match"}
@@ -3569,57 +3631,30 @@ function EditTransactionSheet({
         </p>
       ) : actionView === "confirmLink" ? (
         <p className="text-sm" role="alert">
-          Mark{" "}
-          <strong>
-            {selectedPlan?.label} · {formatDisplayDate(selectedPlan?.dueDate)}
-          </strong>{" "}
-          ({formatMoney(selectedPlan?.amount ?? 0, state.profile.currency)} planned) as paid by{" "}
+          Mark <strong>{selectedPlans.map((item) => item.label).join(", ")}</strong> as paid by{" "}
           <strong>
             {currentTx.description} · {formatMoney(currentTx.amount, state.profile.currency)}
           </strong>{" "}
           from {actualSource ?? "the recorded payment source"}? That month's planned item will be
-          cleared. No second expense is added.
+          cleared. The one recorded transaction remains unchanged.
+          {assignmentMode === "duplicates" && selectedPlans.length > 1 &&
+            " These planned items must be copies of the same expense, not separate bills."}
           {selectedPlan?.sourceType === "recurring_bill" &&
             ` Future monthly estimate ${updateFutureAmount ? `will change to ${formatMoney(currentTx.amount, state.profile.currency)}` : "stays as it is"}.`}
         </p>
       ) : actionView === "confirmUnlink" ? (
         <p className="text-sm" role="alert">
-          Remove the match to <strong>{currentTx.linkedPlannedExpense?.label}</strong>? That month's
-          planned bill will return. The transaction and bank balance stay the same. You can then
+          Remove the match to <strong>{plannedMatchLabels(currentTx)}</strong>? Those
+          planned bills will return. The transaction and bank balance stay the same. You can then
           assign the transaction to another bill.
         </p>
       ) : actionView === "link" ? (
         <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">
-            Select the bill this payment covered, even if its estimate, merchant, or payment account
-            changed. Unsaved edits are not included.
-          </p>
-          <Field label="Upcoming expense">
-            <Select
-              value={selectedPlan?.id ?? ""}
-              onChange={(event) => {
-                setPlannedId(event.target.value);
-                setUpdateFutureAmount(false);
-              }}
-            >
-              {planned.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.label} · {formatDisplayDate(item.dueDate)} · planned{" "}
-                  {formatMoney(item.amount, state.profile.currency)}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          {selectedPlan && (
-            <p className="rounded-xl bg-muted p-3 text-sm">
-              Planned {formatMoney(selectedPlan.amount, state.profile.currency)} from{" "}
-              {plannedSource ?? "an unspecified source"}. Actual{" "}
-              {formatMoney(currentTx.amount, state.profile.currency)} from{" "}
-              {actualSource ?? "an unspecified source"}. Only the selected due date will be marked
-              paid.
-            </p>
-          )}
-          {selectedPlan?.sourceType === "recurring_bill" && (
+          <AssignmentChoices items={planned} selectedIds={chosenIds}
+            onChange={(ids) => { setSelectedPlanIds(ids); setPlannedId(""); setUpdateFutureAmount(false); }}
+            mode={assignmentMode} onModeChange={setAssignmentMode}
+            amount={currentTx.amount} currency={state.profile.currency} kind="expense" />
+          {selectedPlans.length === 1 && selectedPlan?.sourceType === "recurring_bill" && (
             <label className="flex min-w-0 items-start gap-3 rounded-xl border border-border p-3 text-sm">
               <input
                 type="checkbox"
@@ -3658,7 +3693,7 @@ function EditTransactionSheet({
           <div className="grid gap-3 sm:grid-cols-2">
             {currentTx.linkedPlannedExpense && (
               <p className="sm:col-span-2 rounded-xl bg-muted p-3 text-sm">
-                Matched to {currentTx.linkedPlannedExpense.label}.
+                Matched to {plannedMatchLabels(currentTx)}.
               </p>
             )}
             <Field label="Amount">

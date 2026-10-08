@@ -7,6 +7,23 @@ function nameKey(value: string): string {
   return value.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
+/** Combined plans consume the payment once; duplicate plans describe the same payment. */
+export function validAssignmentSelection(
+  amount: number,
+  items: Pick<CashFlowBreakdownItem, "id" | "label" | "amount">[],
+  mode: "combined" | "duplicates",
+): boolean {
+  if (!Number.isFinite(amount) || amount <= 0 || !items.length ||
+      new Set(items.map((item) => item.id)).size !== items.length ||
+      items.some((item) => !Number.isFinite(item.amount) || item.amount <= 0)) return false;
+  if (items.length === 1) return true; // The actual price can differ from the estimate.
+  const cents = Math.round(amount * 100);
+  if (mode === "combined")
+    return items.reduce((sum, item) => sum + Math.round(item.amount * 100), 0) <= cents;
+  return items.every((item) =>
+    nameKey(item.label) === nameKey(items[0].label) && Math.round(item.amount * 100) === cents);
+}
+
 function score(item: CashFlowBreakdownItem, tx: Transaction): number {
   const expected = nameKey(item.label);
   const actual = nameKey(tx.description);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assignablePlannedExpenses, assignablePlannedIncome } from "./activityAssignment";
-import { expensesComingTotal, pendingIncome } from "./forecast";
+import { expensesComingTotal, pendingIncome, pendingIncomeBreakdown } from "./forecast";
 import { reducer } from "./reducer";
 import { emptyState, type AppState, type Transaction } from "./types";
 
@@ -27,6 +27,91 @@ function mobile(): Transaction {
 }
 
 describe("assigning activity to an upcoming item", () => {
+  it("settles two $50 bills with one $100 expense and restores both without moving cash", () => {
+    const before = fixture();
+    before.transactions = [{ ...mobile(), amount: 100 }];
+    before.plannedExpenseOverrides = [{ id: "second-bill", sourceType: "one_time",
+      sourceId: "other", month: "2026-09", action: "add", amount: 50,
+      dueDate: "2026-09-29", name: "Other bill", accountId: "checking" }];
+    const initial = expensesComingTotal(before, sep);
+    const linked = reducer(before, { type: "ASSIGN_PLANNED_ITEMS", id: "mobile-charge",
+      itemIds: ["mobile:2026-09", "second-bill"], mode: "combined" });
+    expect(linked).not.toBe(before);
+    expect(linked.transactions[0].linkedPlannedExpenses).toHaveLength(1);
+    expect(linked.accounts).toEqual(before.accounts);
+    expect(expensesComingTotal(linked, sep)).toBe(initial - 100);
+    const restored = reducer(linked, { type: "UNLINK_PLANNED_TRANSACTION", id: "mobile-charge" });
+    expect(restored.transactions[0].linkedPlannedExpense).toBeUndefined();
+    expect(restored.transactions[0].linkedPlannedExpenses).toBeUndefined();
+    expect(expensesComingTotal(restored, sep)).toBe(initial);
+  });
+
+  it("clears three duplicate $100 plans with one $100 transaction only when explicitly selected", () => {
+    const before = fixture();
+    before.transactions = [{ ...mobile(), amount: 100 }];
+    before.plannedExpenseOverrides = [1, 2, 3].map((n) => ({
+      id: `duplicate-${n}`, sourceType: "one_time" as const, sourceId: `bill-${n}`,
+      month: "2026-09", action: "add" as const, amount: 100, dueDate: "2026-09-29",
+      name: "Phone bill", accountId: "checking",
+    }));
+    const ids = ["duplicate-1", "duplicate-2", "duplicate-3"];
+    expect(reducer(before, { type: "ASSIGN_PLANNED_ITEMS", id: "mobile-charge",
+      itemIds: ids, mode: "combined" })).toBe(before);
+    const linked = reducer(before, { type: "ASSIGN_PLANNED_ITEMS", id: "mobile-charge",
+      itemIds: ids, mode: "duplicates" });
+    expect(linked.transactions[0].linkedPlannedExpenses).toHaveLength(2);
+    expect(linked.transactions).toHaveLength(1);
+    expect(linked.accounts).toEqual(before.accounts);
+    expect(linked.plannedExpenseOverrides).toHaveLength(0);
+    expect(reducer(linked, { type: "UNLINK_PLANNED_TRANSACTION", id: "mobile-charge" })
+      .plannedExpenseOverrides).toHaveLength(3);
+  });
+
+  it("allocates one $100 deposit across two planned $50 incomes", () => {
+    const before = fixture();
+    before.transactions = [{ id: "deposit", type: "income", amount: 100, category: "Income",
+      description: "Deposit", date: "2026-09-29", targetAccountId: "checking",
+      balanceAlreadySynced: true, createdAt: "2026-09-29", updatedAt: "2026-09-29" }];
+    before.plannedIncomeOverrides = [1, 2].map((n) => ({ id: `income-${n}`,
+      sourceId: `income-${n}`, action: "add" as const, payDate: "2026-09-30",
+      amount: 50, label: `Income ${n}`, accountId: "checking" }));
+    const linked = reducer(before, { type: "ASSIGN_PLANNED_ITEMS", id: "deposit",
+      itemIds: ["income-1", "income-2"], mode: "combined" });
+    expect(linked.transactions[0].linkedPlannedIncomes).toHaveLength(1);
+    expect(pendingIncome(linked, sep)).toBe(0);
+    expect(linked.accounts).toEqual(before.accounts);
+    expect(reducer(linked, { type: "UNLINK_PLANNED_TRANSACTION", id: "deposit" })
+      .plannedIncomeOverrides).toHaveLength(2);
+  });
+
+  it("splits a bank deposit across two job paydays and reverses each ledger entry", () => {
+    const before = fixture();
+    before.transactions = [{ id: "deposit", type: "income", amount: 100,
+      category: "Income", description: "Payroll", date: "2026-09-29",
+      targetAccountId: "checking", balanceAlreadySynced: true,
+      createdAt: "2026-09-29", updatedAt: "2026-09-29" }];
+    before.jobs = ["one", "two"].map((id) => ({ id, name: id, type: "full_time" as const,
+      netHourlyRate: 0, netPaycheckAmount: 50, payFrequency: "weekly" as const,
+      paydayWeekday: 2, defaultDepositAccountId: "checking" }));
+    before.timesheet = ["one", "two"].map((id) => ({ id: `pay-${id}`, jobId: id,
+      jobName: id, entryType: "salary_paycheck" as const, date: "2026-09-29",
+      hours: 0, rate: 0, expectedAmount: 50, paid: false, payStatus: "unpaid" as const,
+      createdAt: "2026-09-29", updatedAt: "2026-09-29", userEdited: true }));
+    const ids = pendingIncomeBreakdown(before, sep).flatMap((section) => section.items)
+      .filter((item) => item.incomeSourceType === "work_paycheck" ||
+        item.incomeSourceType === "salary_paycheck").map((item) => item.id).slice(0, 2);
+    expect(ids).toHaveLength(2);
+    const linked = reducer(before, { type: "ASSIGN_PLANNED_ITEMS", id: "deposit",
+      itemIds: ids, mode: "combined" });
+    expect(linked).not.toBe(before);
+    expect(linked.timesheet.filter((entry) => entry.paid).map((entry) => entry.actualAmount))
+      .toEqual([50, 50]);
+    expect(linked.accounts).toEqual(before.accounts);
+    const undone = reducer(linked, { type: "UNLINK_PLANNED_TRANSACTION", id: "deposit" });
+    expect(undone.timesheet.every((entry) => !entry.paid)).toBe(true);
+    expect(undone.accounts).toEqual(before.accounts);
+  });
+
   it("assigns the $96.61 T-Mobile charge to the $50 mobile bill despite an outdated payment account", () => {
     const before = fixture();
     before.transactions = [mobile()];
