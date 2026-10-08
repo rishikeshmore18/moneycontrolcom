@@ -51,6 +51,7 @@ export function projectPromoPayoff(
   charges: PlannedCardCharge[] = [],
   monthlyPayment = card.zeroAprMonthlyPayment ?? 0,
   paymentForCycle?: (index: number, balance: number) => number,
+  skipPaymentOnDate?: (date: string) => boolean,
 ): PromoProjection {
   const today = toISODate(ref);
   const deadline = card.zeroAprEndDate ?? through;
@@ -75,8 +76,9 @@ export function projectPromoPayoff(
       }
       // The user's monthly estimate includes planned purchases, so count the larger amount.
       balance += Math.max(monthlySpend, planned);
-      const scheduled =
-        record && paymentForCycle ? cents(paymentForCycle(paymentIndex, money(balance))) : perMonth;
+      const scheduled = skipPaymentOnDate?.(date)
+        ? 0
+        : record && paymentForCycle ? cents(paymentForCycle(paymentIndex, money(balance))) : perMonth;
       const amount = Math.min(balance, scheduled);
       balance -= amount;
       if (record && amount > 0)
@@ -110,7 +112,7 @@ export function projectPromoPayoff(
   const required = high ? Math.max(cents(card.minimumDue), low) : 0;
   return {
     payments: projection.payments,
-    paymentDatesBeforeDeadline: promoDates.length,
+    paymentDatesBeforeDeadline: promoDates.filter((date) => !skipPaymentOnDate?.(date)).length,
     projectedBalanceAtDeadline: money(projection.balanceAtDeadline),
     additionalMonthlyNeeded: money(Math.max(0, required - paymentAmount)),
     lumpSumNeeded: money(projection.balanceAtDeadline),

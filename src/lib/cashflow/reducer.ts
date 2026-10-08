@@ -394,6 +394,7 @@ function normalizeState(state: AppState): AppState {
         !(
           override.sourceType === "card_due" &&
           override.action === "skip" &&
+          !override.manualCardSkip &&
           state.transactions.some(
             (tx) =>
               tx.type === "card_payment" &&

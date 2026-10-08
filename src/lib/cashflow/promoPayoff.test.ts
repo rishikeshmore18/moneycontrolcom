@@ -51,6 +51,73 @@ const state = (): AppState => ({
 });
 
 describe("0% card payoff plan", () => {
+  it("skips only the selected installment while preserving card debt and later payments", () => {
+    const s = state();
+    const other: Card = { ...card, id: "other", name: "Other", currentBalance: 1000 };
+    s.cards.push(other);
+    const october = expensesComingBreakdown(s, ref).flatMap((section) => section.items)
+      .find((item) => item.sourceType === "card_due" && item.sourceId === "promo");
+    expect(october).toMatchObject({ amount: 500, dueDate: "2026-10-08" });
+    const skipped = reducer(s, { type: "ADD_PLANNED_EXPENSE_OVERRIDE", payload: {
+      sourceType: "card_due", sourceId: october!.id, month: "2026-10", action: "skip",
+      manualCardSkip: true,
+    } });
+    expect(skipped.cards.map((item) => item.currentBalance))
+      .toEqual(s.cards.map((item) => item.currentBalance));
+    expect(skipped.accounts).toEqual(s.accounts);
+    expect(expensesComingBreakdown(skipped, ref).flatMap((section) => section.items)
+      .some((item) => item.id === october!.id)).toBe(false);
+    expect(expensesComingTotal(skipped, ref)).toBe(expensesComingTotal(s, ref) - 500);
+    expect(expensesComingBreakdown(skipped, ref).flatMap((section) => section.items)
+      .some((item) => item.sourceId === "other")).toBe(true);
+    const november = expensesComingBreakdown(skipped, new Date(2026, 10, 7), "this_month")
+      .flatMap((section) => section.items)
+      .find((item) => item.sourceId === "promo" && item.dueDate === "2026-11-08");
+    expect(november?.amount).toBe(500);
+    expect(expensesComingBreakdown(skipped, new Date(2026, 9, 9))
+      .flatMap((section) => section.items).some((item) => item.id === october!.id)).toBe(false);
+    const hydrated = reducer(skipped, { type: "HYDRATE", state: skipped });
+    expect(hydrated.plannedExpenseOverrides.some((override) =>
+      override.sourceId === october!.id && override.action === "skip")).toBe(true);
+  });
+
+  it("a skipped promo month still owes the balance and changes the payoff gap", () => {
+    const normal = projectPromoPayoff(card, ref, card.zeroAprEndDate!);
+    const skipped = projectPromoPayoff(card, ref, card.zeroAprEndDate!, [], 500,
+      undefined, (date) => date === "2026-10-08");
+    expect(normal.projectedBalanceAtDeadline).toBe(0);
+    expect(skipped.projectedBalanceAtDeadline).toBe(500);
+    expect(skipped.lumpSumNeeded).toBe(500);
+    expect(skipped.paymentDatesBeforeDeadline).toBe(9);
+    expect(skipped.requiredMonthlyPayment).toBeGreaterThan(500);
+    const view = zeroAprPayoffPlan(card, [], ref, [], ["promo:fixed:2026-10-08"]);
+    expect(view.projectedBalanceAtDeadline).toBe(500);
+    expect(view.statementCyclesRemaining).toBe(9);
+    expect(view.recommendedMonthlyPayment).toBeGreaterThan(500);
+  });
+
+  it("skips one standard card reminder without clearing its balance or a different card", () => {
+    const s = state();
+    s.cards = [
+      { ...card, id: "standard", name: "Standard", type: "regular", currentBalance: 200,
+        statementBalance: 200 },
+      { ...card, id: "second", name: "Second", type: "regular", currentBalance: 100,
+        statementBalance: 100 },
+    ];
+    const item = expensesComingBreakdown(s, ref).flatMap((section) => section.items)
+      .find((candidate) => candidate.sourceId === "standard" &&
+        candidate.sourceType === "card_due");
+    expect(item).toBeDefined();
+    const skipped = reducer(s, { type: "ADD_PLANNED_EXPENSE_OVERRIDE", payload: {
+      sourceType: "card_due", sourceId: item!.id, month: item!.dueDate!.slice(0, 7),
+      action: "skip", manualCardSkip: true,
+    } });
+    const visible = expensesComingBreakdown(skipped, ref).flatMap((section) => section.items);
+    expect(visible.some((candidate) => candidate.id === item!.id)).toBe(false);
+    expect(visible.some((candidate) => candidate.sourceId === "second")).toBe(true);
+    expect(skipped.cards.map((c) => c.currentBalance)).toEqual([200, 100]);
+  });
+
   it("pays $5,000 with ten $500 payments and no utilization payment alongside it", () => {
     const plan = projectPromoPayoff(card, ref, card.zeroAprEndDate!);
     expect(plan.payments).toHaveLength(10);

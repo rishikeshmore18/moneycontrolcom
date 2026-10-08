@@ -393,6 +393,13 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
         end: toISO(endOfMonth(ref)),
       });
     }
+    if ((state.plannedExpenseOverrides ?? []).some((override) =>
+      override.sourceType === "card_due" && override.action === "skip" &&
+      override.sourceId?.startsWith(`${card.id}:`) && override.month === monthKey(ref))) {
+      return cardCashFlowItemsForRange({ ...state, cards: [card] }, ref, {
+        start: toISO(startOfMonth(ref)), end: toISO(endOfMonth(ref)),
+      });
+    }
 
     const cycleExpenses = expensesInCycle(state.transactions, card.id, cycle);
     const postedCycleExpenses = cycleExpenses.filter(
@@ -569,6 +576,9 @@ function cardCashFlowItemsForRange(
       const dueDate = dateForMonthDay(month, card.dueDate);
       if (dueDate < startDate || dueDate >= today) continue;
       const id = `${card.id}:${installmentType}:${dueDate}`;
+      // A skipped occurrence is not a payment and must not reduce the balance
+      // used to project the remaining installments.
+      if (cardPaymentOverride(state, id)?.action === "skip") continue;
       const paidCents = state.transactions
         .filter(
           (tx) =>
@@ -659,6 +669,7 @@ function cardCashFlowItemsForRange(
                 balance - (card.limit * card.targetUtilizationPercent) / 100,
               )) - (fixed && index === 0 && firstDueDate >= today ? paidForFirstDue : 0),
         ),
+      (date) => cardPaymentOverride(state, `${card.id}:${installmentType}:${date}`)?.action === "skip",
     );
     projection.payments.forEach((payment) => {
       const paymentId = `${card.id}:${installmentType}:${payment.date}`;

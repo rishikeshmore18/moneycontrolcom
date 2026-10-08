@@ -235,6 +235,8 @@ export interface PlannedExpenseOverride {
   sourceId?: string;
   month: string; // YYYY-MM
   action: PlannedExpenseOverrideAction;
+  /** Explicitly skipped card occurrence, unlike old payment-created skips. */
+  manualCardSkip?: boolean;
   name?: string;
   amount?: number;
   dueDay?: number;

@@ -78,6 +78,7 @@ export function zeroAprPayoffPlan(
   transactions: Transaction[],
   ref: Date = new Date(),
   charges: PlannedCardCharge[] = [],
+  skippedPaymentIds: string[] = [],
 ): ZeroAprPayoffPlan {
   const recordedPayments = paymentsForCard(transactions, card.id);
   const trackedStartingBalance = card.currentBalance + recordedPayments;
@@ -139,12 +140,18 @@ export function zeroAprPayoffPlan(
       ? undefined
       : (_index, balance) =>
           Math.max(card.minimumDue, balance - (card.limit * card.targetUtilizationPercent) / 100),
+    (date) => skippedPaymentIds.includes(
+      `${card.id}:${fixed ? "fixed" : "utilization"}:${date}`,
+    ),
   );
 
   return {
     daysRemaining,
-    statementCyclesRemaining,
-    recommendedMonthlyPayment,
+    statementCyclesRemaining: skippedPaymentIds.length
+      ? projection.paymentDatesBeforeDeadline : statementCyclesRemaining,
+    recommendedMonthlyPayment: skippedPaymentIds.length
+      ? Math.min(card.currentBalance, Math.max(recommendedMonthlyPayment,
+          projection.requiredMonthlyPayment)) : recommendedMonthlyPayment,
     recordedPayments,
     progressPercent,
     paymentMode: fixed ? "fixed" : "utilization",
