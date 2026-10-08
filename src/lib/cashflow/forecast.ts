@@ -69,6 +69,10 @@ export interface CashFlowBreakdownItem {
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
   isOverdue?: boolean;
+  /** The cash payment is already represented by this card's payment schedule. */
+  includedInCardPayment?: boolean;
+  /** Month of the bill occurrence, even if its due date was moved. */
+  occurrenceMonth?: string;
 }
 
 export interface CashFlowBreakdownSection {
@@ -262,7 +266,7 @@ function overrideFor(
 
 function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBreakdownItem[] {
   const recurring = state.recurringBills.flatMap((bill) => {
-    if (!bill.active) return [];
+    if (!bill.active || (bill.startMonth && monthKey(ref) < bill.startMonth)) return [];
     const override = overrideFor(state, "recurring_bill", bill.id, ref);
     if (override?.action === "skip") return [];
     const paymentMethod =
@@ -286,6 +290,7 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
     return [
       {
         id: `${bill.id}:${monthKey(ref)}`,
+        occurrenceMonth: monthKey(ref),
         label: override?.name ?? bill.name,
         detail: destination
           ? `Due ${formatDisplayDate(dueDate)} - ${destination}`
@@ -319,6 +324,7 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
             : account?.name;
       return {
         id: override.id,
+        occurrenceMonth: override.month,
         label: override.name ?? "Planned expense",
         detail: destination
           ? `Due ${formatDisplayDate(dueDate)} - ${destination}`
@@ -336,6 +342,18 @@ function billExpenseItems(state: AppState, ref: Date = new Date()): CashFlowBrea
     });
 
   return [...recurring, ...oneTime].filter((item) => item.amount > 0);
+}
+
+/** Older saved bills predate startMonth. Carry the preceding month, or the
+ * earliest month for which we have a saved override, without inventing years
+ * of obligations before the bill was entered. New bills keep their startMonth. */
+function recurringStartMonth(state: AppState, bill: RecurringBill, ref: Date): string {
+  if (bill.startMonth) return bill.startMonth;
+  const priorMonth = monthKey(addMonths(ref, -1));
+  const recordedMonths = (state.plannedExpenseOverrides ?? [])
+    .filter((item) => item.sourceType === "recurring_bill" && item.sourceId === bill.id)
+    .map((item) => item.month);
+  return [priorMonth, ...recordedMonths].sort()[0];
 }
 
 export function upcomingBillsThisMonth(state: AppState, ref: Date = new Date()): number {
@@ -360,7 +378,7 @@ function cardDueItems(state: AppState, ref: Date = new Date()): CashFlowBreakdow
     const cycle = currentOpenCycle(card, ref);
     if (isZeroAprCard(card)) {
       return cardCashFlowItemsForRange({ ...state, cards: [card] }, ref, {
-        start: toISO(startOfMonth(ref)),
+        start: [toISO(startOfMonth(ref)), card.paymentScheduleStartDate ?? toISO(ref)].sort()[0],
         end: toISO(endOfMonth(ref)),
       });
     }
@@ -462,7 +480,9 @@ function cardCashFlowItemsForRange(
         : undefined);
     if (override?.action === "skip") return;
     const rawDueDate = override?.dueDate ?? item.dueDate ?? item.periodDate ?? today;
-    if (!eventDateInRange(rawDueDate, range)) return;
+    const eventDate =
+      item.isOverdue && rawDueDate < range.start && range.end >= today ? today : rawDueDate;
+    if (!eventDateInRange(eventDate, range)) return;
     const amount = override?.amount ?? item.amount;
     if (amount <= 0) return;
     items.push({
@@ -471,7 +491,7 @@ function cardCashFlowItemsForRange(
       amount,
       overrideId: override?.id,
       dueDate: rawDueDate,
-      periodDate: rawDueDate,
+      periodDate: eventDate,
       detail:
         (override?.dueDate
           ? `${item.detail} - payment date changed to ${formatDisplayDate(rawDueDate)}`
@@ -528,6 +548,50 @@ function cardCashFlowItemsForRange(
     }
 
     const fixed = card.zeroAprPaymentMode === "fixed" && (card.zeroAprMonthlyPayment ?? 0) > 0;
+    const installmentType = fixed ? "fixed" : "utilization";
+    const startDate = card.paymentScheduleStartDate ?? today;
+    let unpaidOverdueCents = 0;
+    for (const month of monthRefsForRange({
+      start: startDate <= today ? startDate : today,
+      end: today,
+    })) {
+      const dueDate = dateForMonthDay(month, card.dueDate);
+      if (dueDate < startDate || dueDate >= today) continue;
+      const id = `${card.id}:${installmentType}:${dueDate}`;
+      const paidCents = state.transactions
+        .filter(
+          (tx) =>
+            tx.type === "card_payment" &&
+            tx.cardId === card.id &&
+            tx.cardPayment?.plannedExpenseItemId === id,
+        )
+        .reduce((sum, tx) => sum + Math.round(tx.amount * 100), 0);
+      const scheduledCents = Math.round(
+        (fixed ? Math.max(card.minimumDue, card.zeroAprMonthlyPayment ?? 0) : card.minimumDue) *
+          100,
+      );
+      const remainingCents = Math.min(
+        Math.max(0, Math.round(card.currentBalance * 100) - unpaidOverdueCents),
+        Math.max(0, scheduledCents - paidCents),
+      );
+      if (!remainingCents) continue;
+      unpaidOverdueCents += remainingCents;
+      const cycle = currentOpenCycle(card, dueDate);
+      pushCardItem({
+        id,
+        label: card.name,
+        detail: `Unpaid ${fixed ? "0% APR payoff" : "minimum"} installment - due ${formatDisplayDate(dueDate)}`,
+        amount: remainingCents / 100,
+        sourceType: "card_due",
+        sourceId: card.id,
+        dueDate,
+        periodDate: dueDate,
+        isOverdue: true,
+        accountId: paymentAccountId,
+        cycleStart: cycle.cycleStart,
+        cycleEnd: cycle.cycleEnd,
+      });
+    }
     const charges = plannedCardChargesForRange(state, card.id, ref, generationEnd);
     const targetPaydown = Math.max(
       0,
@@ -536,21 +600,60 @@ function cardCashFlowItemsForRange(
     const firstPayment = fixed
       ? card.zeroAprMonthlyPayment!
       : Math.max(card.minimumDue, targetPaydown);
+    const firstDueDate = dateForMonthDay(ref, card.dueDate);
+    const firstDueId = `${card.id}:${installmentType}:${firstDueDate}`;
+    const paidForFirstDue =
+      firstDueDate >= today
+        ? state.transactions
+            .filter(
+              (tx) =>
+                tx.type === "card_payment" &&
+                tx.cardId === card.id &&
+                tx.cardPayment?.plannedExpenseItemId === firstDueId,
+            )
+            .reduce((sum, tx) => sum + tx.amount, 0)
+        : 0;
+    const pendingPaid = state.transactions
+      .filter(
+        (tx) =>
+          tx.type === "card_payment" &&
+          tx.cardId === card.id &&
+          tx.cardPayment &&
+          !tx.cardPayment.cardPosted &&
+          !!tx.cardPayment.plannedExpenseItemId,
+      )
+      .reduce((sum, tx) => sum + tx.amount, 0);
     const projection = projectPromoPayoff(
-      card,
+      {
+        ...card,
+        currentBalance:
+          Math.max(
+            0,
+            Math.round(card.currentBalance * 100) -
+              unpaidOverdueCents -
+              Math.round(pendingPaid * 100),
+          ) / 100,
+      },
       ref,
       generationEnd,
       charges,
       firstPayment,
-      fixed
-        ? undefined
-        : (_index, balance) =>
-            Math.max(card.minimumDue, balance - (card.limit * card.targetUtilizationPercent) / 100),
+      (index, balance) =>
+        Math.max(
+          0,
+          (fixed
+            ? Math.max(card.minimumDue, card.zeroAprMonthlyPayment ?? 0)
+            : Math.max(
+                card.minimumDue,
+                balance - (card.limit * card.targetUtilizationPercent) / 100,
+              )) - (fixed && index === 0 && firstDueDate >= today ? paidForFirstDue : 0),
+        ),
     );
     projection.payments.forEach((payment) => {
+      const paymentId = `${card.id}:${installmentType}:${payment.date}`;
       const cycle = currentOpenCycle(card, payment.date);
       pushCardItem({
-        id: `${card.id}:${fixed ? "fixed" : "utilization"}:${payment.date}`,
+        id: paymentId,
         label: card.name,
         detail: fixed
           ? `0% APR monthly payoff plan - due ${formatDisplayDate(payment.date)}`
@@ -1056,10 +1159,26 @@ function expenseSectionsForRange(
   range: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
   const today = toISO(ref);
-  // Keep unpaid items whose due date has already passed in the current month visible
-  // instead of letting them vanish from the forecast when the period starts at today.
+  const billStartMonths = new Map(
+    state.recurringBills
+      .filter((bill) => bill.active)
+      .map((bill) => [bill.id, recurringStartMonth(state, bill, ref)]),
+  );
+  const oldBillMonths = [...billStartMonths.values()];
+  const oldOneTimeMonths = (state.plannedExpenseOverrides ?? [])
+    .filter(
+      (item) =>
+        item.sourceType === "one_time" && item.action === "add" && item.month <= monthKey(ref),
+    )
+    .map((item) => item.month);
+  const earliestUnpaidMonth = [...oldBillMonths, ...oldOneTimeMonths].sort()[0];
+  // An overdue bill remains an obligation after the calendar month changes.
+  // Show it in forward-looking periods until that occurrence is settled or skipped.
   const expandedRange = {
-    start: range.start < today ? range.start : toISO(startOfMonth(ref)),
+    start:
+      range.end >= today && earliestUnpaidMonth
+        ? [range.start, `${earliestUnpaidMonth}-01`].sort()[0]
+        : range.start,
     end: range.end,
   };
   const monthRefs = monthRefsForRange(expandedRange);
@@ -1073,16 +1192,32 @@ function expenseSectionsForRange(
   const billItems = sortByDueDate(
     monthRefs
       .flatMap((monthRef) => billExpenseItems(state, monthRef))
-      .filter((item) => itemInRange(item, expandedRange))
+      .filter(
+        (item) =>
+          item.sourceType !== "recurring_bill" ||
+          (item.occurrenceMonth ?? "") >= (billStartMonths.get(item.sourceId ?? "") ?? ""),
+      )
+      .filter(
+        (item) =>
+          itemInRange(item, range) ||
+          (range.end >= today && !!item.dueDate && item.dueDate < today),
+      )
       .map(markOverdue),
   );
-  const cashBillItems = billItems.filter(
-    (item) =>
-      !(
-        item.paymentMethod === "card" &&
-        state.cards.some((card) => card.id === item.cardId && isZeroAprCard(card))
-      ),
-  );
+  const annotatedBills = billItems.map((item) => {
+    const card =
+      item.paymentMethod === "card"
+        ? state.cards.find((candidate) => candidate.id === item.cardId)
+        : undefined;
+    if (!card || !isZeroAprCard(card)) return item;
+    return {
+      ...item,
+      includedInCardPayment: true,
+      detail: `${item.detail ?? "Planned charge"} - included in ${card.name}'s card payment plan`,
+    };
+  });
+  const cashBillItems = annotatedBills.filter((item) => !item.includedInCardPayment);
+  const cardFundedBills = annotatedBills.filter((item) => item.includedInCardPayment);
   const recurringBillItems = cashBillItems.filter((item) => item.sourceType === "recurring_bill");
   const oneTimeItems = cashBillItems.filter((item) => item.sourceType === "one_time");
   const cardItems = cardCashFlowItemsForRange(state, ref, expandedRange).map(markOverdue);
@@ -1094,6 +1229,8 @@ function expenseSectionsForRange(
   if (oneTimeItems.length > 0)
     sections.push({ title: "One-time planned expenses", items: oneTimeItems });
   if (cardItems.length > 0) sections.push({ title: "Upcoming card bills", items: cardItems });
+  if (cardFundedBills.length > 0)
+    sections.push({ title: "Card-funded bills", items: cardFundedBills });
   if (debtItems.length > 0) sections.push({ title: "Debt plan", items: debtItems });
   return sections;
 }
@@ -1213,14 +1350,8 @@ function safetyExpenseSectionsForRange(
   const rangeEndMonth = range.end.slice(0, 7);
   const budgetReserveItems = monthRefsForRange(range).flatMap((monthRef) => {
     const budgetMonth = monthKey(monthRef);
-    const representedCommittedItems = [
-      ...allSections.flatMap((section) => section.items),
-      ...billExpenseItems(state, monthRef).filter(
-        (item) =>
-          item.paymentMethod === "card" &&
-          state.cards.some((card) => card.id === item.cardId && isZeroAprCard(card)),
-      ),
-    ]
+    const representedCommittedItems = allSections
+      .flatMap((section) => section.items)
       .filter(
         (item) =>
           (item.sourceType === "recurring_bill" || item.sourceType === "one_time") &&
@@ -1294,7 +1425,12 @@ export function expensesComingTotal(
   customRange?: ForecastDateRange,
 ): number {
   return expensesComingBreakdown(state, ref, period, customRange).reduce(
-    (sum, section) => sum + section.items.reduce((sectionSum, item) => sectionSum + item.amount, 0),
+    (sum, section) =>
+      sum +
+      section.items.reduce(
+        (sectionSum, item) => sectionSum + (item.includedInCardPayment ? 0 : item.amount),
+        0,
+      ),
     0,
   );
 }

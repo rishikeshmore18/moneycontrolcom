@@ -60,11 +60,18 @@ import {
 import { CardSheet, DebtSheet, JobSheet, RecurringSheet } from "./Profile";
 import { toast } from "./Toast";
 import { canMergeExpenses, canMergeIncome } from "@/lib/cashflow/transactionMerge";
-import { assignablePlannedExpenses, assignablePlannedIncome } from "@/lib/cashflow/activityAssignment";
+import {
+  assignablePlannedExpenses,
+  assignablePlannedIncome,
+} from "@/lib/cashflow/activityAssignment";
 import { plaidListConnections, plaidRelinkActivity } from "@/lib/plaid/plaid.functions";
 
 type BreakdownKey =
-  "have_now" | "income_coming" | "expenses_coming" | "left_to_spend" | "spendable_today";
+  | "have_now"
+  | "income_coming"
+  | "expenses_coming"
+  | "left_to_spend"
+  | "spendable_today";
 
 type ExpenseAction =
   | { type: "add_one_time" }
@@ -201,7 +208,11 @@ export function Dashboard() {
 
   function skipItemForMonth(item: CashFlowBreakdownItem) {
     if (!item.sourceType || (!item.sourceId && item.sourceType !== "one_time")) return;
-    const itemMonth = item.periodDate?.slice(0, 7) ?? item.dueDate?.slice(0, 7) ?? currentMonth;
+    const itemMonth =
+      item.occurrenceMonth ??
+      item.periodDate?.slice(0, 7) ??
+      item.dueDate?.slice(0, 7) ??
+      currentMonth;
     if (item.overrideId && item.sourceType === "one_time") {
       dispatch({ type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: item.overrideId });
       toast("Planned expense removed");
@@ -243,13 +254,18 @@ export function Dashboard() {
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
-      {state.transactions.some((tx) => tx.type === "card_payment" &&
-        (!tx.cardPayment || !tx.cardPayment.cashPosted || !tx.cardPayment.cardPosted)) &&
+      {state.transactions.some(
+        (tx) =>
+          tx.type === "card_payment" &&
+          (!tx.cardPayment || !tx.cardPayment.cashPosted || !tx.cardPayment.cardPosted),
+      ) && (
         <p className="rounded-xl border border-border p-3 text-sm leading-relaxed" role="status">
-          Some card payments need posting confirmation. Spendable Today keeps a conservative reserve until they clear;
-          this may temporarily protect the same money on both sides. Older payments need a status check.
-          Open the payment in Activity to edit its source, confirm posting, or delete an incorrect entry.
-        </p>}
+          Some card payments need posting confirmation. Spendable Today keeps a conservative reserve
+          until they clear; this may temporarily protect the same money on both sides. Older
+          payments need a status check. Open the payment in Activity to edit its source, confirm
+          posting, or delete an incorrect entry.
+        </p>
+      )}
 
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <KPI
@@ -278,7 +294,10 @@ export function Dashboard() {
           <div className="divide-y divide-border">
             {state.accounts.length === 0 && <Empty label="No accounts yet" />}
             {state.accounts.map((a) => (
-              <div key={a.id} className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3">
+              <div
+                key={a.id}
+                className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 py-3"
+              >
                 <div className="min-w-0 flex-1 break-words">
                   <div className="font-bold break-words">{a.name}</div>
                   {a.availableForSpending === false && (
@@ -291,7 +310,9 @@ export function Dashboard() {
                     {a.type}
                   </div>
                 </div>
-                <div className={`ml-auto break-words text-right font-black ${a.balance < 0 ? "text-[color:var(--bad)]" : ""}`}>
+                <div
+                  className={`ml-auto break-words text-right font-black ${a.balance < 0 ? "text-[color:var(--bad)]" : ""}`}
+                >
                   {m(a.balance)}
                 </div>
               </div>
@@ -387,7 +408,9 @@ export function Dashboard() {
                     {t.type.replace("_", " ")} · {formatDisplayDate(t.date)}
                   </div>
                   {(t.linkedPlannedExpense || t.linkedPlannedIncome) && (
-                    <div className="text-xs text-[color:var(--primary)] truncate">Matched to {t.linkedPlannedExpense?.label ?? t.linkedPlannedIncome?.label}</div>
+                    <div className="text-xs text-[color:var(--primary)] truncate">
+                      Matched to {t.linkedPlannedExpense?.label ?? t.linkedPlannedIncome?.label}
+                    </div>
                   )}
                 </div>
                 <div
@@ -411,9 +434,12 @@ export function Dashboard() {
               </button>
               {((t.type === "expense" && assignablePlannedExpenses(state, t).length > 0) ||
                 (t.type === "income" && assignablePlannedIncome(state, t).length > 0)) && (
-                <button type="button" onClick={() => openEdit(t, true)}
+                <button
+                  type="button"
+                  onClick={() => openEdit(t, true)}
                   className="min-h-11 shrink-0 rounded-xl px-2 text-xs font-bold text-[color:var(--primary)] hover:bg-muted"
-                  aria-label={`Assign ${t.description || t.category} to ${t.type === "income" ? "upcoming income" : "an upcoming bill"}`}>
+                  aria-label={`Assign ${t.description || t.category} to ${t.type === "income" ? "upcoming income" : "an upcoming bill"}`}
+                >
                   Assign
                 </button>
               )}
@@ -456,7 +482,10 @@ export function Dashboard() {
       <EditTransactionSheet
         tx={editingTx?.type === "expense" ? editingTx : null}
         initialView={matchOnOpen ? "link" : "edit"}
-        onConvertPayment={(tx) => { setEditingTx(null); setConvertingPayment(tx); }}
+        onConvertPayment={(tx) => {
+          setEditingTx(null);
+          setConvertingPayment(tx);
+        }}
         onClose={() => setEditingTx(null)}
         onSaved={(tx) => {
           setEditingTx(null);
@@ -471,11 +500,22 @@ export function Dashboard() {
         tx={editingTx?.type === "income" ? editingTx : null}
         initialView={matchOnOpen ? "link" : "edit"}
         onClose={() => setEditingTx(null)}
-        onDone={() => { setEditingTx(null); setSelectedTx(null); }}
+        onDone={() => {
+          setEditingTx(null);
+          setSelectedTx(null);
+        }}
       />
-      {(editingTx?.type === "card_payment" || convertingPayment) && <CardPaymentEditor
-        key={(convertingPayment ?? editingTx)!.id} tx={(convertingPayment ?? editingTx)!}
-        onClose={() => { setEditingTx(null); setConvertingPayment(null); setSelectedTx(null); }} />}
+      {(editingTx?.type === "card_payment" || convertingPayment) && (
+        <CardPaymentEditor
+          key={(convertingPayment ?? editingTx)!.id}
+          tx={(convertingPayment ?? editingTx)!}
+          onClose={() => {
+            setEditingTx(null);
+            setConvertingPayment(null);
+            setSelectedTx(null);
+          }}
+        />
+      )}
 
       <BreakdownSheet
         open={!!activeBreakdownData}
@@ -543,7 +583,9 @@ function CashFlowFormulaCard({
     <Card className="!p-4 sm:!p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <h2 className="min-w-0 break-words text-lg font-black tracking-tight">{periodLabel} Cash Flow</h2>
+          <h2 className="min-w-0 break-words text-lg font-black tracking-tight">
+            {periodLabel} Cash Flow
+          </h2>
           <Info size={15} className="text-muted-foreground" aria-hidden="true" />
         </div>
         <Select
@@ -812,15 +854,23 @@ function FlowDetail({
       className={`min-w-0 w-full min-h-[146px] rounded-2xl border bg-muted/25 p-2.5 text-left transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--primary-glow)] min-[390px]:aspect-square min-[390px]:min-h-0 sm:p-3 xl:aspect-auto ${flowTone[tone].detail} ${className ?? ""}`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className={`min-w-0 text-[11px] font-extrabold leading-tight sm:text-xs ${flowTone[tone].text}`}>{label}</div>
+        <div
+          className={`min-w-0 text-[11px] font-extrabold leading-tight sm:text-xs ${flowTone[tone].text}`}
+        >
+          {label}
+        </div>
         <div
           className={`grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-[color:var(--card-solid)] sm:h-8 sm:w-8 sm:rounded-xl ${flowTone[tone].text}`}
         >
           <Icon size={16} />
         </div>
       </div>
-      <div className="mt-2 break-words text-sm font-black leading-tight min-[390px]:text-base sm:text-lg">{value}</div>
-      <div className="mt-1 text-[10px] leading-tight text-muted-foreground sm:text-xs">{helper}</div>
+      <div className="mt-2 break-words text-sm font-black leading-tight min-[390px]:text-base sm:text-lg">
+        {value}
+      </div>
+      <div className="mt-1 text-[10px] leading-tight text-muted-foreground sm:text-xs">
+        {helper}
+      </div>
       <div
         className={`mt-2 inline-flex rounded-full px-2 py-1 text-[9px] font-extrabold leading-tight sm:text-[10px] ${flowTone[tone].badge}`}
       >
@@ -883,7 +933,9 @@ function BreakdownSheet({
             <div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
               Total
             </div>
-            <div className={`break-words text-xl font-black ${flowTone[tone].text}`}>{formatMoney(total)}</div>
+            <div className={`break-words text-xl font-black ${flowTone[tone].text}`}>
+              {formatMoney(total)}
+            </div>
           </div>
         </div>
       }
@@ -905,13 +957,21 @@ function BreakdownSheet({
           </div>
         )}
         {sections.map((section) => {
-          const sectionTotal = section.items.reduce((sum, item) => sum + item.amount, 0);
+          const sectionTotal = section.items.reduce(
+            (sum, item) => sum + (item.includedInCardPayment ? 0 : item.amount),
+            0,
+          );
           return (
-            <div key={section.title} className="min-w-0 rounded-2xl border border-border bg-muted/20">
+            <div
+              key={section.title}
+              className="min-w-0 rounded-2xl border border-border bg-muted/20"
+            >
               <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border px-4 py-3">
                 <div className="min-w-0 break-words font-extrabold">{section.title}</div>
                 <div className="min-w-0 break-words text-sm font-bold text-muted-foreground">
-                  {formatMoney(sectionTotal)}
+                  {section.title === "Card-funded bills"
+                    ? "Cash counted on card due date"
+                    : formatMoney(sectionTotal)}
                 </div>
               </div>
               <div className="min-w-0 divide-y divide-border">
@@ -919,7 +979,10 @@ function BreakdownSheet({
                   const affordability = affordabilityById?.[item.id];
                   const isOverdue = item.isOverdue;
                   return (
-                    <div key={`${section.title}-${item.id}`} className="grid min-w-0 gap-3 px-4 py-3">
+                    <div
+                      key={`${section.title}-${item.id}`}
+                      className="grid min-w-0 gap-3 px-4 py-3"
+                    >
                       <div className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,1fr)_auto] sm:gap-4">
                         <div className="min-w-0">
                           <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -1315,7 +1378,6 @@ function IncomeActionSheets({
     );
   }
 
-
   if (action.type === "edit_once") {
     return <IncomePaydayOverrideSheet item={action.item} onClose={onClose} />;
   }
@@ -1629,9 +1691,13 @@ function PlannedIncomeSheet({
     <Sheet
       open
       onClose={onClose}
-      title={isRepayment
-        ? "Edit expected repayment"
-        : item ? "Edit upcoming income" : "Add upcoming income"}
+      title={
+        isRepayment
+          ? "Edit expected repayment"
+          : item
+            ? "Edit upcoming income"
+            : "Add upcoming income"
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -1668,8 +1734,8 @@ function PlannedIncomeSheet({
         </Field>
         {isRepayment && (
           <p className="text-sm text-muted-foreground">
-            This is expected money, not a confirmed deposit. Edit the date or amount here;
-            mark it received only when your friend pays you back.
+            This is expected money, not a confirmed deposit. Edit the date or amount here; mark it
+            received only when your friend pays you back.
           </p>
         )}
         <Field label="Deposit to" hint="Where the money will land when it arrives">
@@ -1739,7 +1805,6 @@ function MarkIncomeReceivedSheet({
 
     if (entries.length === 0) return toast("No timesheet entries found for this payday");
 
-
     entries.forEach((entry, index) => {
       const entryExpected = entry.actualAmount ?? entry.expectedAmount;
       const allocated =
@@ -1794,8 +1859,9 @@ function MarkIncomeReceivedSheet({
     <Sheet
       open
       onClose={onClose}
-      title={item.incomeKind === "friend_repayment"
-        ? "Mark repayment received" : "Mark pay received"}
+      title={
+        item.incomeKind === "friend_repayment" ? "Mark repayment received" : "Mark pay received"
+      }
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>
@@ -1832,7 +1898,8 @@ function MarkIncomeReceivedSheet({
         {item.incomeKind === "friend_repayment" && (
           <label className="flex items-start gap-3 rounded-2xl border border-border bg-muted/20 p-3 text-sm">
             <input
-              type="checkbox" checked={alreadyInBankBalance}
+              type="checkbox"
+              checked={alreadyInBankBalance}
               onChange={(event) => setAlreadyInBankBalance(event.target.checked)}
               className="mt-0.5 h-5 w-5 shrink-0 accent-primary"
             />
@@ -1863,7 +1930,8 @@ function ExpenseActionSheets({
   if (!action) return null;
   const actionMonth =
     "item" in action
-      ? ((action.item.periodDate?.slice(0, 7) ??
+      ? ((action.item.occurrenceMonth ??
+          action.item.periodDate?.slice(0, 7) ??
           action.item.dueDate?.slice(0, 7) ??
           currentMonth) as string)
       : currentMonth;
@@ -2524,7 +2592,11 @@ function txToneClass(t: Transaction): string {
 }
 
 function canEditTransaction(t: Transaction): boolean {
-  return (t.type === "expense" && !t.reconciledByPaymentId) || t.type === "income" || t.type === "card_payment";
+  return (
+    (t.type === "expense" && !t.reconciledByPaymentId) ||
+    t.type === "income" ||
+    t.type === "card_payment"
+  );
 }
 
 function AllActivitySheet({
@@ -2587,7 +2659,10 @@ function AllActivitySheet({
                           {t.type.replace("_", " ")} · {t.category}
                         </div>
                         {(t.linkedPlannedExpense || t.linkedPlannedIncome) && (
-                          <div className="text-xs text-[color:var(--primary)] truncate">Matched to {t.linkedPlannedExpense?.label ?? t.linkedPlannedIncome?.label}</div>
+                          <div className="text-xs text-[color:var(--primary)] truncate">
+                            Matched to{" "}
+                            {t.linkedPlannedExpense?.label ?? t.linkedPlannedIncome?.label}
+                          </div>
                         )}
                       </div>
                       <div className={`font-black shrink-0 ml-3 ${txToneClass(t)}`}>
@@ -2670,7 +2745,9 @@ function TransactionDetailSheet({
       toast("Debt payment deleted.");
       onDeleted();
     } catch (error) {
-      toast(`Couldn't delete the payment: ${error instanceof Error ? error.message : String(error)}`);
+      toast(
+        `Couldn't delete the payment: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -2679,84 +2756,120 @@ function TransactionDetailSheet({
   return (
     <Sheet
       open={!!tx}
-      onClose={() => { if (!busy) onClose(); }}
-      title={confirmDelete ? "Delete debt payment?" : tx.description || tx.category || "Transaction"}
-      footer={tx.type === "debt_payment" ? confirmDelete ? (
-        <>
-          <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>Cancel</Button>
-          <Button variant="danger" disabled={busy} onClick={() => void removeDebtPayment()}>
-            {busy ? "Deleting…" : "Delete payment"}
-          </Button>
-        </>
-      ) : (
-        <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
-          <Trash2 size={16} /> Delete payment
-        </Button>
-      ) : undefined}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      title={
+        confirmDelete ? "Delete debt payment?" : tx.description || tx.category || "Transaction"
+      }
+      footer={
+        tx.type === "debt_payment" ? (
+          confirmDelete ? (
+            <>
+              <Button variant="ghost" disabled={busy} onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </Button>
+              <Button variant="danger" disabled={busy} onClick={() => void removeDebtPayment()}>
+                {busy ? "Deleting…" : "Delete payment"}
+              </Button>
+            </>
+          ) : (
+            <Button variant="ghost" onClick={() => setConfirmDelete(true)}>
+              <Trash2 size={16} /> Delete payment
+            </Button>
+          )
+        ) : undefined
+      }
     >
       {confirmDelete ? (
         <p className="text-sm text-foreground" role="alert">
-          Delete <strong>{currentTx.description} · {fm(currentTx.amount)} · {formatDisplayDate(currentTx.date)}</strong>?
+          Delete{" "}
+          <strong>
+            {currentTx.description} · {fm(currentTx.amount)} · {formatDisplayDate(currentTx.date)}
+          </strong>
+          ?
           {currentTx.balanceAlreadySynced
             ? " The amount applied to this debt will be restored. Your synced bank balance will stay as it is."
-            : " The amount applied to this debt and the payment from your account will be reversed."}
-          {" "}This cannot be undone.
+            : " The amount applied to this debt and the payment from your account will be reversed."}{" "}
+          This cannot be undone.
         </p>
-      ) : <div className="space-y-4">
-        <div className="flex items-start justify-between gap-3 py-2">
-          <div className="min-w-0 flex-1 text-center">
-            <div className={`text-4xl font-black tracking-tight ${txToneClass(tx)}`}>
-              {txSign(tx)}
-              {fm(Math.abs(tx.amount))}
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3 py-2">
+            <div className="min-w-0 flex-1 text-center">
+              <div className={`text-4xl font-black tracking-tight ${txToneClass(tx)}`}>
+                {txSign(tx)}
+                {fm(Math.abs(tx.amount))}
+              </div>
+              <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground capitalize">
+                {tx.type.replace("_", " ")}
+              </div>
             </div>
-            <div className="mt-1 text-xs uppercase tracking-wide text-muted-foreground capitalize">
-              {tx.type.replace("_", " ")}
+            {canEditTransaction(tx) && (
+              <button
+                type="button"
+                onClick={() => onEdit(tx)}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                aria-label={`Edit ${tx.description || tx.category}`}
+              >
+                <Pencil size={16} />
+              </button>
+            )}
+          </div>
+          <div className="rounded-2xl bg-muted/40 divide-y divide-border">
+            <Row label="Date" value={formatDisplayDate(tx.date)} />
+            <Row label="Category" value={tx.category || "—"} />
+            <Row label="Payment method" value={method} />
+            {tx.type === "card_payment" && (
+              <>
+                <Row label="Paid to" value={card?.name ?? "Card no longer available"} />
+                <Row
+                  label="Account posting"
+                  value={
+                    !tx.cardPayment
+                      ? "Not checked for this older payment"
+                      : tx.cardPayment.cashPosted
+                        ? "Reflected in account"
+                        : "Pending, money reserved"
+                  }
+                />
+                <Row
+                  label="Card posting"
+                  value={
+                    !tx.cardPayment
+                      ? "Not checked for this older payment"
+                      : tx.cardPayment.cardPosted
+                        ? "Reflected on card"
+                        : "Awaiting card confirmation"
+                  }
+                />
+              </>
+            )}
+            {targetAccount && tx.type === "transfer" && account && (
+              <Row label="To" value={`${targetAccount.bankName} · ${targetAccount.name}`} />
+            )}
+            {debt && <Row label="Debt" value={debt.name} />}
+            {tx.type === "debt_payment" && tx.debtPrincipalAmount !== undefined && (
+              <Row label="Applied to debt balance" value={fm(tx.debtPrincipalAmount)} />
+            )}
+            {tx.cycleStart && tx.cycleEnd && (
+              <Row
+                label="Billing cycle"
+                value={`${formatDisplayDate(tx.cycleStart)} – ${formatDisplayDate(tx.cycleEnd)}`}
+              />
+            )}
+            <Row label="Recorded" value={formatDisplayDate(tx.createdAt.slice(0, 10))} />
+          </div>
+          <div className="rounded-2xl bg-muted/40 p-3">
+            <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground font-bold">
+              Note
+            </div>
+            <div className="whitespace-pre-wrap text-sm text-foreground">
+              {tx.notes?.trim() ? tx.notes : "Nil"}
             </div>
           </div>
-          {canEditTransaction(tx) && (
-            <button
-              type="button"
-              onClick={() => onEdit(tx)}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-border bg-[color:var(--card-solid)] text-muted-foreground transition hover:bg-muted hover:text-foreground"
-              aria-label={`Edit ${tx.description || tx.category}`}
-            >
-              <Pencil size={16} />
-            </button>
-          )}
         </div>
-        <div className="rounded-2xl bg-muted/40 divide-y divide-border">
-          <Row label="Date" value={formatDisplayDate(tx.date)} />
-          <Row label="Category" value={tx.category || "—"} />
-          <Row label="Payment method" value={method} />
-          {tx.type === "card_payment" && <>
-            <Row label="Paid to" value={card?.name ?? "Card no longer available"} />
-            <Row label="Account posting" value={!tx.cardPayment ? "Not checked for this older payment" : tx.cardPayment.cashPosted ? "Reflected in account" : "Pending, money reserved"} />
-            <Row label="Card posting" value={!tx.cardPayment ? "Not checked for this older payment" : tx.cardPayment.cardPosted ? "Reflected on card" : "Awaiting card confirmation"} />
-          </>}
-          {targetAccount && tx.type === "transfer" && account && (
-            <Row label="To" value={`${targetAccount.bankName} · ${targetAccount.name}`} />
-          )}
-          {debt && <Row label="Debt" value={debt.name} />}
-          {tx.type === "debt_payment" && tx.debtPrincipalAmount !== undefined && (
-            <Row label="Applied to debt balance" value={fm(tx.debtPrincipalAmount)} />
-          )}
-          {tx.cycleStart && tx.cycleEnd && (
-            <Row
-              label="Billing cycle"
-              value={`${formatDisplayDate(tx.cycleStart)} – ${formatDisplayDate(tx.cycleEnd)}`}
-            />
-          )}
-          <Row label="Recorded" value={formatDisplayDate(tx.createdAt.slice(0, 10))} />
-        </div>
-        <div className="rounded-2xl bg-muted/40 p-3">
-          <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground font-bold">
-            Note
-          </div>
-          <div className="whitespace-pre-wrap text-sm text-foreground">
-            {tx.notes?.trim() ? tx.notes : "Nil"}
-          </div>
-        </div>
-      </div>}
+      )}
     </Sheet>
   );
 }
@@ -2775,7 +2888,9 @@ function EditIncomeTransactionSheet({
   const { state, dispatch } = useApp();
   const relinkActivity = useServerFn(plaidRelinkActivity);
   const listConnections = useServerFn(plaidListConnections);
-  const [view, setView] = useState<"edit" | "merge" | "confirmMerge" | "link" | "confirmLink" | "confirmUnlink" | "confirmDelete">(initialView);
+  const [view, setView] = useState<
+    "edit" | "merge" | "confirmMerge" | "link" | "confirmLink" | "confirmUnlink" | "confirmDelete"
+  >(initialView);
   const [busy, setBusy] = useState(false);
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -2798,8 +2913,10 @@ function EditIncomeTransactionSheet({
   const currentTx = tx;
   const fm = (amount: number) => formatMoney(amount, state.profile.currency);
   const account = state.accounts.find((item) => item.id === tx.targetAccountId);
-  const candidates = state.transactions.filter((candidate) => canMergeIncome(tx, candidate) &&
-    !(tx.linkedPlannedIncome && candidate.linkedPlannedIncome));
+  const candidates = state.transactions.filter(
+    (candidate) =>
+      canMergeIncome(tx, candidate) && !(tx.linkedPlannedIncome && candidate.linkedPlannedIncome),
+  );
   const target = candidates.find((candidate) => candidate.id === targetId);
   const planned = assignablePlannedIncome(state, tx);
   const selectedPlan = planned.find((item) => item.id === plannedId) ?? planned[0];
@@ -2807,16 +2924,26 @@ function EditIncomeTransactionSheet({
 
   async function bankLinked() {
     const connections = await listConnections();
-    return connections.some((connection) => connection.accounts.some((item) =>
-      item.linkedLocalKind === "account" && item.linkedLocalId === currentTx.targetAccountId));
+    return connections.some((connection) =>
+      connection.accounts.some(
+        (item) =>
+          item.linkedLocalKind === "account" && item.linkedLocalId === currentTx.targetAccountId,
+      ),
+    );
   }
 
   function save() {
     if (!description.trim() || !category.trim() || !validISODate(date)) {
       return toast("Enter a name, category, and valid date.");
     }
-    dispatch({ type: "UPDATE_INCOME_TRANSACTION", id: currentTx.id,
-      description, category, date, notes });
+    dispatch({
+      type: "UPDATE_INCOME_TRANSACTION",
+      id: currentTx.id,
+      description,
+      category,
+      date,
+      notes,
+    });
     toast("Income details updated. Bank amount unchanged.");
     onDone();
   }
@@ -2827,15 +2954,26 @@ function EditIncomeTransactionSheet({
     try {
       const authoritative = await bankLinked();
       await relinkActivity({ data: { removedId: currentTx.id, keptId: keepId } });
-      dispatch(keepId
-        ? { type: "MERGE_INCOME_TRANSACTIONS", sourceId: currentTx.id,
-            targetId: keepId, bankBalanceAuthoritative: authoritative }
-        : { type: "DELETE_INCOME_TRANSACTION", id: currentTx.id,
-            bankBalanceAuthoritative: authoritative });
+      dispatch(
+        keepId
+          ? {
+              type: "MERGE_INCOME_TRANSACTIONS",
+              sourceId: currentTx.id,
+              targetId: keepId,
+              bankBalanceAuthoritative: authoritative,
+            }
+          : {
+              type: "DELETE_INCOME_TRANSACTION",
+              id: currentTx.id,
+              bankBalanceAuthoritative: authoritative,
+            },
+      );
       toast(keepId ? "Income merged. One deposit remains in Activity." : "Income record deleted.");
       onDone();
     } catch (error) {
-      toast(`Couldn't ${keepId ? "merge" : "delete"} this income: ${error instanceof Error ? error.message : String(error)}`);
+      toast(
+        `Couldn't ${keepId ? "merge" : "delete"} this income: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -2850,73 +2988,221 @@ function EditIncomeTransactionSheet({
 
   function unlink() {
     dispatch({ type: "UNLINK_PLANNED_TRANSACTION", id: currentTx.id });
-    toast("Income match removed. The expected income is upcoming again; the deposit remains in Activity.");
+    toast(
+      "Income match removed. The expected income is upcoming again; the deposit remains in Activity.",
+    );
     onDone();
   }
 
   return (
     <Sheet
       open
-      onClose={() => { if (!busy) onClose(); }}
-      title={view === "edit" ? "Edit income" : view === "confirmDelete" ? "Delete income?"
-        : view === "confirmUnlink" ? "Remove income match?"
-        : view === "link" || view === "confirmLink" ? "Match upcoming income" : "Merge income"}
-      footer={view === "edit" ? (
-        <>
-          <Button variant="ghost" onClick={onClose}>Cancel</Button>
-          <Button variant="soft" disabled={candidates.length === 0} onClick={() => {
-            setTargetId(candidates[0]?.id ?? ""); setView("merge");
-          }}>Merge duplicate</Button>
-          <Button variant="soft" disabled={planned.length === 0} onClick={() => {
-            setPlannedId(planned[0]?.id ?? ""); setView("link");
-          }}>Assign to income</Button>
-          {tx.linkedPlannedIncome && <Button variant="soft" onClick={() => setView("confirmUnlink")}>Change match</Button>}
-          <Button variant="ghost" onClick={() => setView("confirmDelete")}>Delete</Button>
-          <Button variant="primary" onClick={save}>Save</Button>
-        </>
-      ) : (
-        <>
-          <Button variant="ghost" disabled={busy} onClick={() => setView("edit")}>Back</Button>
-          {view === "merge" && <Button variant="primary" disabled={!target} onClick={() => setView("confirmMerge")}>Review merge</Button>}
-          {view === "link" && <Button variant="primary" disabled={!selectedPlan} onClick={() => setView("confirmLink")}>Review match</Button>}
-          {view === "confirmMerge" && <Button variant="primary" disabled={busy || !target} onClick={() => void remove(targetId)}>{busy ? "Merging…" : "Merge income"}</Button>}
-          {view === "confirmLink" && <Button variant="primary" disabled={!selectedPlan} onClick={link}>Mark received and link</Button>}
-          {view === "confirmUnlink" && <Button variant="primary" onClick={unlink}>Remove match</Button>}
-          {view === "confirmDelete" && <Button variant="danger" disabled={busy} onClick={() => void remove()}>{busy ? "Deleting…" : "Delete income"}</Button>}
-        </>
-      )}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      title={
+        view === "edit"
+          ? "Edit income"
+          : view === "confirmDelete"
+            ? "Delete income?"
+            : view === "confirmUnlink"
+              ? "Remove income match?"
+              : view === "link" || view === "confirmLink"
+                ? "Match upcoming income"
+                : "Merge income"
+      }
+      footer={
+        view === "edit" ? (
+          <>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="soft"
+              disabled={candidates.length === 0}
+              onClick={() => {
+                setTargetId(candidates[0]?.id ?? "");
+                setView("merge");
+              }}
+            >
+              Merge duplicate
+            </Button>
+            <Button
+              variant="soft"
+              disabled={planned.length === 0}
+              onClick={() => {
+                setPlannedId(planned[0]?.id ?? "");
+                setView("link");
+              }}
+            >
+              Assign to income
+            </Button>
+            {tx.linkedPlannedIncome && (
+              <Button variant="soft" onClick={() => setView("confirmUnlink")}>
+                Change match
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setView("confirmDelete")}>
+              Delete
+            </Button>
+            <Button variant="primary" onClick={save}>
+              Save
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => setView("edit")}>
+              Back
+            </Button>
+            {view === "merge" && (
+              <Button variant="primary" disabled={!target} onClick={() => setView("confirmMerge")}>
+                Review merge
+              </Button>
+            )}
+            {view === "link" && (
+              <Button
+                variant="primary"
+                disabled={!selectedPlan}
+                onClick={() => setView("confirmLink")}
+              >
+                Review match
+              </Button>
+            )}
+            {view === "confirmMerge" && (
+              <Button
+                variant="primary"
+                disabled={busy || !target}
+                onClick={() => void remove(targetId)}
+              >
+                {busy ? "Merging…" : "Merge income"}
+              </Button>
+            )}
+            {view === "confirmLink" && (
+              <Button variant="primary" disabled={!selectedPlan} onClick={link}>
+                Mark received and link
+              </Button>
+            )}
+            {view === "confirmUnlink" && (
+              <Button variant="primary" onClick={unlink}>
+                Remove match
+              </Button>
+            )}
+            {view === "confirmDelete" && (
+              <Button variant="danger" disabled={busy} onClick={() => void remove()}>
+                {busy ? "Deleting…" : "Delete income"}
+              </Button>
+            )}
+          </>
+        )
+      }
     >
       {view === "edit" ? (
         <div className="grid min-w-0 gap-3">
-          <p className="text-sm text-muted-foreground">{fm(tx.amount)} deposited to {account?.name ?? "an account"}. Edit the activity details without changing the bank amount.</p>
-          {tx.linkedPlannedIncome && <p className="rounded-xl bg-muted p-3 text-sm">Matched to {tx.linkedPlannedIncome.label}.</p>}
-          <Field label="Name"><Input value={description} onChange={(event) => setDescription(event.target.value)} /></Field>
-          <Field label="Category"><Input value={category} onChange={(event) => setCategory(event.target.value)} /></Field>
-          <Field label="Date"><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></Field>
-          <Field label="Note"><Textarea value={notes} onChange={(event) => setNotes(event.target.value)} /></Field>
-          {candidates.length === 0 && <p className="text-xs text-muted-foreground">Merge appears when another income has the same amount and account within four days.</p>}
+          <p className="text-sm text-muted-foreground">
+            {fm(tx.amount)} deposited to {account?.name ?? "an account"}. Edit the activity details
+            without changing the bank amount.
+          </p>
+          {tx.linkedPlannedIncome && (
+            <p className="rounded-xl bg-muted p-3 text-sm">
+              Matched to {tx.linkedPlannedIncome.label}.
+            </p>
+          )}
+          <Field label="Name">
+            <Input value={description} onChange={(event) => setDescription(event.target.value)} />
+          </Field>
+          <Field label="Category">
+            <Input value={category} onChange={(event) => setCategory(event.target.value)} />
+          </Field>
+          <Field label="Date">
+            <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </Field>
+          <Field label="Note">
+            <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+          </Field>
+          {candidates.length === 0 && (
+            <p className="text-xs text-muted-foreground">
+              Merge appears when another income has the same amount and account within four days.
+            </p>
+          )}
         </div>
       ) : view === "merge" ? (
         <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">Choose the record to keep. Merging removes the duplicate, not the deposit from your bank.</p>
-          <Field label="Keep this income"><Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
-            {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.description} · {formatDisplayDate(candidate.date)} · {fm(candidate.amount)}</option>)}
-          </Select></Field>
+          <p className="text-sm text-muted-foreground">
+            Choose the record to keep. Merging removes the duplicate, not the deposit from your
+            bank.
+          </p>
+          <Field label="Keep this income">
+            <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
+              {candidates.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.description} · {formatDisplayDate(candidate.date)} ·{" "}
+                  {fm(candidate.amount)}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </div>
       ) : view === "link" ? (
         <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">Select the expected income this deposit paid. Its amount can differ from the estimate; the actual deposit stays {fm(tx.amount)}.</p>
-          <Field label="Upcoming income"><Select value={selectedPlan?.id ?? ""} onChange={(event) => setPlannedId(event.target.value)}>
-            {planned.map((item) => <option key={item.id} value={item.id}>{item.label} · {formatDisplayDate(item.payDate ?? item.periodDate)} · expected {fm(item.amount)}</option>)}
-          </Select></Field>
-          {selectedPlan && <p className="rounded-xl bg-muted p-3 text-sm">Expected {fm(selectedPlan.amount)} to {plannedAccount?.name ?? "an account"}. Actual {fm(tx.amount)} to {account?.name ?? "an account"}. Select the right payday even if the estimate or destination changed.</p>}
+          <p className="text-sm text-muted-foreground">
+            Select the expected income this deposit paid. Its amount can differ from the estimate;
+            the actual deposit stays {fm(tx.amount)}.
+          </p>
+          <Field label="Upcoming income">
+            <Select
+              value={selectedPlan?.id ?? ""}
+              onChange={(event) => setPlannedId(event.target.value)}
+            >
+              {planned.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label} · {formatDisplayDate(item.payDate ?? item.periodDate)} · expected{" "}
+                  {fm(item.amount)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {selectedPlan && (
+            <p className="rounded-xl bg-muted p-3 text-sm">
+              Expected {fm(selectedPlan.amount)} to {plannedAccount?.name ?? "an account"}. Actual{" "}
+              {fm(tx.amount)} to {account?.name ?? "an account"}. Select the right payday even if
+              the estimate or destination changed.
+            </p>
+          )}
         </div>
       ) : (
         <p className="text-sm" role="alert">
-          {view === "confirmMerge" ? <>Keep <strong>{target?.description}</strong> and remove <strong>{tx.description}</strong>? The bank balance will not be credited or debited again.</>
-            : view === "confirmLink" ? <>Mark <strong>{selectedPlan?.label} · {formatDisplayDate(selectedPlan?.payDate ?? selectedPlan?.periodDate)}</strong> as received using this {fm(tx.amount)} deposit? No new money will be added.</>
-            : view === "confirmUnlink" ? <>Remove the match to <strong>{tx.linkedPlannedIncome?.label}</strong>? The expected income will return; the {fm(tx.amount)} activity and account balance stay the same. Then assign it to the correct item.</>
-            : <>Delete <strong>{tx.description} · {fm(tx.amount)}</strong> from Activity? {tx.linkedPlannedIncome && "Its matched upcoming income will become unpaid again. "}The bank deposit itself will not be deleted. This cannot be undone.</>}
+          {view === "confirmMerge" ? (
+            <>
+              Keep <strong>{target?.description}</strong> and remove{" "}
+              <strong>{tx.description}</strong>? The bank balance will not be credited or debited
+              again.
+            </>
+          ) : view === "confirmLink" ? (
+            <>
+              Mark{" "}
+              <strong>
+                {selectedPlan?.label} ·{" "}
+                {formatDisplayDate(selectedPlan?.payDate ?? selectedPlan?.periodDate)}
+              </strong>{" "}
+              as received using this {fm(tx.amount)} deposit? No new money will be added.
+            </>
+          ) : view === "confirmUnlink" ? (
+            <>
+              Remove the match to <strong>{tx.linkedPlannedIncome?.label}</strong>? The expected
+              income will return; the {fm(tx.amount)} activity and account balance stay the same.
+              Then assign it to the correct item.
+            </>
+          ) : (
+            <>
+              Delete{" "}
+              <strong>
+                {tx.description} · {fm(tx.amount)}
+              </strong>{" "}
+              from Activity?{" "}
+              {tx.linkedPlannedIncome && "Its matched upcoming income will become unpaid again. "}
+              The bank deposit itself will not be deleted. This cannot be undone.
+            </>
+          )}
         </p>
       )}
     </Sheet>
@@ -2954,7 +3240,9 @@ function EditTransactionSheet({
   const [sourceAccountId, setSourceAccountId] = useState(tx?.sourceAccountId ?? "");
   const [cardId, setCardId] = useState(tx?.cardId ?? "");
   const [repaymentDate, setRepaymentDate] = useState(linkedReturn?.payDate ?? "");
-  const [actionView, setActionView] = useState<"edit" | "merge" | "confirmMerge" | "link" | "confirmLink" | "confirmUnlink" | "confirmDelete">(initialView);
+  const [actionView, setActionView] = useState<
+    "edit" | "merge" | "confirmMerge" | "link" | "confirmLink" | "confirmUnlink" | "confirmDelete"
+  >(initialView);
   const [targetId, setTargetId] = useState("");
   const [plannedId, setPlannedId] = useState("");
   const [updateFutureAmount, setUpdateFutureAmount] = useState(false);
@@ -2980,34 +3268,45 @@ function EditTransactionSheet({
   if (!tx || !canEditTransaction(tx)) return null;
   const currentTx = tx;
 
-  const categories = Array.from(new Set([...(state.categories ?? ["Groceries", "Other"]), FRIEND_EXPENSE_CATEGORY]));
+  const categories = Array.from(
+    new Set([...(state.categories ?? ["Groceries", "Other"]), FRIEND_EXPENSE_CATEGORY]),
+  );
   const accountOptions = state.accounts.filter(isSpendableAccount);
   const amountNumber = toNumber(amount);
   const selectedCategory =
     category === "Other" && newCategory.trim() ? newCategory.trim() : category;
   const friendSelected = isFriendExpenseCategory(selectedCategory);
-  const candidates = state.transactions.filter((candidate) => canMergeExpenses(currentTx, candidate));
+  const candidates = state.transactions.filter((candidate) =>
+    canMergeExpenses(currentTx, candidate),
+  );
   const target = candidates.find((candidate) => candidate.id === targetId);
   const planned = assignablePlannedExpenses(state, currentTx);
   const selectedPlan = planned.find((item) => item.id === plannedId) ?? planned[0];
-  const plannedSource = selectedPlan?.paymentMethod === "card"
-    ? state.cards.find((item) => item.id === selectedPlan.cardId)?.name
-    : state.accounts.find((item) => item.id === selectedPlan?.accountId)?.name;
+  const plannedSource =
+    selectedPlan?.paymentMethod === "card"
+      ? state.cards.find((item) => item.id === selectedPlan.cardId)?.name
+      : state.accounts.find((item) => item.id === selectedPlan?.accountId)?.name;
   const actualSource = currentTx.cardId
     ? state.cards.find((item) => item.id === currentTx.cardId)?.name
     : state.accounts.find((item) => item.id === currentTx.sourceAccountId)?.name;
 
   function linkPlanned() {
     if (!selectedPlan) return;
-    dispatch({ type: "LINK_EXPENSE_TRANSACTION", id: currentTx.id, itemId: selectedPlan.id,
-      updateFutureBillAmount: selectedPlan.sourceType === "recurring_bill" && updateFutureAmount });
+    dispatch({
+      type: "LINK_EXPENSE_TRANSACTION",
+      id: currentTx.id,
+      itemId: selectedPlan.id,
+      updateFutureBillAmount: selectedPlan.sourceType === "recurring_bill" && updateFutureAmount,
+    });
     toast("Bill assigned to this transaction. No second charge was added.");
     onRemoved();
   }
 
   function unlinkPlanned() {
     dispatch({ type: "UNLINK_PLANNED_TRANSACTION", id: currentTx.id });
-    toast("Bill match removed. The planned expense is upcoming again; the transaction remains in Activity.");
+    toast(
+      "Bill match removed. The planned expense is upcoming again; the transaction remains in Activity.",
+    );
     onRemoved();
   }
 
@@ -3016,17 +3315,30 @@ function EditTransactionSheet({
     setBusy(true);
     try {
       const connections = keptId ? await listConnections() : [];
-      const bankBalanceAuthoritative = connections.some((connection) => connection.accounts.some((account) =>
-        account.linkedLocalKind === (currentTx.cardId ? "card" : "account") &&
-        account.linkedLocalId === (currentTx.cardId ?? currentTx.sourceAccountId)));
+      const bankBalanceAuthoritative = connections.some((connection) =>
+        connection.accounts.some(
+          (account) =>
+            account.linkedLocalKind === (currentTx.cardId ? "card" : "account") &&
+            account.linkedLocalId === (currentTx.cardId ?? currentTx.sourceAccountId),
+        ),
+      );
       await relinkActivity({ data: { removedId: currentTx.id, keptId } });
-      dispatch(keptId
-        ? { type: "MERGE_TRANSACTIONS", sourceId: currentTx.id, targetId: keptId, bankBalanceAuthoritative }
-        : { type: "DELETE_TRANSACTION", id: currentTx.id });
+      dispatch(
+        keptId
+          ? {
+              type: "MERGE_TRANSACTIONS",
+              sourceId: currentTx.id,
+              targetId: keptId,
+              bankBalanceAuthoritative,
+            }
+          : { type: "DELETE_TRANSACTION", id: currentTx.id },
+      );
       toast(keptId ? "Expenses merged. One transaction remains." : "Expense deleted.");
       onRemoved();
     } catch (error) {
-      toast(`Couldn't ${keptId ? "merge" : "delete"} the expense: ${error instanceof Error ? error.message : String(error)}`);
+      toast(
+        `Couldn't ${keptId ? "merge" : "delete"} the expense: ${error instanceof Error ? error.message : String(error)}`,
+      );
     } finally {
       setBusy(false);
     }
@@ -3037,7 +3349,10 @@ function EditTransactionSheet({
     if (!selectedCategory) return toast("Choose a category");
     if (sourceType === "account" && !sourceAccountId) return toast("Choose an account");
     if (sourceType === "card" && !cardId) return toast("Choose a card");
-    if (friendSelected && (!validISODate(repaymentDate) || !validISODate(date) || repaymentDate < date)) {
+    if (
+      friendSelected &&
+      (!validISODate(repaymentDate) || !validISODate(date) || repaymentDate < date)
+    ) {
       return toast("Choose a valid return date on or after the expense date.");
     }
     if (category === "Other" && newCategory.trim()) {
@@ -3078,157 +3393,328 @@ function EditTransactionSheet({
   return (
     <Sheet
       open={!!tx}
-      onClose={() => { if (!busy) onClose(); }}
-      title={actionView === "edit" ? "Edit expense" : actionView === "confirmDelete" ? "Delete expense?"
-        : actionView === "confirmUnlink" ? "Remove bill match?"
-        : actionView === "link" || actionView === "confirmLink" ? "Match upcoming expense" : "Merge expenses"}
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      title={
+        actionView === "edit"
+          ? "Edit expense"
+          : actionView === "confirmDelete"
+            ? "Delete expense?"
+            : actionView === "confirmUnlink"
+              ? "Remove bill match?"
+              : actionView === "link" || actionView === "confirmLink"
+                ? "Match upcoming expense"
+                : "Merge expenses"
+      }
       footer={
         actionView === "edit" ? (
           <>
-            <Button variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button variant="soft" disabled={candidates.length === 0} onClick={() => { setTargetId(candidates[0]?.id ?? ""); setActionView("merge"); }}>Merge</Button>
-            <Button variant="soft" disabled={planned.length === 0} onClick={() => { setPlannedId(planned[0]?.id ?? ""); setActionView("link"); }}>Assign to bill</Button>
-            {currentTx.linkedPlannedExpense && <Button variant="soft" onClick={() => setActionView("confirmUnlink")}>Change match</Button>}
-            <Button variant="ghost" onClick={() => setActionView("confirmDelete")}>Delete</Button>
-            {!currentTx.cardId && !currentTx.linkedPlannedExpense && !linkedReturn && <Button variant="soft" onClick={() => onConvertPayment(currentTx)}>This is a card payment</Button>}
-            <Button variant="primary" onClick={save}>Save</Button>
+            <Button variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="soft"
+              disabled={candidates.length === 0}
+              onClick={() => {
+                setTargetId(candidates[0]?.id ?? "");
+                setActionView("merge");
+              }}
+            >
+              Merge
+            </Button>
+            <Button
+              variant="soft"
+              disabled={planned.length === 0}
+              onClick={() => {
+                setPlannedId(planned[0]?.id ?? "");
+                setActionView("link");
+              }}
+            >
+              Assign to bill
+            </Button>
+            {currentTx.linkedPlannedExpense && (
+              <Button variant="soft" onClick={() => setActionView("confirmUnlink")}>
+                Change match
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setActionView("confirmDelete")}>
+              Delete
+            </Button>
+            {!currentTx.cardId && !currentTx.linkedPlannedExpense && !linkedReturn && (
+              <Button variant="soft" onClick={() => onConvertPayment(currentTx)}>
+                This is a card payment
+              </Button>
+            )}
+            <Button variant="primary" onClick={save}>
+              Save
+            </Button>
           </>
         ) : actionView === "merge" || actionView === "link" ? (
           <>
-            <Button variant="ghost" onClick={() => setActionView("edit")}>Back</Button>
-            <Button variant="primary" disabled={actionView === "merge" ? !target : !selectedPlan}
-              onClick={() => setActionView(actionView === "merge" ? "confirmMerge" : "confirmLink")}>Review {actionView === "merge" ? "merge" : "match"}</Button>
+            <Button variant="ghost" onClick={() => setActionView("edit")}>
+              Back
+            </Button>
+            <Button
+              variant="primary"
+              disabled={actionView === "merge" ? !target : !selectedPlan}
+              onClick={() => setActionView(actionView === "merge" ? "confirmMerge" : "confirmLink")}
+            >
+              Review {actionView === "merge" ? "merge" : "match"}
+            </Button>
           </>
         ) : (
           <>
-            <Button variant="ghost" disabled={busy} onClick={() => setActionView(actionView === "confirmDelete" || actionView === "confirmUnlink" ? "edit" : actionView === "confirmLink" ? "link" : "merge")}>
+            <Button
+              variant="ghost"
+              disabled={busy}
+              onClick={() =>
+                setActionView(
+                  actionView === "confirmDelete" || actionView === "confirmUnlink"
+                    ? "edit"
+                    : actionView === "confirmLink"
+                      ? "link"
+                      : "merge",
+                )
+              }
+            >
               {actionView === "confirmDelete" ? "Cancel" : "Back"}
             </Button>
-            <Button variant="primary" disabled={busy} onClick={() => actionView === "confirmLink" ? linkPlanned() : actionView === "confirmUnlink" ? unlinkPlanned() : void remove(actionView === "confirmMerge" ? targetId : undefined)}>
-              {busy ? "Working…" : actionView === "confirmDelete" ? "Delete expense" : actionView === "confirmLink" ? "Assign bill" : actionView === "confirmUnlink" ? "Remove match" : "Merge expenses"}
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() =>
+                actionView === "confirmLink"
+                  ? linkPlanned()
+                  : actionView === "confirmUnlink"
+                    ? unlinkPlanned()
+                    : void remove(actionView === "confirmMerge" ? targetId : undefined)
+              }
+            >
+              {busy
+                ? "Working…"
+                : actionView === "confirmDelete"
+                  ? "Delete expense"
+                  : actionView === "confirmLink"
+                    ? "Assign bill"
+                    : actionView === "confirmUnlink"
+                      ? "Remove match"
+                      : "Merge expenses"}
             </Button>
           </>
         )
       }
     >
       {actionView === "confirmDelete" ? (
-        <p className="text-sm text-foreground">Delete <strong>{currentTx.description || currentTx.category} · {formatMoney(currentTx.amount, state.profile.currency)}</strong> from your activity? Any matched upcoming bill will become unpaid again; a linked expected friend repayment will be removed. This cannot be undone.</p>
+        <p className="text-sm text-foreground">
+          Delete{" "}
+          <strong>
+            {currentTx.description || currentTx.category} ·{" "}
+            {formatMoney(currentTx.amount, state.profile.currency)}
+          </strong>{" "}
+          from your activity? Any matched upcoming bill will become unpaid again; a linked expected
+          friend repayment will be removed. This cannot be undone.
+        </p>
       ) : actionView === "confirmMerge" ? (
-        <p className="text-sm text-foreground">Keep <strong>{target?.description || target?.category} · {target ? formatMoney(target.amount, state.profile.currency) : ""}</strong> and remove <strong>{currentTx.description || currentTx.category}</strong>? The amount will be counted once, and any bank-review link will point to the kept expense. This cannot be undone.</p>
+        <p className="text-sm text-foreground">
+          Keep{" "}
+          <strong>
+            {target?.description || target?.category} ·{" "}
+            {target ? formatMoney(target.amount, state.profile.currency) : ""}
+          </strong>{" "}
+          and remove <strong>{currentTx.description || currentTx.category}</strong>? The amount will
+          be counted once, and any bank-review link will point to the kept expense. This cannot be
+          undone.
+        </p>
       ) : actionView === "confirmLink" ? (
-        <p className="text-sm" role="alert">Mark <strong>{selectedPlan?.label} · {formatDisplayDate(selectedPlan?.dueDate)}</strong> ({formatMoney(selectedPlan?.amount ?? 0, state.profile.currency)} planned) as paid by <strong>{currentTx.description} · {formatMoney(currentTx.amount, state.profile.currency)}</strong> from {actualSource ?? "the recorded payment source"}? That month's planned item will be cleared. No second expense is added.{selectedPlan?.sourceType === "recurring_bill" && ` Future monthly estimate ${updateFutureAmount ? `will change to ${formatMoney(currentTx.amount, state.profile.currency)}` : "stays as it is"}.`}</p>
+        <p className="text-sm" role="alert">
+          Mark{" "}
+          <strong>
+            {selectedPlan?.label} · {formatDisplayDate(selectedPlan?.dueDate)}
+          </strong>{" "}
+          ({formatMoney(selectedPlan?.amount ?? 0, state.profile.currency)} planned) as paid by{" "}
+          <strong>
+            {currentTx.description} · {formatMoney(currentTx.amount, state.profile.currency)}
+          </strong>{" "}
+          from {actualSource ?? "the recorded payment source"}? That month's planned item will be
+          cleared. No second expense is added.
+          {selectedPlan?.sourceType === "recurring_bill" &&
+            ` Future monthly estimate ${updateFutureAmount ? `will change to ${formatMoney(currentTx.amount, state.profile.currency)}` : "stays as it is"}.`}
+        </p>
       ) : actionView === "confirmUnlink" ? (
-        <p className="text-sm" role="alert">Remove the match to <strong>{currentTx.linkedPlannedExpense?.label}</strong>? That month's planned bill will return. The transaction and bank balance stay the same. You can then assign the transaction to another bill.</p>
+        <p className="text-sm" role="alert">
+          Remove the match to <strong>{currentTx.linkedPlannedExpense?.label}</strong>? That month's
+          planned bill will return. The transaction and bank balance stay the same. You can then
+          assign the transaction to another bill.
+        </p>
       ) : actionView === "link" ? (
         <div className="grid gap-3">
-          <p className="text-sm text-muted-foreground">Select the bill this payment covered, even if its estimate, merchant, or payment account changed. Unsaved edits are not included.</p>
-          <Field label="Upcoming expense"><Select value={selectedPlan?.id ?? ""} onChange={(event) => { setPlannedId(event.target.value); setUpdateFutureAmount(false); }}>
-            {planned.map((item) => <option key={item.id} value={item.id}>{item.label} · {formatDisplayDate(item.dueDate)} · planned {formatMoney(item.amount, state.profile.currency)}</option>)}
-          </Select></Field>
-          {selectedPlan && <p className="rounded-xl bg-muted p-3 text-sm">Planned {formatMoney(selectedPlan.amount, state.profile.currency)} from {plannedSource ?? "an unspecified source"}. Actual {formatMoney(currentTx.amount, state.profile.currency)} from {actualSource ?? "an unspecified source"}. Only the selected due date will be marked paid.</p>}
-          {selectedPlan?.sourceType === "recurring_bill" && <label className="flex min-w-0 items-start gap-3 rounded-xl border border-border p-3 text-sm">
-            <input type="checkbox" className="mt-1" checked={updateFutureAmount} onChange={(event) => setUpdateFutureAmount(event.target.checked)} />
-            <span>Use {formatMoney(currentTx.amount, state.profile.currency)} as the new monthly estimate for future bills. Leave unchecked if this payment included a one-time charge.</span>
-          </label>}
+          <p className="text-sm text-muted-foreground">
+            Select the bill this payment covered, even if its estimate, merchant, or payment account
+            changed. Unsaved edits are not included.
+          </p>
+          <Field label="Upcoming expense">
+            <Select
+              value={selectedPlan?.id ?? ""}
+              onChange={(event) => {
+                setPlannedId(event.target.value);
+                setUpdateFutureAmount(false);
+              }}
+            >
+              {planned.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label} · {formatDisplayDate(item.dueDate)} · planned{" "}
+                  {formatMoney(item.amount, state.profile.currency)}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {selectedPlan && (
+            <p className="rounded-xl bg-muted p-3 text-sm">
+              Planned {formatMoney(selectedPlan.amount, state.profile.currency)} from{" "}
+              {plannedSource ?? "an unspecified source"}. Actual{" "}
+              {formatMoney(currentTx.amount, state.profile.currency)} from{" "}
+              {actualSource ?? "an unspecified source"}. Only the selected due date will be marked
+              paid.
+            </p>
+          )}
+          {selectedPlan?.sourceType === "recurring_bill" && (
+            <label className="flex min-w-0 items-start gap-3 rounded-xl border border-border p-3 text-sm">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={updateFutureAmount}
+                onChange={(event) => setUpdateFutureAmount(event.target.checked)}
+              />
+              <span>
+                Use {formatMoney(currentTx.amount, state.profile.currency)} as the new monthly
+                estimate for future bills. Leave unchecked if this payment included a one-time
+                charge.
+              </span>
+            </label>
+          )}
         </div>
       ) : actionView === "merge" ? (
         <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">Choose the expense to keep. Only the same amount and payment source within four days can be merged. Unsaved edits to this expense are not included.</p>
+          <p className="text-sm text-muted-foreground">
+            Choose the expense to keep. Only the same amount and payment source within four days can
+            be merged. Unsaved edits to this expense are not included.
+          </p>
           <Field label="Keep this expense">
             <Select value={targetId} onChange={(event) => setTargetId(event.target.value)}>
               {candidates.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
-                  {candidate.description || candidate.category} · {formatDisplayDate(candidate.date)} · {formatMoney(candidate.amount, state.profile.currency)}
+                  {candidate.description || candidate.category} ·{" "}
+                  {formatDisplayDate(candidate.date)} ·{" "}
+                  {formatMoney(candidate.amount, state.profile.currency)}
                 </option>
               ))}
             </Select>
           </Field>
         </div>
-      ) : <><div className="grid gap-3 sm:grid-cols-2">
-        {currentTx.linkedPlannedExpense && <p className="sm:col-span-2 rounded-xl bg-muted p-3 text-sm">Matched to {currentTx.linkedPlannedExpense.label}.</p>}
-        <Field label="Amount">
-          <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        </Field>
-        <Field label="Date">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        <Field label="Category">
-          <Select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {categories.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-            <option value="Other">Other</option>
-          </Select>
-        </Field>
-        {category === "Other" && (
-          <Field label="New category" hint="Leave blank to keep Other.">
-            <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
-          </Field>
-        )}
-        {friendSelected && (
-          <Field
-            label="Expected return date"
-            hint="Also editable in Income coming. This is an estimate until the money arrives."
-          >
-            <Input
-              type="date" min={date} value={repaymentDate}
-              onChange={(event) => setRepaymentDate(event.target.value)}
-            />
-          </Field>
-        )}
-        {!friendSelected && linkedReturn && (
-          <p className="self-center text-sm text-muted-foreground">
-            Changing the category will remove the expected repayment from Income coming.
-          </p>
-        )}
-        <Field label="Description" hint="Shown as the expense title.">
-          <Input value={description} onChange={(e) => setDescription(e.target.value)} />
-        </Field>
-        <Field label="Paid with">
-          <Select
-            value={sourceType}
-            onChange={(e) => setSourceType(e.target.value as "account" | "card")}
-          >
-            <option value="account">Account</option>
-            <option value="card">Credit card</option>
-          </Select>
-        </Field>
-        {sourceType === "account" ? (
-          <Field label="Account">
-            <Select value={sourceAccountId} onChange={(e) => setSourceAccountId(e.target.value)}>
-              <option value="">Pick an account...</option>
-              {accountOptions.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        ) : (
-          <Field label="Credit card">
-            <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
-              <option value="">Pick a card...</option>
-              {state.cards.map((card) => (
-                <option key={card.id} value={card.id}>
-                  {card.name}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        )}
-        <div className="sm:col-span-2">
-          <Field label="Note">
-            <Textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="No note"
-            />
-          </Field>
-        </div>
-      </div>
-      {candidates.length === 0 && <p className="mt-3 text-xs text-muted-foreground">Merge is available when another expense has the same amount and payment source within four days.</p>}</>}
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {currentTx.linkedPlannedExpense && (
+              <p className="sm:col-span-2 rounded-xl bg-muted p-3 text-sm">
+                Matched to {currentTx.linkedPlannedExpense.label}.
+              </p>
+            )}
+            <Field label="Amount">
+              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
+            </Field>
+            <Field label="Date">
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+            <Field label="Category">
+              <Select value={category} onChange={(e) => setCategory(e.target.value)}>
+                {categories.map((item) => (
+                  <option key={item} value={item}>
+                    {item}
+                  </option>
+                ))}
+                <option value="Other">Other</option>
+              </Select>
+            </Field>
+            {category === "Other" && (
+              <Field label="New category" hint="Leave blank to keep Other.">
+                <Input value={newCategory} onChange={(e) => setNewCategory(e.target.value)} />
+              </Field>
+            )}
+            {friendSelected && (
+              <Field
+                label="Expected return date"
+                hint="Also editable in Income coming. This is an estimate until the money arrives."
+              >
+                <Input
+                  type="date"
+                  min={date}
+                  value={repaymentDate}
+                  onChange={(event) => setRepaymentDate(event.target.value)}
+                />
+              </Field>
+            )}
+            {!friendSelected && linkedReturn && (
+              <p className="self-center text-sm text-muted-foreground">
+                Changing the category will remove the expected repayment from Income coming.
+              </p>
+            )}
+            <Field label="Description" hint="Shown as the expense title.">
+              <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+            </Field>
+            <Field label="Paid with">
+              <Select
+                value={sourceType}
+                onChange={(e) => setSourceType(e.target.value as "account" | "card")}
+              >
+                <option value="account">Account</option>
+                <option value="card">Credit card</option>
+              </Select>
+            </Field>
+            {sourceType === "account" ? (
+              <Field label="Account">
+                <Select
+                  value={sourceAccountId}
+                  onChange={(e) => setSourceAccountId(e.target.value)}
+                >
+                  <option value="">Pick an account...</option>
+                  {accountOptions.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : (
+              <Field label="Credit card">
+                <Select value={cardId} onChange={(e) => setCardId(e.target.value)}>
+                  <option value="">Pick a card...</option>
+                  {state.cards.map((card) => (
+                    <option key={card.id} value={card.id}>
+                      {card.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            )}
+            <div className="sm:col-span-2">
+              <Field label="Note">
+                <Textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="No note"
+                />
+              </Field>
+            </div>
+          </div>
+          {candidates.length === 0 && (
+            <p className="mt-3 text-xs text-muted-foreground">
+              Merge is available when another expense has the same amount and payment source within
+              four days.
+            </p>
+          )}
+        </>
+      )}
     </Sheet>
   );
 }

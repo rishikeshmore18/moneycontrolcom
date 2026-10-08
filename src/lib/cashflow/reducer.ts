@@ -15,12 +15,17 @@ import {
   emptyState,
 } from "./types";
 import { clampNonNegative } from "./money";
-import { newId, todayISO } from "./dates";
+import { newId, todayISO, toISODate } from "./dates";
 import { expensesComingBreakdown } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 import { canMergeExpenses, canMergeIncome } from "./transactionMerge";
 import { assignablePlannedExpenses, assignablePlannedIncome } from "./activityAssignment";
-import { recordCardPayment, removeCardPayment, validCardPayment, type CardPaymentInput } from "./cardPaymentLedger";
+import {
+  recordCardPayment,
+  removeCardPayment,
+  validCardPayment,
+  type CardPaymentInput,
+} from "./cardPaymentLedger";
 
 export type Action =
   | { type: "HYDRATE"; state: AppState }
@@ -88,12 +93,34 @@ export type Action =
     }
   | { type: "DELETE_TRANSACTION"; id: string }
   | { type: "DELETE_INCOME_TRANSACTION"; id: string; bankBalanceAuthoritative: boolean }
-  | { type: "UPDATE_INCOME_TRANSACTION"; id: string; description: string; category: string; date: string; notes?: string }
-  | { type: "MERGE_INCOME_TRANSACTIONS"; sourceId: string; targetId: string; bankBalanceAuthoritative: boolean }
+  | {
+      type: "UPDATE_INCOME_TRANSACTION";
+      id: string;
+      description: string;
+      category: string;
+      date: string;
+      notes?: string;
+    }
+  | {
+      type: "MERGE_INCOME_TRANSACTIONS";
+      sourceId: string;
+      targetId: string;
+      bankBalanceAuthoritative: boolean;
+    }
   | { type: "LINK_INCOME_TRANSACTION"; id: string; itemId: string }
-  | { type: "LINK_EXPENSE_TRANSACTION"; id: string; itemId: string; updateFutureBillAmount?: boolean }
+  | {
+      type: "LINK_EXPENSE_TRANSACTION";
+      id: string;
+      itemId: string;
+      updateFutureBillAmount?: boolean;
+    }
   | { type: "UNLINK_PLANNED_TRANSACTION"; id: string }
-  | { type: "MERGE_TRANSACTIONS"; sourceId: string; targetId: string; bankBalanceAuthoritative?: boolean }
+  | {
+      type: "MERGE_TRANSACTIONS";
+      sourceId: string;
+      targetId: string;
+      bankBalanceAuthoritative?: boolean;
+    }
   | {
       type: "ADD_EXPENSE";
       payload: {
@@ -190,9 +217,11 @@ function updateAccount(state: AppState, id: string, delta: number): Account[] {
 }
 
 function updateAccountCents(state: AppState, id: string, delta: number): Account[] {
-  return state.accounts.map((account) => account.id === id
-    ? { ...account, balance: Math.round((account.balance + delta) * 100) / 100, updatedAt: now() }
-    : account);
+  return state.accounts.map((account) =>
+    account.id === id
+      ? { ...account, balance: Math.round((account.balance + delta) * 100) / 100, updatedAt: now() }
+      : account,
+  );
 }
 
 function addTx(
@@ -217,15 +246,26 @@ function undoIncomeLink(state: AppState, tx: Transaction): AppState {
     ...state,
     timesheet: state.timesheet.flatMap((entry) => {
       if (entry.linkedTransactionId !== tx.id) return [entry];
-      if (added.has(entry.id)) return [{ ...entry, paid: false, payStatus: "unpaid",
-        actualAmount: undefined, paidAccountId: undefined, linkedTransactionId: undefined,
-        userEdited: true, updatedAt: now() }];
+      if (added.has(entry.id))
+        return [
+          {
+            ...entry,
+            paid: false,
+            payStatus: "unpaid",
+            actualAmount: undefined,
+            paidAccountId: undefined,
+            linkedTransactionId: undefined,
+            userEdited: true,
+            updatedAt: now(),
+          },
+        ];
       return [previous.get(entry.id) ?? { ...entry, linkedTransactionId: undefined }];
     }),
-    plannedIncomeOverrides: link.originalOverride &&
+    plannedIncomeOverrides:
+      link.originalOverride &&
       !state.plannedIncomeOverrides.some((override) => override.id === link.originalOverride?.id)
-      ? [...state.plannedIncomeOverrides, link.originalOverride]
-      : state.plannedIncomeOverrides,
+        ? [...state.plannedIncomeOverrides, link.originalOverride]
+        : state.plannedIncomeOverrides,
   };
 }
 
@@ -235,23 +275,33 @@ function undoExpenseLink(state: AppState, tx: Transaction): AppState {
   if (link.sourceType === "one_time") {
     return {
       ...state,
-      plannedExpenseOverrides: link.originalOverride &&
+      plannedExpenseOverrides:
+        link.originalOverride &&
         !state.plannedExpenseOverrides.some((override) => override.id === link.originalOverride?.id)
-        ? [...state.plannedExpenseOverrides, link.originalOverride]
-        : state.plannedExpenseOverrides,
+          ? [...state.plannedExpenseOverrides, link.originalOverride]
+          : state.plannedExpenseOverrides,
     };
   }
-  if (!link.createdOverrideId ||
-      !state.plannedExpenseOverrides.some((override) => override.id === link.createdOverrideId)) return state;
+  if (
+    !link.createdOverrideId ||
+    !state.plannedExpenseOverrides.some((override) => override.id === link.createdOverrideId)
+  )
+    return state;
   return {
     ...state,
-    recurringBills: link.priorRecurringAmount === undefined ? state.recurringBills :
-      state.recurringBills.map((bill) => bill.id === link.sourceId &&
-        bill.amount === link.matchedRecurringAmount
-        ? { ...bill, amount: link.priorRecurringAmount! } : bill),
+    recurringBills:
+      link.priorRecurringAmount === undefined
+        ? state.recurringBills
+        : state.recurringBills.map((bill) =>
+            bill.id === link.sourceId && bill.amount === link.matchedRecurringAmount
+              ? { ...bill, amount: link.priorRecurringAmount! }
+              : bill,
+          ),
     plannedExpenseOverrides: [
-      ...state.plannedExpenseOverrides.filter((override) => override.id !== link.createdOverrideId &&
-        override.id !== link.originalOverride?.id),
+      ...state.plannedExpenseOverrides.filter(
+        (override) =>
+          override.id !== link.createdOverrideId && override.id !== link.originalOverride?.id,
+      ),
       ...(link.originalOverride ? [link.originalOverride] : []),
     ],
   };
@@ -278,8 +328,28 @@ function mergeCategories(...groups: (string[] | undefined)[]): string[] {
 }
 
 function normalizeState(state: AppState): AppState {
+  const today = new Date();
+  const priorMonth = toISODate(new Date(today.getFullYear(), today.getMonth() - 1, 1)).slice(0, 7);
   return {
     ...state,
+    cards: state.cards.map((card) => ({
+      ...card,
+      paymentScheduleStartDate: card.paymentScheduleStartDate ?? todayISO(),
+    })),
+    recurringBills: state.recurringBills.map((bill) => ({
+      ...bill,
+      startMonth:
+        bill.startMonth ??
+        [
+          priorMonth,
+          ...(state.plannedExpenseOverrides ?? [])
+            .filter(
+              (override) =>
+                override.sourceType === "recurring_bill" && override.sourceId === bill.id,
+            )
+            .map((override) => override.month),
+        ].sort()[0],
+    })),
     categories: mergeCategories(
       DEFAULT_CATEGORIES,
       state.categories,
@@ -289,11 +359,21 @@ function normalizeState(state: AppState): AppState {
     ),
     // Older payment entry code hid whole card obligations, including partial payments.
     // Recompute these from the remaining balance; retain explicit amount/date overrides.
-    plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter((override) =>
-      !(override.sourceType === "card_due" && override.action === "skip" &&
-        state.transactions.some((tx) => tx.type === "card_payment" && tx.cardId &&
-          !tx.cardPayment && override.month === tx.date.slice(0, 7) &&
-          (override.sourceId === tx.cardId || override.sourceId?.startsWith(`${tx.cardId}:`))))),
+    plannedExpenseOverrides: (state.plannedExpenseOverrides ?? []).filter(
+      (override) =>
+        !(
+          override.sourceType === "card_due" &&
+          override.action === "skip" &&
+          state.transactions.some(
+            (tx) =>
+              tx.type === "card_payment" &&
+              tx.cardId &&
+              !tx.cardPayment &&
+              override.month === tx.date.slice(0, 7) &&
+              (override.sourceId === tx.cardId || override.sourceId?.startsWith(`${tx.cardId}:`)),
+          )
+        ),
+    ),
     plannedIncomeOverrides: state.plannedIncomeOverrides ?? [],
     categoryBudgets: state.categoryBudgets ?? [],
     categoryBudgetOverrides: state.categoryBudgetOverrides ?? [],
@@ -312,11 +392,23 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, profile: { ...state.profile, ...action.payload } };
 
     case "SYNC_ACCOUNT_BALANCE":
-      return { ...state, accounts: state.accounts.map((account) => account.id === action.id
-        ? { ...account, balance: action.balance, bankLinked: true, updatedAt: now() } : account) };
+      return {
+        ...state,
+        accounts: state.accounts.map((account) =>
+          account.id === action.id
+            ? { ...account, balance: action.balance, bankLinked: true, updatedAt: now() }
+            : account,
+        ),
+      };
     case "SYNC_CARD_BALANCE":
-      return { ...state, cards: state.cards.map((card) => card.id === action.id
-        ? { ...card, currentBalance: action.balance, limit: action.limit, bankLinked: true } : card) };
+      return {
+        ...state,
+        cards: state.cards.map((card) =>
+          card.id === action.id
+            ? { ...card, currentBalance: action.balance, limit: action.limit, bankLinked: true }
+            : card,
+        ),
+      };
 
     case "ADD_ACCOUNT": {
       const acc: Account = {
@@ -339,7 +431,17 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, accounts: state.accounts.filter((a) => a.id !== action.id) };
 
     case "ADD_CARD":
-      return { ...state, cards: [...state.cards, { ...action.payload, id: newId() }] };
+      return {
+        ...state,
+        cards: [
+          ...state.cards,
+          {
+            ...action.payload,
+            paymentScheduleStartDate: action.payload.paymentScheduleStartDate ?? todayISO(),
+            id: newId(),
+          },
+        ],
+      };
     case "UPDATE_CARD":
       return {
         ...state,
@@ -380,7 +482,14 @@ export function reducer(state: AppState, action: Action): AppState {
     case "ADD_RECURRING":
       return {
         ...state,
-        recurringBills: [...state.recurringBills, { ...action.payload, id: newId() }],
+        recurringBills: [
+          ...state.recurringBills,
+          {
+            ...action.payload,
+            startMonth: action.payload.startMonth ?? todayISO().slice(0, 7),
+            id: newId(),
+          },
+        ],
       };
     case "UPDATE_RECURRING":
       return {
@@ -442,9 +551,17 @@ export function reducer(state: AppState, action: Action): AppState {
     case "MARK_PLANNED_EXPENSE_PAID": {
       const { sourceType, sourceId, overrideId, month } = action.payload;
       if (sourceType === "one_time") {
-        if (!overrideId || !state.plannedExpenseOverrides.some((override) =>
-          override.id === overrideId && override.sourceType === "one_time" && override.month === month && override.action === "add"
-        )) return state;
+        if (
+          !overrideId ||
+          !state.plannedExpenseOverrides.some(
+            (override) =>
+              override.id === overrideId &&
+              override.sourceType === "one_time" &&
+              override.month === month &&
+              override.action === "add",
+          )
+        )
+          return state;
         return reducer(state, { type: "DELETE_PLANNED_EXPENSE_OVERRIDE", id: overrideId });
       }
       if (!sourceId || !state.recurringBills.some((bill) => bill.id === sourceId)) return state;
@@ -562,9 +679,14 @@ export function reducer(state: AppState, action: Action): AppState {
       const linkedRepayment = (state.plannedIncomeOverrides ?? []).find(
         (override) => override.kind === "friend_repayment" && override.linkedExpenseId === p.id,
       );
-      if (p.friendRepaymentDate &&
-        (!isFriendExpenseCategory(p.category) || !validISODate(p.friendRepaymentDate) ||
-          !validISODate(p.date) || p.friendRepaymentDate < p.date)) return state;
+      if (
+        p.friendRepaymentDate &&
+        (!isFriendExpenseCategory(p.category) ||
+          !validISODate(p.friendRepaymentDate) ||
+          !validISODate(p.date) ||
+          p.friendRepaymentDate < p.date)
+      )
+        return state;
 
       let next = state;
 
@@ -663,18 +785,22 @@ export function reducer(state: AppState, action: Action): AppState {
         const nextBalance = Math.round((debt.balance + principal) * 100) / 100;
         return {
           ...state,
-          debts: state.debts.map((item) => item.id === debt.id
-            ? {
-                ...item,
-                balance: nextBalance,
-                status: item.status === "paid_off" && nextBalance > 0
-                  ? transaction.debtStatusBeforePayment ?? "active"
-                  : item.status,
-              }
-            : item),
-          accounts: transaction.balanceAlreadySynced || !transaction.sourceAccountId
-            ? state.accounts
-            : updateAccount(state, transaction.sourceAccountId, transaction.amount),
+          debts: state.debts.map((item) =>
+            item.id === debt.id
+              ? {
+                  ...item,
+                  balance: nextBalance,
+                  status:
+                    item.status === "paid_off" && nextBalance > 0
+                      ? (transaction.debtStatusBeforePayment ?? "active")
+                      : item.status,
+                }
+              : item,
+          ),
+          accounts:
+            transaction.balanceAlreadySynced || !transaction.sourceAccountId
+              ? state.accounts
+              : updateAccount(state, transaction.sourceAccountId, transaction.amount),
           transactions: state.transactions.filter((tx) => tx.id !== transaction.id),
         };
       }
@@ -684,9 +810,11 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!expense.balanceAlreadySynced && expense.cardId) {
         next = {
           ...next,
-          cards: next.cards.map((card) => card.id === expense.cardId
-            ? { ...card, currentBalance: clampNonNegative(card.currentBalance - expense.amount) }
-            : card),
+          cards: next.cards.map((card) =>
+            card.id === expense.cardId
+              ? { ...card, currentBalance: clampNonNegative(card.currentBalance - expense.amount) }
+              : card,
+          ),
         };
       } else if (!expense.balanceAlreadySynced && expense.sourceAccountId) {
         next = { ...next, accounts: updateAccount(next, expense.sourceAccountId, expense.amount) };
@@ -702,14 +830,28 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "UPDATE_INCOME_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
-      if (!tx || tx.type !== "income" || !validISODate(action.date) ||
-          !action.description.trim() || !action.category.trim()) return state;
+      if (
+        !tx ||
+        tx.type !== "income" ||
+        !validISODate(action.date) ||
+        !action.description.trim() ||
+        !action.category.trim()
+      )
+        return state;
       return {
         ...state,
-        transactions: state.transactions.map((item) => item.id === tx.id
-          ? { ...item, description: action.description.trim(), category: action.category.trim(),
-              date: action.date, notes: action.notes?.trim() || undefined, updatedAt: now() }
-          : item),
+        transactions: state.transactions.map((item) =>
+          item.id === tx.id
+            ? {
+                ...item,
+                description: action.description.trim(),
+                category: action.category.trim(),
+                date: action.date,
+                notes: action.notes?.trim() || undefined,
+                updatedAt: now(),
+              }
+            : item,
+        ),
       };
     }
 
@@ -719,8 +861,10 @@ export function reducer(state: AppState, action: Action): AppState {
       const next = undoIncomeLink(state, tx);
       return {
         ...next,
-        accounts: tx.balanceAlreadySynced || action.bankBalanceAuthoritative || !tx.targetAccountId
-          ? next.accounts : updateAccountCents(next, tx.targetAccountId, -tx.amount),
+        accounts:
+          tx.balanceAlreadySynced || action.bankBalanceAuthoritative || !tx.targetAccountId
+            ? next.accounts
+            : updateAccountCents(next, tx.targetAccountId, -tx.amount),
         transactions: next.transactions.filter((item) => item.id !== tx.id),
       };
     }
@@ -728,58 +872,108 @@ export function reducer(state: AppState, action: Action): AppState {
     case "UNLINK_PLANNED_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
       if (!tx || (!tx.linkedPlannedExpense && !tx.linkedPlannedIncome)) return state;
-      const restored = tx.linkedPlannedIncome ? undoIncomeLink(state, tx) : undoExpenseLink(state, tx);
+      const restored = tx.linkedPlannedIncome
+        ? undoIncomeLink(state, tx)
+        : undoExpenseLink(state, tx);
       return {
         ...restored,
-        transactions: restored.transactions.map((item) => item.id === tx.id
-          ? { ...item, linkedPlannedIncome: undefined, linkedPlannedExpense: undefined, updatedAt: now() }
-          : item),
+        transactions: restored.transactions.map((item) =>
+          item.id === tx.id
+            ? {
+                ...item,
+                linkedPlannedIncome: undefined,
+                linkedPlannedExpense: undefined,
+                updatedAt: now(),
+              }
+            : item,
+        ),
       };
     }
 
     case "MERGE_INCOME_TRANSACTIONS": {
       const source = state.transactions.find((item) => item.id === action.sourceId);
       const target = state.transactions.find((item) => item.id === action.targetId);
-      if (!source || !target || !canMergeIncome(source, target) ||
-          (source.linkedPlannedIncome && target.linkedPlannedIncome)) return state;
+      if (
+        !source ||
+        !target ||
+        !canMergeIncome(source, target) ||
+        (source.linkedPlannedIncome && target.linkedPlannedIncome)
+      )
+        return state;
       // The linked bank balance is already authoritative. Do not subtract a manual
       // payday again after the bank has mirrored the deposited cash.
       const synced = Boolean(source.balanceAlreadySynced || target.balanceAlreadySynced);
       return {
         ...state,
-        accounts: synced || action.bankBalanceAuthoritative || !source.targetAccountId
-          ? state.accounts : updateAccountCents(state, source.targetAccountId, -source.amount),
-        timesheet: state.timesheet.map((entry) => entry.linkedTransactionId === source.id
-          ? { ...entry, linkedTransactionId: target.id } : entry),
-        transactions: state.transactions.filter((item) => item.id !== source.id).map((item) =>
-          item.id === target.id
-            ? { ...item, balanceAlreadySynced: synced, updatedAt: now(),
-                linkedPlannedIncome: item.linkedPlannedIncome ?? source.linkedPlannedIncome }
-            : item),
+        accounts:
+          synced || action.bankBalanceAuthoritative || !source.targetAccountId
+            ? state.accounts
+            : updateAccountCents(state, source.targetAccountId, -source.amount),
+        timesheet: state.timesheet.map((entry) =>
+          entry.linkedTransactionId === source.id
+            ? { ...entry, linkedTransactionId: target.id }
+            : entry,
+        ),
+        transactions: state.transactions
+          .filter((item) => item.id !== source.id)
+          .map((item) =>
+            item.id === target.id
+              ? {
+                  ...item,
+                  balanceAlreadySynced: synced,
+                  updatedAt: now(),
+                  linkedPlannedIncome: item.linkedPlannedIncome ?? source.linkedPlannedIncome,
+                }
+              : item,
+          ),
       };
     }
 
     case "LINK_INCOME_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
-      if (!tx || tx.type !== "income" || !tx.targetAccountId || tx.linkedPlannedIncome ||
-          !validISODate(tx.date)) return state;
-      const item = assignablePlannedIncome(state, tx).find((candidate) => candidate.id === action.itemId);
+      if (
+        !tx ||
+        tx.type !== "income" ||
+        !tx.targetAccountId ||
+        tx.linkedPlannedIncome ||
+        !validISODate(tx.date)
+      )
+        return state;
+      const item = assignablePlannedIncome(state, tx).find(
+        (candidate) => candidate.id === action.itemId,
+      );
       if (!item) return state;
       if (item.incomeSourceType === "one_time") {
-        const override = state.plannedIncomeOverrides.find((candidate) => candidate.id === item.overrideId);
+        const override = state.plannedIncomeOverrides.find(
+          (candidate) => candidate.id === item.overrideId,
+        );
         if (!override) return state;
         return {
           ...state,
-          plannedIncomeOverrides: state.plannedIncomeOverrides.filter((candidate) => candidate.id !== override.id),
-          transactions: state.transactions.map((candidate) => candidate.id === tx.id
-            ? { ...candidate, linkedPlannedIncome: { itemId: item.id, label: item.label,
-                originalOverride: override }, updatedAt: now() }
-            : candidate),
+          plannedIncomeOverrides: state.plannedIncomeOverrides.filter(
+            (candidate) => candidate.id !== override.id,
+          ),
+          transactions: state.transactions.map((candidate) =>
+            candidate.id === tx.id
+              ? {
+                  ...candidate,
+                  linkedPlannedIncome: {
+                    itemId: item.id,
+                    label: item.label,
+                    originalOverride: override,
+                  },
+                  updatedAt: now(),
+                }
+              : candidate,
+          ),
         };
       }
       const entries = item.incomeEntries ?? [];
       if (entries.length === 0 || entries.some((entry) => entry.paid)) return state;
-      const total = entries.reduce((sum, entry) => sum + (entry.actualAmount ?? entry.expectedAmount), 0);
+      const total = entries.reduce(
+        (sum, entry) => sum + (entry.actualAmount ?? entry.expectedAmount),
+        0,
+      );
       if (total <= 0) return state;
       let allocated = 0;
       const addedEntryIds: string[] = [];
@@ -787,15 +981,26 @@ export function reducer(state: AppState, action: Action): AppState {
       const replacements = new Map<string, TimesheetEntry>();
       entries.forEach((entry, index) => {
         const id = entry.auto ? newId() : entry.id;
-        const share = index === entries.length - 1
-          ? Math.round((tx.amount - allocated) * 100) / 100
-          : Math.round(tx.amount * ((entry.actualAmount ?? entry.expectedAmount) / total) * 100) / 100;
+        const share =
+          index === entries.length - 1
+            ? Math.round((tx.amount - allocated) * 100) / 100
+            : Math.round(tx.amount * ((entry.actualAmount ?? entry.expectedAmount) / total) * 100) /
+              100;
         allocated += share;
         if (entry.auto) addedEntryIds.push(id);
         else originalEntries.push(entry);
-        replacements.set(entry.id, { ...entry, id, auto: false, paid: true,
-          payStatus: "paid", userEdited: true, paidAccountId: tx.targetAccountId,
-          actualAmount: share, linkedTransactionId: tx.id, updatedAt: now() });
+        replacements.set(entry.id, {
+          ...entry,
+          id,
+          auto: false,
+          paid: true,
+          payStatus: "paid",
+          userEdited: true,
+          paidAccountId: tx.targetAccountId,
+          actualAmount: share,
+          linkedTransactionId: tx.id,
+          updatedAt: now(),
+        });
       });
       return {
         ...state,
@@ -803,47 +1008,91 @@ export function reducer(state: AppState, action: Action): AppState {
           ...state.timesheet.map((entry) => replacements.get(entry.id) ?? entry),
           ...entries.filter((entry) => entry.auto).map((entry) => replacements.get(entry.id)!),
         ],
-        transactions: state.transactions.map((candidate) => candidate.id === tx.id
-          ? { ...candidate, linkedPlannedIncome: { itemId: item.id, label: item.label,
-              originalEntries, addedEntryIds }, updatedAt: now() }
-          : candidate),
+        transactions: state.transactions.map((candidate) =>
+          candidate.id === tx.id
+            ? {
+                ...candidate,
+                linkedPlannedIncome: {
+                  itemId: item.id,
+                  label: item.label,
+                  originalEntries,
+                  addedEntryIds,
+                },
+                updatedAt: now(),
+              }
+            : candidate,
+        ),
       };
     }
 
     case "LINK_EXPENSE_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
-      if (!tx || tx.type !== "expense" || tx.linkedPlannedExpense || !validISODate(tx.date)) return state;
-      const item = assignablePlannedExpenses(state, tx).find((candidate) => candidate.id === action.itemId);
-      if (!item || (item.sourceType !== "one_time" && item.sourceType !== "recurring_bill")) return state;
+      if (!tx || tx.type !== "expense" || tx.linkedPlannedExpense || !validISODate(tx.date))
+        return state;
+      const item = assignablePlannedExpenses(state, tx).find(
+        (candidate) => candidate.id === action.itemId,
+      );
+      if (!item || (item.sourceType !== "one_time" && item.sourceType !== "recurring_bill"))
+        return state;
       // A monthly bill can have a due-date override in the following month.
       // The occurrence key, not the displayed due date, controls which month is paid.
-      const month = item.sourceType === "recurring_bill" ? item.id.slice(-7)
-        : state.plannedExpenseOverrides.find((override) => override.id === item.overrideId)?.month ?? "";
+      const month =
+        item.sourceType === "recurring_bill"
+          ? item.id.slice(-7)
+          : (state.plannedExpenseOverrides.find((override) => override.id === item.overrideId)
+              ?.month ?? "");
       const original = state.plannedExpenseOverrides.find((override) =>
-        item.sourceType === "one_time" ? override.id === item.overrideId
-          : override.sourceType === "recurring_bill" && override.sourceId === item.sourceId && override.month === month);
+        item.sourceType === "one_time"
+          ? override.id === item.overrideId
+          : override.sourceType === "recurring_bill" &&
+            override.sourceId === item.sourceId &&
+            override.month === month,
+      );
       if (item.sourceType === "one_time" && !original) return state;
       const createdOverrideId = item.sourceType === "recurring_bill" ? newId() : undefined;
-      const recurringBill = item.sourceType === "recurring_bill"
-        ? state.recurringBills.find((bill) => bill.id === item.sourceId) : undefined;
+      const recurringBill =
+        item.sourceType === "recurring_bill"
+          ? state.recurringBills.find((bill) => bill.id === item.sourceId)
+          : undefined;
       if (item.sourceType === "recurring_bill" && !recurringBill) return state;
       const link: NonNullable<Transaction["linkedPlannedExpense"]> = {
-        label: item.label, sourceType: item.sourceType, sourceId: item.sourceId,
-        month, createdOverrideId, originalOverride: original,
+        label: item.label,
+        sourceType: item.sourceType,
+        sourceId: item.sourceId,
+        month,
+        createdOverrideId,
+        originalOverride: original,
         ...(action.updateFutureBillAmount && recurringBill && recurringBill.amount !== tx.amount
-          ? { priorRecurringAmount: recurringBill.amount, matchedRecurringAmount: tx.amount } : {}),
+          ? { priorRecurringAmount: recurringBill.amount, matchedRecurringAmount: tx.amount }
+          : {}),
       };
       return {
         ...state,
-        recurringBills: link.priorRecurringAmount === undefined ? state.recurringBills :
-          state.recurringBills.map((bill) => bill.id === recurringBill?.id ? { ...bill, amount: tx.amount } : bill),
+        recurringBills:
+          link.priorRecurringAmount === undefined
+            ? state.recurringBills
+            : state.recurringBills.map((bill) =>
+                bill.id === recurringBill?.id ? { ...bill, amount: tx.amount } : bill,
+              ),
         plannedExpenseOverrides: [
           ...state.plannedExpenseOverrides.filter((override) => override.id !== original?.id),
-          ...(createdOverrideId ? [{ id: createdOverrideId, sourceType: "recurring_bill" as const,
-            sourceId: item.sourceId, month, action: "skip" as const }] : []),
+          ...(createdOverrideId
+            ? [
+                {
+                  id: createdOverrideId,
+                  sourceType: "recurring_bill" as const,
+                  sourceId: item.sourceId,
+                  month,
+                  action: "skip" as const,
+                },
+              ]
+            : []),
         ],
-        transactions: state.transactions.map((candidate) => candidate.id === tx.id
-          ? { ...candidate, linkedPlannedExpense: link, updatedAt: now() } : candidate),
+        transactions: state.transactions.map((candidate) =>
+          candidate.id === tx.id
+            ? { ...candidate, linkedPlannedExpense: link, updatedAt: now() }
+            : candidate,
+        ),
       };
     }
 
@@ -853,40 +1102,65 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!source || !target || !canMergeExpenses(source, target)) return state;
       // Reverse the duplicate's local impact. If the duplicate is bank-synced,
       // the remaining record must also be bank-synced, so reverse its manual impact instead.
-      const toReverse = source.balanceAlreadySynced ? (target.balanceAlreadySynced ? null : target) : source;
+      const toReverse = source.balanceAlreadySynced
+        ? target.balanceAlreadySynced
+          ? null
+          : target
+        : source;
       let next = state;
       // A bank-linked balance already contains the single real charge.
       if (!action.bankBalanceAuthoritative && toReverse?.cardId) {
         next = {
           ...next,
-          cards: next.cards.map((card) => card.id === toReverse.cardId
-            ? { ...card, currentBalance: clampNonNegative(card.currentBalance - toReverse.amount) }
-            : card),
+          cards: next.cards.map((card) =>
+            card.id === toReverse.cardId
+              ? {
+                  ...card,
+                  currentBalance: clampNonNegative(card.currentBalance - toReverse.amount),
+                }
+              : card,
+          ),
         };
       } else if (!action.bankBalanceAuthoritative && toReverse?.sourceAccountId) {
-        next = { ...next, accounts: updateAccount(next, toReverse.sourceAccountId, toReverse.amount) };
+        next = {
+          ...next,
+          accounts: updateAccount(next, toReverse.sourceAccountId, toReverse.amount),
+        };
       }
       const linked = (next.plannedIncomeOverrides ?? []).filter(
         (override) => override.linkedExpenseId === target.id,
       );
       return {
         ...next,
-        transactions: next.transactions.filter((tx) => tx.id !== source.id).map((tx) => tx.id === target.id
-          ? { ...tx, balanceAlreadySynced: Boolean(source.balanceAlreadySynced || target.balanceAlreadySynced),
-              linkedPlannedExpense: tx.linkedPlannedExpense ?? source.linkedPlannedExpense, updatedAt: now() }
-          : tx),
+        transactions: next.transactions
+          .filter((tx) => tx.id !== source.id)
+          .map((tx) =>
+            tx.id === target.id
+              ? {
+                  ...tx,
+                  balanceAlreadySynced: Boolean(
+                    source.balanceAlreadySynced || target.balanceAlreadySynced,
+                  ),
+                  linkedPlannedExpense: tx.linkedPlannedExpense ?? source.linkedPlannedExpense,
+                  updatedAt: now(),
+                }
+              : tx,
+          ),
         plannedIncomeOverrides: (next.plannedIncomeOverrides ?? [])
           .filter((override) => override.linkedExpenseId !== source.id || linked.length === 0)
-          .map((override) => override.linkedExpenseId === source.id
-            ? {
-                ...override,
-                linkedExpenseId: target.id,
-                sourceId: `friend-repayment-${target.id}`,
-                label: override.label === `Repayment: ${source.description.trim() || "friend"}`
-                  ? `Repayment: ${target.description.trim() || "friend"}`
-                  : override.label,
-              }
-            : override),
+          .map((override) =>
+            override.linkedExpenseId === source.id
+              ? {
+                  ...override,
+                  linkedExpenseId: target.id,
+                  sourceId: `friend-repayment-${target.id}`,
+                  label:
+                    override.label === `Repayment: ${source.description.trim() || "friend"}`
+                      ? `Repayment: ${target.description.trim() || "friend"}`
+                      : override.label,
+                }
+              : override,
+          ),
       };
     }
 
@@ -904,7 +1178,8 @@ export function reducer(state: AppState, action: Action): AppState {
           (p.method === "credit_card"
             ? !state.cards.some((card) => card.id === p.cardId)
             : !state.accounts.some((account) => account.id === p.sourceAccountId)))
-      ) return state;
+      )
+        return state;
       let next = state;
       if (!p.balanceAlreadySynced && p.method === "credit_card" && p.cardId) {
         next = {
@@ -959,66 +1234,147 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "UPDATE_CARD_PAYMENT": {
       const tx = state.transactions.find((item) => item.id === action.id);
-      if (!tx || tx.type !== "card_payment" || !validCardPayment(state, action.payload)) return state;
+      if (!tx || tx.type !== "card_payment" || !validCardPayment(state, action.payload))
+        return state;
       // Bank-linked evidence is immutable: correcting metadata must not invent a different transfer.
-      if ((tx.cardPayment?.bankCreditId || tx.cardPayment?.bankDebitId) &&
-          (action.payload.amount !== tx.amount || action.payload.cardId !== tx.cardId ||
-           action.payload.sourceAccountId !== tx.sourceAccountId)) return state;
+      if (
+        (tx.cardPayment?.bankCreditId || tx.cardPayment?.bankDebitId) &&
+        (action.payload.amount !== tx.amount ||
+          action.payload.cardId !== tx.cardId ||
+          action.payload.sourceAccountId !== tx.sourceAccountId)
+      )
+        return state;
       const undone = removeCardPayment(state, tx);
-      const result = recordCardPayment(undone, { ...action.payload, transactionId: tx.id,
+      const result = recordCardPayment(undone, {
+        ...action.payload,
+        transactionId: tx.id,
         cashPosted: tx.cardPayment?.bankDebitId ? true : action.payload.cashPosted,
         cardPosted: tx.cardPayment?.bankCreditId ? true : action.payload.cardPosted,
-        bankDebitId: tx.cardPayment?.bankDebitId, bankCreditId: tx.cardPayment?.bankCreditId,
+        bankDebitId: tx.cardPayment?.bankDebitId,
+        bankCreditId: tx.cardPayment?.bankCreditId,
         cashAlreadySynced: Boolean(tx.cardPayment?.bankDebitId),
-        cardAlreadySynced: Boolean(tx.cardPayment?.bankCreditId) });
-      return { ...result, transactions: result.transactions.map((item) => item.id === tx.id
-        ? { ...item, createdAt: tx.createdAt } : item) };
+        cardAlreadySynced: Boolean(tx.cardPayment?.bankCreditId),
+      });
+      return {
+        ...result,
+        transactions: result.transactions.map((item) =>
+          item.id === tx.id ? { ...item, createdAt: tx.createdAt } : item,
+        ),
+      };
     }
 
     case "RECONCILE_CARD_PAYMENT": {
       const tx = state.transactions.find((item) => item.id === action.id);
       if (!tx || tx.type !== "card_payment") return state;
-      const prior = tx.cardPayment ?? { version: 2 as const,
-        cashPosted: !state.accounts.find((account) => account.id === tx.sourceAccountId)?.bankLinked, cardPosted: false,
-        cashLocalApplied: tx.amount, cardLocalApplied: tx.amount, statementLocalApplied: 0 };
+      const prior = tx.cardPayment ?? {
+        version: 2 as const,
+        cashPosted: !state.accounts.find((account) => account.id === tx.sourceAccountId)
+          ?.bankLinked,
+        cardPosted: false,
+        cashLocalApplied: tx.amount,
+        cardLocalApplied: tx.amount,
+        statementLocalApplied: 0,
+      };
       const key = action.leg === "cash" ? "bankDebitId" : "bankCreditId";
       if (prior[key] && prior[key] !== action.bankId) return state;
-      if (state.transactions.some((item) => item.id !== tx.id && item.cardPayment?.[key] === action.bankId)) return state;
-      return { ...state, transactions: state.transactions.map((item) => item.id === tx.id
-        ? { ...item, cardPayment: { ...prior, [key]: action.bankId,
-            ...(action.leg === "cash" ? { cashPosted: true, cashLocalApplied: 0 }
-              : { cardPosted: true, cardLocalApplied: 0, statementLocalApplied: 0 }) },
-            updatedAt: now() } : item) };
+      if (
+        state.transactions.some(
+          (item) => item.id !== tx.id && item.cardPayment?.[key] === action.bankId,
+        )
+      )
+        return state;
+      return {
+        ...state,
+        transactions: state.transactions.map((item) =>
+          item.id === tx.id
+            ? {
+                ...item,
+                cardPayment: {
+                  ...prior,
+                  [key]: action.bankId,
+                  ...(action.leg === "cash"
+                    ? { cashPosted: true, cashLocalApplied: 0 }
+                    : { cardPosted: true, cardLocalApplied: 0, statementLocalApplied: 0 }),
+                },
+                updatedAt: now(),
+              }
+            : item,
+        ),
+      };
     }
 
     case "CONVERT_CARD_PAYMENT": {
       const expense = state.transactions.find((item) => item.id === action.id);
-      if (!expense || expense.type !== "expense" || expense.cardId || expense.linkedPlannedExpense ||
-          expense.reconciledByPaymentId || !validCardPayment(state, action.payload)) return state;
-      const kept = action.mergeIntoId ? state.transactions.find((item) => item.id === action.mergeIntoId) : undefined;
-      if (action.mergeIntoId && (!kept || kept.type !== "card_payment" ||
-          kept.cardId !== action.payload.cardId || kept.sourceAccountId !== expense.sourceAccountId ||
-          Math.round(kept.amount * 100) !== Math.round(expense.amount * 100))) return state;
+      if (
+        !expense ||
+        expense.type !== "expense" ||
+        expense.cardId ||
+        expense.linkedPlannedExpense ||
+        expense.reconciledByPaymentId ||
+        !validCardPayment(state, action.payload)
+      )
+        return state;
+      const kept = action.mergeIntoId
+        ? state.transactions.find((item) => item.id === action.mergeIntoId)
+        : undefined;
+      if (
+        action.mergeIntoId &&
+        (!kept ||
+          kept.type !== "card_payment" ||
+          kept.cardId !== action.payload.cardId ||
+          kept.sourceAccountId !== expense.sourceAccountId ||
+          Math.round(kept.amount * 100) !== Math.round(expense.amount * 100))
+      )
+        return state;
       const account = state.accounts.find((item) => item.id === expense.sourceAccountId);
       // Undo the local expense, then replace it with one transfer, never a second expense.
-      const undone = { ...state,
-        accounts: !expense.balanceAlreadySynced && account && !account.bankLinked
-          ? updateAccountCents(state, account.id, expense.amount) : state.accounts,
-        transactions: state.transactions.filter((item) => item.id !== expense.id) };
+      const undone = {
+        ...state,
+        accounts:
+          !expense.balanceAlreadySynced && account && !account.bankLinked
+            ? updateAccountCents(state, account.id, expense.amount)
+            : state.accounts,
+        transactions: state.transactions.filter((item) => item.id !== expense.id),
+      };
       if (kept) {
-        const applyCash = kept.cardPayment?.cashPosted === false && !account?.bankLinked && !expense.balanceAlreadySynced;
-        return { ...undone,
-          accounts: applyCash ? updateAccountCents(undone, expense.sourceAccountId!, -expense.amount) : undone.accounts,
-          transactions: undone.transactions.map((item) => item.id === kept.id
-          ? { ...item, cardPayment: { ...(item.cardPayment ?? { version: 2 as const,
-              cardPosted: false, cardLocalApplied: item.amount, statementLocalApplied: 0, cashLocalApplied: item.amount }),
-              ...(applyCash ? { cashLocalApplied: expense.amount } : {}),
-              cashPosted: !!expense.balanceAlreadySynced || !account?.bankLinked }, updatedAt: now() } : item) };
+        const applyCash =
+          kept.cardPayment?.cashPosted === false &&
+          !account?.bankLinked &&
+          !expense.balanceAlreadySynced;
+        return {
+          ...undone,
+          accounts: applyCash
+            ? updateAccountCents(undone, expense.sourceAccountId!, -expense.amount)
+            : undone.accounts,
+          transactions: undone.transactions.map((item) =>
+            item.id === kept.id
+              ? {
+                  ...item,
+                  cardPayment: {
+                    ...(item.cardPayment ?? {
+                      version: 2 as const,
+                      cardPosted: false,
+                      cardLocalApplied: item.amount,
+                      statementLocalApplied: 0,
+                      cashLocalApplied: item.amount,
+                    }),
+                    ...(applyCash ? { cashLocalApplied: expense.amount } : {}),
+                    cashPosted: !!expense.balanceAlreadySynced || !account?.bankLinked,
+                  },
+                  updatedAt: now(),
+                }
+              : item,
+          ),
+        };
       }
-      return recordCardPayment(undone, { ...action.payload, amount: expense.amount,
-        sourceAccountId: expense.sourceAccountId!, transactionId: expense.id,
+      return recordCardPayment(undone, {
+        ...action.payload,
+        amount: expense.amount,
+        sourceAccountId: expense.sourceAccountId!,
+        transactionId: expense.id,
         cashPosted: !!expense.balanceAlreadySynced || !account?.bankLinked,
-        cashAlreadySynced: expense.balanceAlreadySynced || account?.bankLinked });
+        cashAlreadySynced: expense.balanceAlreadySynced || account?.bankLinked,
+      });
     }
 
     case "PAY_DEBT": {
@@ -1027,9 +1383,16 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!debt) return state;
       const principal = p.principalAmount ?? Math.min(p.amount, debt.balance);
       const pay = p.principalAmount === undefined ? principal : p.amount;
-      if (!Number.isFinite(pay) || pay <= 0 || !Number.isFinite(principal) ||
-          principal < 0 || principal > pay || principal > debt.balance ||
-          !state.accounts.some((account) => account.id === p.sourceAccountId)) return state;
+      if (
+        !Number.isFinite(pay) ||
+        pay <= 0 ||
+        !Number.isFinite(principal) ||
+        principal < 0 ||
+        principal > pay ||
+        principal > debt.balance ||
+        !state.accounts.some((account) => account.id === p.sourceAccountId)
+      )
+        return state;
       const nextBalance = clampNonNegative(debt.balance - principal);
       const next: AppState = {
         ...state,
@@ -1065,12 +1428,22 @@ export function reducer(state: AppState, action: Action): AppState {
     case "REVIEW_DEBT_PAYMENT": {
       const p = action.payload;
       const cents = (value: number) => Math.abs(value * 100 - Math.round(value * 100)) < 0.00001;
-      if (!validISODate(p.date) || !cents(p.amount) || !cents(p.principalAmount) ||
-          !Number.isFinite(p.amount) || !Number.isFinite(p.principalAmount)) return state;
+      if (
+        !validISODate(p.date) ||
+        !cents(p.amount) ||
+        !cents(p.principalAmount) ||
+        !Number.isFinite(p.amount) ||
+        !Number.isFinite(p.principalAmount)
+      )
+        return state;
       const planned = expensesComingBreakdown(state, new Date(`${p.date}T12:00:00`), "this_month")
         .flatMap((section) => section.items)
-        .find((item) => item.sourceType === "debt_plan" && item.sourceId === p.debtId &&
-          item.dueDate?.slice(0, 7) === p.date.slice(0, 7));
+        .find(
+          (item) =>
+            item.sourceType === "debt_plan" &&
+            item.sourceId === p.debtId &&
+            item.dueDate?.slice(0, 7) === p.date.slice(0, 7),
+        );
       const paid = reducer(state, { type: "PAY_DEBT", payload: p });
       if (paid === state || !planned) return paid;
       const remaining = Math.round((planned.amount - p.amount) * 100) / 100;
@@ -1156,14 +1529,23 @@ export function reducer(state: AppState, action: Action): AppState {
       const p = action.payload;
       const account = state.accounts.find((a) => a.id === p.accountId);
       const plannedOverride = p.plannedIncomeOverrideId
-        ? state.plannedIncomeOverrides.find((override) => override.id === p.plannedIncomeOverrideId && override.action === "add")
+        ? state.plannedIncomeOverrides.find(
+            (override) => override.id === p.plannedIncomeOverrideId && override.action === "add",
+          )
         : undefined;
-      if (!account || !Number.isFinite(p.amount) || p.amount <= 0 ||
-          (p.plannedIncomeOverrideId && !plannedOverride) ||
-          (p.transactionId && state.transactions.some((tx) => tx.id === p.transactionId))) return state;
+      if (
+        !account ||
+        !Number.isFinite(p.amount) ||
+        p.amount <= 0 ||
+        (p.plannedIncomeOverrideId && !plannedOverride) ||
+        (p.transactionId && state.transactions.some((tx) => tx.id === p.transactionId))
+      )
+        return state;
       const next: AppState = {
         ...state,
-        accounts: p.balanceAlreadySynced ? state.accounts : updateAccount(state, p.accountId, p.amount),
+        accounts: p.balanceAlreadySynced
+          ? state.accounts
+          : updateAccount(state, p.accountId, p.amount),
         plannedIncomeOverrides: plannedOverride
           ? state.plannedIncomeOverrides.filter((override) => override.id !== plannedOverride.id)
           : state.plannedIncomeOverrides,
@@ -1178,13 +1560,22 @@ export function reducer(state: AppState, action: Action): AppState {
         notes: p.notes,
         balanceAlreadySynced: p.balanceAlreadySynced,
         linkedPlannedIncome: plannedOverride
-          ? { itemId: plannedOverride.id, label: plannedOverride.label ?? "One-time income",
-              originalOverride: plannedOverride }
+          ? {
+              itemId: plannedOverride.id,
+              label: plannedOverride.label ?? "One-time income",
+              originalOverride: plannedOverride,
+            }
           : undefined,
       };
-      return { ...next, transactions: p.transactionId
-        ? [{ ...tx, id: p.transactionId, createdAt: now(), updatedAt: now() }, ...next.transactions]
-        : addTx(next, tx) };
+      return {
+        ...next,
+        transactions: p.transactionId
+          ? [
+              { ...tx, id: p.transactionId, createdAt: now(), updatedAt: now() },
+              ...next.transactions,
+            ]
+          : addTx(next, tx),
+      };
     }
 
     case "UPSERT_TIMESHEET": {
@@ -1233,12 +1624,20 @@ export function reducer(state: AppState, action: Action): AppState {
         description: entry.jobName,
         date: date ?? entry.date,
         targetAccountId: paidAccountId,
-        linkedPlannedIncome: { itemId: entry.id, label: entry.jobName,
-          originalEntries: [entry], addedEntryIds: [] },
+        linkedPlannedIncome: {
+          itemId: entry.id,
+          label: entry.jobName,
+          originalEntries: [entry],
+          addedEntryIds: [],
+        },
       };
-      return { ...next, transactions: [
-        { ...tx, id: transactionId, createdAt: now(), updatedAt: now() }, ...next.transactions,
-      ] };
+      return {
+        ...next,
+        transactions: [
+          { ...tx, id: transactionId, createdAt: now(), updatedAt: now() },
+          ...next.transactions,
+        ],
+      };
     }
     case "UNMARK_TIMESHEET_PAID": {
       const entry = state.timesheet.find((t) => t.id === action.payload.id);
@@ -1250,7 +1649,8 @@ export function reducer(state: AppState, action: Action): AppState {
         return {
           ...restored,
           accounts: linked.targetAccountId
-            ? updateAccountCents(restored, linked.targetAccountId, -linked.amount) : restored.accounts,
+            ? updateAccountCents(restored, linked.targetAccountId, -linked.amount)
+            : restored.accounts,
           transactions: restored.transactions.filter((tx) => tx.id !== linked.id),
         };
       }
