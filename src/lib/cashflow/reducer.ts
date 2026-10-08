@@ -41,6 +41,7 @@ export type Action =
   | { type: "SYNC_CARD_BALANCE"; id: string; balance: number; limit: number }
   | { type: "UPDATE_CARD_PAYMENT"; id: string; payload: CardPaymentInput }
   | { type: "RECONCILE_CARD_PAYMENT"; id: string; leg: "cash" | "card"; bankId: string }
+  | { type: "RECONCILE_ACCOUNT_TRANSFER"; id: string; leg: "debit" | "credit"; bankId: string }
   | { type: "CONVERT_CARD_PAYMENT"; id: string; payload: CardPaymentInput; mergeIntoId?: string }
   | { type: "DELETE_CARD"; id: string }
   | { type: "ADD_DEBT"; payload: Omit<Debt, "id"> }
@@ -171,6 +172,11 @@ export type Action =
         amount: number;
         date: string;
         notes?: string;
+        transactionId?: string;
+        bankDebitId?: string;
+        bankCreditId?: string;
+        debitAlreadySynced?: boolean;
+        creditAlreadySynced?: boolean;
       };
     }
   | {
@@ -777,6 +783,17 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "DELETE_TRANSACTION": {
       const transaction = state.transactions.find((tx) => tx.id === action.id);
+      if (transaction?.type === "transfer") {
+        const fromApplied = transaction.accountTransfer?.fromLocalApplied ?? transaction.amount;
+        const toApplied = transaction.accountTransfer?.toLocalApplied ?? transaction.amount;
+        return { ...state,
+          accounts: state.accounts.map((account) => account.id === transaction.sourceAccountId && !account.bankLinked
+            ? { ...account, balance: Math.round((account.balance + fromApplied) * 100) / 100 }
+            : account.id === transaction.targetAccountId && !account.bankLinked
+              ? { ...account, balance: Math.round((account.balance - toApplied) * 100) / 100 }
+              : account),
+          transactions: state.transactions.filter((tx) => tx.id !== transaction.id) };
+      }
       if (transaction?.type === "card_payment") return removeCardPayment(state, transaction);
       if (transaction?.type === "debt_payment") {
         const principal = transaction.debtPrincipalAmount ?? transaction.amount;
@@ -1461,13 +1478,23 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "ADD_TRANSFER": {
       const p = action.payload;
+      if (!Number.isFinite(p.amount) || p.amount <= 0 ||
+          Math.abs(p.amount * 100 - Math.round(p.amount * 100)) > 0.00001 ||
+          !validISODate(p.date) || p.fromAccountId === p.toAccountId ||
+          !state.accounts.some((account) => account.id === p.fromAccountId) ||
+          !state.accounts.some((account) => account.id === p.toAccountId) ||
+          (p.transactionId && state.transactions.some((tx) => tx.id === p.transactionId))) return state;
+      const fromLocalApplied = state.accounts.find((a) => a.id === p.fromAccountId)?.bankLinked ||
+        p.debitAlreadySynced ? 0 : p.amount;
+      const toLocalApplied = state.accounts.find((a) => a.id === p.toAccountId)?.bankLinked ||
+        p.creditAlreadySynced ? 0 : p.amount;
       const next: AppState = {
         ...state,
         accounts: state.accounts.map((a) => {
           if (a.id === p.fromAccountId)
-            return { ...a, balance: a.balance - p.amount, updatedAt: now() };
+            return { ...a, balance: Math.round((a.balance - fromLocalApplied) * 100) / 100, updatedAt: now() };
           if (a.id === p.toAccountId)
-            return { ...a, balance: a.balance + p.amount, updatedAt: now() };
+            return { ...a, balance: Math.round((a.balance + toLocalApplied) * 100) / 100, updatedAt: now() };
           return a;
         }),
       };
@@ -1475,13 +1502,30 @@ export function reducer(state: AppState, action: Action): AppState {
         type: "transfer",
         amount: p.amount,
         category: "Transfer",
-        description: "Account transfer",
+        description: `${state.accounts.find((a) => a.id === p.fromAccountId)?.name} to ${state.accounts.find((a) => a.id === p.toAccountId)?.name}`,
         date: p.date,
         sourceAccountId: p.fromAccountId,
         targetAccountId: p.toAccountId,
         notes: p.notes,
+        accountTransfer: { version: 1, bankDebitId: p.bankDebitId,
+          bankCreditId: p.bankCreditId, fromLocalApplied, toLocalApplied },
       };
-      return { ...next, transactions: addTx(next, tx) };
+      const stamp = now();
+      return { ...next, transactions: [{ ...tx, id: p.transactionId ?? newId(),
+        createdAt: stamp, updatedAt: stamp }, ...next.transactions] };
+    }
+
+    case "RECONCILE_ACCOUNT_TRANSFER": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || tx.type !== "transfer" || !tx.accountTransfer || !action.bankId) return state;
+      const key = action.leg === "debit" ? "bankDebitId" : "bankCreditId";
+      if (tx.accountTransfer[key] === action.bankId) return state;
+      if (tx.accountTransfer[key] || state.transactions.some((item) =>
+        item.id !== tx.id && (item.accountTransfer?.bankDebitId === action.bankId ||
+          item.accountTransfer?.bankCreditId === action.bankId))) return state;
+      return { ...state, transactions: state.transactions.map((item) => item.id === tx.id
+        ? { ...item, accountTransfer: { ...tx.accountTransfer!, [key]: action.bankId }, updatedAt: now() }
+        : item) };
     }
 
     case "ADD_ADJUSTMENT": {

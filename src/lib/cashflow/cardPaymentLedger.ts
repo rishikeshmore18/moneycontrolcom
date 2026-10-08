@@ -159,6 +159,14 @@ export function pendingCashForAccount(state: AppState, accountId: string): numbe
   );
 }
 
+/** The destination may post first. Reserve an unposted source leg until its bank row is linked. */
+export function pendingTransferCashForAccount(state: AppState, accountId: string): number {
+  if (!state.accounts.some((account) => account.id === accountId && account.bankLinked)) return 0;
+  return cents(state.transactions.reduce((total, tx) => total +
+    (tx.type === "transfer" && tx.sourceAccountId === accountId && tx.accountTransfer &&
+      !tx.accountTransfer.bankDebitId ? tx.amount : 0), 0));
+}
+
 export function pendingCardPayments(state: AppState, cardId: string): number {
   return cents(
     state.transactions.reduce(

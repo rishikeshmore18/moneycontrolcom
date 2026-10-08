@@ -168,6 +168,14 @@ export interface Transaction {
     bankDebitId?: string;
     bankCreditId?: string;
   };
+  /** A single movement between owned accounts, with each bank leg linked separately. */
+  accountTransfer?: {
+    version: 1;
+    bankDebitId?: string;
+    bankCreditId?: string;
+    fromLocalApplied: number;
+    toLocalApplied: number;
+  };
   /** The unpaid item this accepted transaction settled, for safe undo and audit. */
   linkedPlannedIncome?: {
     itemId: string;
