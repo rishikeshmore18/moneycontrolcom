@@ -19,6 +19,74 @@ export function goalBalance(goal: SavingsGoal): number {
   return goalMoney(goal.movements.reduce((sum, movement) => sum + goalCents(movement.amount), 0));
 }
 
+/** Contribution reminders measure recorded allocations; a plan never moves cash. */
+export function goalPlanProgress(
+  state: AppState,
+  goal: SavingsGoal,
+  today: string,
+): {
+  cadence: "weekly" | "monthly";
+  saved: number;
+  remaining: number;
+  periodEnd: string;
+  estimatedAtDeadline?: number;
+} | null {
+  const cadence = goal.plan?.cadence;
+  const amount = goal.plan?.amount;
+  if ((cadence !== "weekly" && cadence !== "monthly") || !amount) return null;
+  const date = new Date(`${today}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  let start: string;
+  let end: string;
+  if (cadence === "monthly") {
+    start = `${today.slice(0, 7)}-01`;
+    end = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+  } else {
+    const monday = new Date(date);
+    monday.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+    start = monday.toISOString().slice(0, 10);
+    monday.setUTCDate(monday.getUTCDate() + 6);
+    end = monday.toISOString().slice(0, 10);
+  }
+  const saved = goalMoney(
+    Math.max(
+      0,
+      goal.movements
+        .filter(
+          (movement) =>
+            movement.date >= start &&
+            movement.date <= end &&
+            (movement.kind === "save" || movement.kind === "release"),
+        )
+        .reduce((sum, movement) => sum + goalCents(movement.amount), 0),
+    ),
+  );
+  const remaining = goalMoney(Math.max(0, goalCents(amount) - goalCents(saved)));
+  let estimatedAtDeadline: number | undefined;
+  if (goal.targetDate && goal.targetDate >= today) {
+    const deadline = new Date(`${goal.targetDate}T12:00:00Z`);
+    let periods: number;
+    if (cadence === "monthly") {
+      periods = (deadline.getUTCFullYear() - year) * 12 + deadline.getUTCMonth() - month + 1;
+    } else {
+      const deadlineWeek = new Date(deadline);
+      deadlineWeek.setUTCDate(deadline.getUTCDate() - ((deadline.getUTCDay() + 6) % 7));
+      periods =
+        Math.round(
+          (deadlineWeek.getTime() - new Date(`${start}T12:00:00Z`).getTime()) / (7 * 86_400_000),
+        ) + 1;
+    }
+    estimatedAtDeadline = goalMoney(
+      goalCents(backedGoalTotal(state, goal.id)) +
+        goalCents(remaining) +
+        Math.max(0, periods - 1) * goalCents(amount),
+    );
+  }
+  return { cadence, saved, remaining, periodEnd: end, estimatedAtDeadline };
+}
+
 export function allocatedInAccount(state: AppState, accountId: string): number {
   return goalMoney(
     (state.savingsGoals ?? []).reduce(

@@ -7,7 +7,12 @@ import {
   spendableCash,
   spendableToday,
 } from "./forecast";
-import { goalAvailable, goalBalanceInAccount, goalUnfundedAmount } from "./savingsGoals";
+import {
+  goalAvailable,
+  goalBalanceInAccount,
+  goalPlanProgress,
+  goalUnfundedAmount,
+} from "./savingsGoals";
 
 const date = "2026-10-08";
 const ref = new Date(2026, 9, 8, 12);
@@ -91,6 +96,78 @@ function goalState(): AppState {
 }
 
 describe("savings goals keep cash, card obligations and location in sync", () => {
+  it("tracks weekly and monthly contributions without treating a plan as cash or an upcoming bill", () => {
+    let state = reducer(fixture(), {
+      type: "ADD_SAVINGS_GOAL",
+      payload: { name: "Car repairs", plan: { cadence: "weekly", amount: 75 } },
+    });
+    const id = state.savingsGoals![0].id;
+    const before = spendableCash(state);
+    const bills = expensesComingTotal(state, ref);
+    expect(spendableCash(state)).toBe(before);
+    expect(expensesComingTotal(state, ref)).toBe(bills);
+    state = reducer(state, {
+      type: "ALLOCATE_GOAL",
+      goalId: id,
+      accountId: "checking",
+      amount: 40,
+      date: "2026-10-08",
+    });
+    state = reducer(state, {
+      type: "ALLOCATE_GOAL",
+      goalId: id,
+      accountId: "wallet",
+      amount: 35,
+      date: "2026-10-09",
+    });
+    expect(goalPlanProgress(state, state.savingsGoals![0], "2026-10-11")?.remaining).toBe(0);
+    state = reducer(state, {
+      type: "RELEASE_GOAL",
+      goalId: id,
+      accountId: "wallet",
+      amount: 10,
+      date: "2026-10-10",
+    });
+    expect(goalPlanProgress(state, state.savingsGoals![0], "2026-10-11")?.remaining).toBe(10);
+    expect(goalPlanProgress(state, state.savingsGoals![0], "2026-10-12")?.remaining).toBe(75);
+    expect(expensesComingTotal(state, ref)).toBe(bills);
+    state = reducer(state, {
+      type: "UPDATE_SAVINGS_GOAL",
+      id,
+      payload: { name: "Car repairs", plan: { cadence: "monthly", amount: 100 } },
+    });
+    expect(goalPlanProgress(state, state.savingsGoals![0], "2026-10-31")?.remaining).toBe(35);
+    expect(goalPlanProgress(state, state.savingsGoals![0], "2026-11-01")?.remaining).toBe(100);
+  });
+
+  it("keeps a one-time target separate and estimates a dated recurring target as a plan only", () => {
+    let state = reducer(fixture(), {
+      type: "ADD_SAVINGS_GOAL",
+      payload: { name: "Trip", plan: { cadence: "lump_sum" }, targetAmount: 500 },
+    });
+    expect(goalPlanProgress(state, state.savingsGoals![0], date)).toBeNull();
+    const id = state.savingsGoals![0].id;
+    state = reducer(state, {
+      type: "UPDATE_SAVINGS_GOAL",
+      id,
+      payload: {
+        name: "Trip",
+        plan: { cadence: "weekly", amount: 50 },
+        targetAmount: 500,
+        targetDate: "2026-10-18",
+      },
+    });
+    const progress = goalPlanProgress(state, state.savingsGoals![0], "2026-10-08");
+    expect(progress?.estimatedAtDeadline).toBe(100);
+    expect(spendableCash(state)).toBe(spendableCash(fixture()));
+    expect(
+      reducer(state, {
+        type: "UPDATE_SAVINGS_GOAL",
+        id,
+        payload: { name: "Trip", plan: { cadence: "monthly", amount: -5 } },
+      }),
+    ).toBe(state);
+  });
   it("earmarks bank and cash without creating money and refuses over allocation", () => {
     const state = goalState();
     const goal = state.savingsGoals![0];

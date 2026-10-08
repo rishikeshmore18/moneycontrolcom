@@ -35,8 +35,8 @@ export type Action =
   | { type: "RESET" }
   | { type: "COMPLETE_ONBOARDING"; payload: Partial<AppState> }
   | { type: "UPDATE_PROFILE"; payload: Partial<AppState["profile"]> }
-  | { type: "ADD_SAVINGS_GOAL"; payload: { name: string; targetAmount?: number; targetDate?: string } }
-  | { type: "UPDATE_SAVINGS_GOAL"; id: string; payload: { name: string; targetAmount?: number; targetDate?: string } }
+  | { type: "ADD_SAVINGS_GOAL"; payload: { name: string; plan?: SavingsGoal["plan"]; targetAmount?: number; targetDate?: string } }
+  | { type: "UPDATE_SAVINGS_GOAL"; id: string; payload: { name: string; plan?: SavingsGoal["plan"]; targetAmount?: number; targetDate?: string } }
   | { type: "ALLOCATE_GOAL"; goalId: string; accountId: string; amount: number; date: string }
   | { type: "RELEASE_GOAL"; goalId: string; accountId: string; amount: number; date: string }
   | { type: "DELETE_SAVINGS_GOAL"; id: string }
@@ -422,23 +422,29 @@ export function reducer(state: AppState, action: Action): AppState {
       return { ...state, profile: { ...state.profile, ...action.payload } };
 
     case "ADD_SAVINGS_GOAL": {
-      const { name, targetAmount, targetDate } = action.payload;
+      const { name, plan, targetAmount, targetDate } = action.payload;
       if (!name.trim() || name.trim().length > 80 ||
           (targetAmount !== undefined && !validGoalAmount(targetAmount)) ||
-          (targetDate && !validISODate(targetDate))) return state;
+          (targetDate && !validISODate(targetDate)) ||
+          (plan && (!(["weekly", "monthly", "lump_sum"] as const).includes(plan.cadence) ||
+            (plan.cadence === "lump_sum" ? plan.amount !== undefined || targetAmount === undefined :
+              !validGoalAmount(plan.amount ?? 0))))) return state;
       return { ...state, savingsGoals: [...(state.savingsGoals ?? []), {
-        id: newId(), name: name.trim(), targetAmount, targetDate,
+        id: newId(), name: name.trim(), plan, targetAmount, targetDate,
         createdAt: now(), movements: [],
       }] };
     }
     case "UPDATE_SAVINGS_GOAL": {
       if (!state.savingsGoals?.some((goal) => goal.id === action.id)) return state;
-      const { name, targetAmount, targetDate } = action.payload;
+      const { name, plan, targetAmount, targetDate } = action.payload;
       if (!name.trim() || name.trim().length > 80 ||
           (targetAmount !== undefined && !validGoalAmount(targetAmount)) ||
-          (targetDate && !validISODate(targetDate))) return state;
+          (targetDate && !validISODate(targetDate)) ||
+          (plan && (!(["weekly", "monthly", "lump_sum"] as const).includes(plan.cadence) ||
+            (plan.cadence === "lump_sum" ? plan.amount !== undefined || targetAmount === undefined :
+              !validGoalAmount(plan.amount ?? 0))))) return state;
       return { ...state, savingsGoals: state.savingsGoals.map((goal) => goal.id === action.id
-        ? { ...goal, name: name.trim(), targetAmount, targetDate } : goal) };
+        ? { ...goal, name: name.trim(), plan, targetAmount, targetDate } : goal) };
     }
     case "ALLOCATE_GOAL":
     case "RELEASE_GOAL": {
