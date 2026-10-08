@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney, toNumber } from "@/lib/cashflow/money";
 import { formatDisplayDate, todayISO } from "@/lib/cashflow/dates";
+import { validISODate } from "@/lib/cashflow/friendRepayment";
 import {
   allocatedInAccount,
   backedGoalInAccount,
@@ -10,6 +11,7 @@ import {
   goalAvailableInAccount,
   goalBalance,
   goalBalanceInAccount,
+  goalPlanProgress,
   goalUnfundedAmount,
   outstandingGoalCardCharges,
 } from "@/lib/cashflow/savingsGoals";
@@ -22,6 +24,8 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
   const { state, dispatch } = useApp();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
+  const [planType, setPlanType] = useState<"weekly" | "monthly" | "lump_sum">("lump_sum");
+  const [contribution, setContribution] = useState("");
   const [deadline, setDeadline] = useState("");
   const [goalId, setGoalId] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -35,14 +39,38 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
 
   function submitGoal() {
     const desired = target.trim() ? toNumber(target) : undefined;
-    if (!name.trim() || (target.trim() && (!desired || desired <= 0)))
-      return toast("Enter a goal name and a valid target or deadline.");
-    const payload = { name, targetAmount: desired, targetDate: deadline || undefined };
+    const planned = toNumber(contribution);
+    if (!name.trim() || name.trim().length > 80)
+      return toast("Enter a goal name of up to 80 characters.");
+    if (deadline && !validISODate(deadline))
+      return toast("Choose a valid deadline or leave it empty.");
+    if ((target.trim() && (!desired || desired <= 0)) || (planType === "lump_sum" && !desired))
+      return toast("Enter a target amount for this goal.");
+    if (desired && Math.abs(desired * 100 - Math.round(desired * 100)) > 0.00001)
+      return toast("Enter the target amount in dollars and cents.");
+    if (
+      planType !== "lump_sum" &&
+      (planned <= 0 ||
+        !Number.isFinite(planned) ||
+        Math.abs(planned * 100 - Math.round(planned * 100)) > 0.00001)
+    )
+      return toast(`Enter the amount to save each ${planType === "weekly" ? "week" : "month"}.`);
+    const payload = {
+      name,
+      targetAmount: desired,
+      targetDate: deadline || undefined,
+      plan:
+        planType === "lump_sum"
+          ? { cadence: "lump_sum" as const }
+          : { cadence: planType, amount: planned },
+    };
     if (editing) dispatch({ type: "UPDATE_SAVINGS_GOAL", id: editing, payload });
     else dispatch({ type: "ADD_SAVINGS_GOAL", payload });
     setEditing("");
     setName("");
     setTarget("");
+    setContribution("");
+    setPlanType("lump_sum");
     setDeadline("");
   }
 
@@ -85,6 +113,7 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
             const held = backedGoalTotal(state, item.id);
             const recorded = goalBalance(item);
             const committed = outstandingGoalCardCharges(state, item.id);
+            const progress = goalPlanProgress(state, item, todayISO());
             const monthsLeft =
               item.targetDate && item.targetDate >= todayISO()
                 ? Math.max(
@@ -113,6 +142,8 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
                       setEditing(item.id);
                       setName(item.name);
                       setTarget(item.targetAmount ? String(item.targetAmount) : "");
+                      setPlanType(item.plan?.cadence ?? "lump_sum");
+                      setContribution(item.plan?.amount ? String(item.plan.amount) : "");
                       setDeadline(item.targetDate ?? "");
                     }}
                   >
@@ -128,10 +159,39 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
                 {item.targetAmount && (
                   <p className="text-xs text-muted-foreground">
                     {Math.min(100, Math.round((held / item.targetAmount) * 100))}% of target
-                    {monthsLeft && held < item.targetAmount
+                    {!progress && monthsLeft && held < item.targetAmount
                       ? ` · about ${money(Math.ceil(((item.targetAmount - held) / monthsLeft) * 100) / 100)} per month to reach the deadline`
                       : ""}
                   </p>
+                )}
+                {progress && (
+                  <div className="mt-2 space-y-1 text-sm">
+                    <p>
+                      <b>
+                        {money(item.plan!.amount!)}/
+                        {progress.cadence === "weekly" ? "week" : "month"}
+                      </b>{" "}
+                      planned · {money(progress.saved)} saved this{" "}
+                      {progress.cadence === "weekly" ? "week" : "month"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {progress.remaining > 0
+                        ? `${money(progress.remaining)} left to save this ${progress.cadence === "weekly" ? "week" : "month"}`
+                        : "Contribution met for this period"}
+                      . Planned amounts stay out of your balances until you save them.
+                    </p>
+                    {item.targetAmount &&
+                      item.targetDate &&
+                      progress.estimatedAtDeadline !== undefined && (
+                        <p className="text-xs text-muted-foreground">
+                          At this pace: about {money(progress.estimatedAtDeadline)} by{" "}
+                          {formatDisplayDate(item.targetDate)}
+                          {progress.estimatedAtDeadline < item.targetAmount
+                            ? ` · ${money(item.targetAmount - progress.estimatedAtDeadline)} below target`
+                            : " · target on track"}
+                        </p>
+                      )}
+                  </div>
                 )}
                 {committed > 0 && (
                   <p className="text-xs text-muted-foreground">
@@ -152,9 +212,12 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
                   onClick={() => {
                     setGoalId(item.id);
                     setMode("save");
+                    setAmount(progress?.remaining ? String(progress.remaining) : "");
                   }}
                 >
-                  Save this month
+                  {progress?.remaining
+                    ? `Save ${money(progress.remaining)} this ${progress.cadence === "weekly" ? "week" : "month"}`
+                    : "Add savings"}
                 </Button>
               </div>
             );
@@ -169,10 +232,33 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
               placeholder="Trip, car expenses…"
             />
           </Field>
-          <Field label="Target amount (optional)">
+          <Field label="How do you want to save?">
+            <Select
+              value={planType}
+              onChange={(event) => setPlanType(event.target.value as typeof planType)}
+            >
+              <option value="lump_sum">One-time target amount</option>
+              <option value="weekly">Save an amount each week</option>
+              <option value="monthly">Save an amount each month</option>
+            </Select>
+          </Field>
+          {planType !== "lump_sum" && (
+            <Field label={`Amount to save each ${planType === "weekly" ? "week" : "month"}`}>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                inputMode="decimal"
+                value={contribution}
+                onChange={(event) => setContribution(event.target.value)}
+              />
+            </Field>
+          )}
+          <Field label={planType === "lump_sum" ? "Target amount" : "Total target (optional)"}>
             <Input
               type="number"
-              min="0"
+              min="0.01"
+              step="0.01"
               inputMode="decimal"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
@@ -189,8 +275,8 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
           <div className="grid gap-3 rounded-2xl border border-border p-4">
             <strong>Save money or release it</strong>
             <p className="text-xs text-muted-foreground">
-              Choose where this month’s money is held. This earmarks existing money; it does not
-              transfer it.
+              Choose where this money is held. This earmarks existing money; it does not transfer
+              it.
             </p>
             <Field label="Goal">
               <Select value={goalId} onChange={(e) => setGoalId(e.target.value)}>
@@ -204,7 +290,7 @@ export function SavingsGoalsSheet({ onClose }: { onClose: () => void }) {
             </Field>
             <Field label="Action">
               <Select value={mode} onChange={(e) => setMode(e.target.value as "save" | "release")}>
-                <option value="save">Save this month</option>
+                <option value="save">Set aside money</option>
                 <option value="release">Release uncommitted savings</option>
               </Select>
             </Field>

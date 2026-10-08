@@ -313,6 +313,8 @@ export interface SavingsGoalMovement {
 export interface SavingsGoal {
   id: string;
   name: string;
+  /** A contribution plan is a prompt, never an account debit or forecast obligation. */
+  plan?: { cadence: "weekly" | "monthly" | "lump_sum"; amount?: number };
   targetAmount?: number;
   targetDate?: string;
   createdAt: string;
