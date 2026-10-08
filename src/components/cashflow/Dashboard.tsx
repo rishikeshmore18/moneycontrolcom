@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   CalendarClock,
@@ -14,6 +14,9 @@ import {
 import { Card, KPI } from "./Card";
 import { Sheet } from "./Sheet";
 import { CardPaymentEditor } from "./CardPaymentEditor";
+import { SavingsGoalsSheet } from "./SavingsGoalsSheet";
+import { backedGoalTotal } from "@/lib/cashflow/savingsGoals";
+import { goalAvailable, goalBalanceInAccount } from "@/lib/cashflow/savingsGoals";
 import { Button } from "./Button";
 import { Field, Input, Select, Textarea } from "./Field";
 import { PlaidReviewButton } from "./PlaidInbox";
@@ -118,6 +121,7 @@ export function Dashboard() {
   const [spendableAction, setSpendableAction] = useState<SpendableAction | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<Transaction | null>(null);
+  const [goalsOpen, setGoalsOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [convertingPayment, setConvertingPayment] = useState<Transaction | null>(null);
   const [matchOnOpen, setMatchOnOpen] = useState(false);
@@ -247,6 +251,8 @@ export function Dashboard() {
         expensesComing={expensesComing}
         leftToSpend={leftToSpend}
         spendableToday={spendableNow}
+        savingsTotal={(state.savingsGoals ?? []).reduce((sum, goal) => sum + backedGoalTotal(state, goal.id), 0)}
+        onOpenGoals={() => setGoalsOpen(true)}
         period={cashFlowPeriod}
         onPeriodChange={setCashFlowPeriod}
         customRange={customRange}
@@ -254,6 +260,7 @@ export function Dashboard() {
         formatMoney={m}
         onOpenBreakdown={setActiveBreakdown}
       />
+      {goalsOpen && <SavingsGoalsSheet onClose={() => setGoalsOpen(false)} />}
       {state.transactions.some(
         (tx) =>
           tx.type === "card_payment" &&
@@ -558,6 +565,8 @@ function CashFlowFormulaCard({
   expensesComing,
   leftToSpend,
   spendableToday,
+  savingsTotal,
+  onOpenGoals,
   period,
   onPeriodChange,
   customRange,
@@ -570,6 +579,8 @@ function CashFlowFormulaCard({
   expensesComing: number;
   leftToSpend: number;
   spendableToday: number;
+  savingsTotal: number;
+  onOpenGoals: () => void;
   period: CashFlowPeriod;
   onPeriodChange: (period: CashFlowPeriod) => void;
   customRange: ForecastDateRange;
@@ -667,7 +678,7 @@ function CashFlowFormulaCard({
         </div>
       </div>
 
-      <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-5">
+      <div className="mt-4 grid min-w-0 grid-cols-2 gap-2 sm:gap-3 xl:grid-cols-6">
         <FlowDetail
           tone="green"
           label="Have now"
@@ -711,9 +722,11 @@ function CashFlowFormulaCard({
           helper={`Protected ${SPENDABLE_TODAY_HORIZON_DAYS} days`}
           badge="Safe now"
           icon={Wallet}
-          className="col-span-2 !aspect-auto xl:col-span-1"
           onClick={() => onOpenBreakdown("spendable_today")}
         />
+        <FlowDetail tone="blue" label="Savings goals" value={formatMoney(savingsTotal)}
+          helper="Set aside in bank or cash" badge="View goals" icon={Target}
+          onClick={onOpenGoals} />
       </div>
 
       <div className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
@@ -2313,14 +2326,21 @@ function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose:
   const cur = state.profile.currency;
   const [amount, setAmount] = useState(String(item.amount));
   const [date, setDate] = useState(todayISO());
-  const spendableAccounts = state.accounts.filter(isSpendableAccount);
-  const [sourceAccountId, setSourceAccountId] = useState(spendableAccounts[0]?.id ?? "");
+  const paymentAccounts = state.accounts;
+  const [sourceAccountId, setSourceAccountId] = useState(item.accountId ?? state.accounts.find(isSpendableAccount)?.id ?? state.accounts[0]?.id ?? "");
+  const [goalId, setGoalId] = useState("");
+  const [goalAmount, setGoalAmount] = useState("");
 
   function pay() {
     const amt = toNumber(amount);
     if (!item.sourceId) return;
     if (amt <= 0) return toast("Enter an amount");
     if (!sourceAccountId) return toast("Choose an account");
+    const selected = state.savingsGoals?.find((goal) => goal.id === goalId);
+    const fromGoal = toNumber(goalAmount);
+    if (goalId && (!selected || fromGoal <= 0 || fromGoal > amt ||
+        fromGoal > goalBalanceInAccount(selected, sourceAccountId)))
+      return toast("Enter a goal amount saved in this account.");
     dispatch({
       type: "PAY_CREDIT_CARD",
       payload: {
@@ -2329,6 +2349,8 @@ function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose:
         sourceAccountId,
         date,
         plannedExpenseItemId: item.id,
+        savingsGoalId: goalId || undefined,
+        savingsGoalAmount: goalId ? fromGoal : undefined,
       },
     });
     toast(`Recorded ${formatMoney(amt, cur)} to ${item.label}. Awaiting card confirmation.`);
@@ -2344,11 +2366,16 @@ function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose:
       setDate={setDate}
       sourceAccountId={sourceAccountId}
       setSourceAccountId={setSourceAccountId}
-      accounts={spendableAccounts}
+      accounts={paymentAccounts}
       currency={cur}
       onClose={onClose}
       onPay={pay}
-    />
+    >
+      {(state.savingsGoals ?? []).some((goal) => goalBalanceInAccount(goal, sourceAccountId) > 0) && <>
+        <Field label="Use savings goal (optional)"><Select value={goalId} onChange={(event) => setGoalId(event.target.value)}><option value="">No goal</option>{state.savingsGoals!.filter((goal) => goalBalanceInAccount(goal, sourceAccountId) > 0).map((goal) => <option key={goal.id} value={goal.id}>{goal.name} · {formatMoney(goalBalanceInAccount(goal, sourceAccountId), cur)} here</option>)}</Select></Field>
+        {goalId && <Field label="Amount paid from goal"><Input type="number" min="0" inputMode="decimal" value={goalAmount} onChange={(event) => setGoalAmount(event.target.value)} /></Field>}
+      </>}
+    </PayMoneySheet>
   );
 }
 
@@ -2410,6 +2437,7 @@ function PayMoneySheet({
   currency,
   onClose,
   onPay,
+  children,
 }: {
   title: string;
   amount: string;
@@ -2422,6 +2450,7 @@ function PayMoneySheet({
   currency: string;
   onClose: () => void;
   onPay: () => void;
+  children?: ReactNode;
 }) {
   return (
     <Sheet
@@ -2455,6 +2484,7 @@ function PayMoneySheet({
             ))}
           </Select>
         </Field>
+        {children}
       </div>
     </Sheet>
   );
@@ -2820,6 +2850,7 @@ function TransactionDetailSheet({
             <Row label="Date" value={formatDisplayDate(tx.date)} />
             <Row label="Category" value={tx.category || "—"} />
             <Row label="Payment method" value={method} />
+            {tx.savingsGoalId && <Row label="Savings goal" value={`${state.savingsGoals?.find((goal) => goal.id === tx.savingsGoalId)?.name ?? "Goal removed"}${tx.savingsGoalAmount ? ` · ${fm(tx.savingsGoalAmount)}` : ""}`} />}
             {tx.type === "card_payment" && (
               <>
                 <Row label="Paid to" value={card?.name ?? "Card no longer available"} />
@@ -3240,6 +3271,7 @@ function EditTransactionSheet({
   const [sourceAccountId, setSourceAccountId] = useState(tx?.sourceAccountId ?? "");
   const [cardId, setCardId] = useState(tx?.cardId ?? "");
   const [repaymentDate, setRepaymentDate] = useState(linkedReturn?.payDate ?? "");
+  const [savingsGoalId, setSavingsGoalId] = useState(tx?.savingsGoalId ?? "");
   const [actionView, setActionView] = useState<
     "edit" | "merge" | "confirmMerge" | "link" | "confirmLink" | "confirmUnlink" | "confirmDelete"
   >(initialView);
@@ -3259,6 +3291,7 @@ function EditTransactionSheet({
     setSourceAccountId(tx?.sourceAccountId ?? "");
     setCardId(tx?.cardId ?? "");
     setRepaymentDate(linkedReturn?.payDate ?? "");
+    setSavingsGoalId(tx?.savingsGoalId ?? "");
     setActionView(initialView);
     setTargetId("");
     setPlannedId("");
@@ -3271,7 +3304,7 @@ function EditTransactionSheet({
   const categories = Array.from(
     new Set([...(state.categories ?? ["Groceries", "Other"]), FRIEND_EXPENSE_CATEGORY]),
   );
-  const accountOptions = state.accounts.filter(isSpendableAccount);
+  const accountOptions = state.accounts;
   const amountNumber = toNumber(amount);
   const selectedCategory =
     category === "Other" && newCategory.trim() ? newCategory.trim() : category;
@@ -3349,6 +3382,12 @@ function EditTransactionSheet({
     if (!selectedCategory) return toast("Choose a category");
     if (sourceType === "account" && !sourceAccountId) return toast("Choose an account");
     if (sourceType === "card" && !cardId) return toast("Choose a card");
+    const selectedGoal = state.savingsGoals?.find((goal) => goal.id === savingsGoalId);
+    if (selectedGoal && amountNumber > (sourceType === "card"
+      ? goalAvailable(state, selectedGoal) + (currentTx.savingsGoalId === selectedGoal.id ? currentTx.amount : 0)
+      : goalBalanceInAccount(selectedGoal, sourceAccountId) +
+        (currentTx.savingsGoalId === selectedGoal.id && currentTx.sourceAccountId === sourceAccountId ? currentTx.amount : 0)))
+      return toast("Not enough savings in this goal for the expense.");
     if (
       friendSelected &&
       (!validISODate(repaymentDate) || !validISODate(date) || repaymentDate < date)
@@ -3368,6 +3407,7 @@ function EditTransactionSheet({
       notes: notes.trim() ? notes.trim() : undefined,
       sourceAccountId: sourceType === "account" ? sourceAccountId : undefined,
       cardId: sourceType === "card" ? cardId : undefined,
+      savingsGoalId: savingsGoalId || undefined,
       updatedAt: new Date().toISOString(),
     };
 
@@ -3382,6 +3422,7 @@ function EditTransactionSheet({
         notes,
         sourceAccountId: sourceType === "account" ? sourceAccountId : undefined,
         cardId: sourceType === "card" ? cardId : undefined,
+        savingsGoalId: savingsGoalId || undefined,
         friendRepaymentDate: friendSelected ? repaymentDate : linkedReturn ? null : undefined,
       },
     });
@@ -3697,6 +3738,12 @@ function EditTransactionSheet({
                 </Select>
               </Field>
             )}
+            {(state.savingsGoals ?? []).length > 0 && <Field label="Savings goal (optional)" hint="Assign a card purchase to money you have already saved, or spend from that goal in cash or bank.">
+              <Select value={savingsGoalId} onChange={(e) => setSavingsGoalId(e.target.value)}>
+                <option value="">No goal</option>
+                {state.savingsGoals!.map((goal) => <option key={goal.id} value={goal.id}>{goal.name}</option>)}
+              </Select>
+            </Field>}
             <div className="sm:col-span-2">
               <Field label="Note">
                 <Textarea

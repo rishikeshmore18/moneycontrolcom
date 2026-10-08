@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useApp } from "@/lib/cashflow/AppContext";
 import type { Transaction } from "@/lib/cashflow/types";
 import { validCardPayment } from "@/lib/cashflow/cardPaymentLedger";
+import { backedGoalInAccount } from "@/lib/cashflow/savingsGoals";
 import { formatMoney } from "@/lib/cashflow/money";
 import { plaidListConnections, plaidRelinkActivity } from "@/lib/plaid/plaid.functions";
 import { applyBankBalances } from "@/lib/plaid/bankBalances";
@@ -23,6 +24,8 @@ export function CardPaymentEditor({ tx, onClose }: { tx: Transaction; onClose: (
   const [amount, setAmount] = useState(String(tx.amount));
   const [date, setDate] = useState(tx.date);
   const [notes, setNotes] = useState(tx.notes ?? "");
+  const [savingsGoalId, setSavingsGoalId] = useState(tx.savingsGoalId ?? "");
+  const [savingsGoalAmount, setSavingsGoalAmount] = useState(tx.savingsGoalAmount ? String(tx.savingsGoalAmount) : "");
   const [cashPosted, setCashPosted] = useState(tx.cardPayment?.cashPosted ?? true);
   const [cardPosted, setCardPosted] = useState(tx.cardPayment?.cardPosted ?? false);
   const [mergeId, setMergeId] = useState("");
@@ -30,11 +33,20 @@ export function CardPaymentEditor({ tx, onClose }: { tx: Transaction; onClose: (
   const [busy, setBusy] = useState(false);
   const card = state.cards.find((item) => item.id === cardId);
   const account = state.accounts.find((item) => item.id === sourceAccountId);
-  const payload = { cardId, sourceAccountId, amount: Number(amount), date, notes, cashPosted, cardPosted };
+  const payload = { cardId, sourceAccountId, amount: Number(amount), date, notes, cashPosted, cardPosted,
+    savingsGoalId, savingsGoalAmount: savingsGoalId ? Number(savingsGoalAmount) : undefined };
   const candidates = converting ? state.transactions.filter((item) => item.type === "card_payment" &&
     item.cardId === cardId && item.sourceAccountId === tx.sourceAccountId &&
     Math.round(item.amount * 100) === Math.round(tx.amount * 100)) : [];
-  const canSave = validCardPayment(state, payload) && (!mergeId || candidates.some((item) => item.id === mergeId));
+  const goal = state.savingsGoals?.find((item) => item.id === savingsGoalId);
+  const savedHere = goal ? backedGoalInAccount(state, goal.id, sourceAccountId) +
+    (tx.type === "card_payment" && tx.savingsGoalId === goal.id && tx.sourceAccountId === sourceAccountId
+      ? tx.savingsGoalAmount ?? 0 : 0) : 0;
+  const goalIsValid = !savingsGoalId || !!goal && Number.isFinite(Number(savingsGoalAmount)) &&
+    Number(savingsGoalAmount) > 0 && Number(savingsGoalAmount) <= Number(amount) &&
+    Number(savingsGoalAmount) <= savedHere;
+  const canSave = validCardPayment(state, { ...payload, savingsGoalId: undefined,
+    savingsGoalAmount: undefined }) && goalIsValid && (!mergeId || candidates.some((item) => item.id === mergeId));
   const money = (value: number) => formatMoney(value, state.profile.currency);
 
   async function confirm() {
@@ -91,6 +103,10 @@ export function CardPaymentEditor({ tx, onClose }: { tx: Transaction; onClose: (
         <option value="">Choose account or cash wallet</option>
         {state.accounts.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
       </Select></Field>
+      {(state.savingsGoals ?? []).length > 0 && !mergeId && <>
+        <Field label="Paid using savings goal (optional)"><Select value={savingsGoalId} onChange={(event) => setSavingsGoalId(event.target.value)}><option value="">No goal</option>{state.savingsGoals!.map((item) => <option key={item.id} value={item.id}>{item.name} · {money(backedGoalInAccount(state, item.id, sourceAccountId))} here</option>)}</Select></Field>
+        {savingsGoalId && <Field label="Amount from goal"><Input type="number" min="0.01" inputMode="decimal" value={savingsGoalAmount} onChange={(event) => setSavingsGoalAmount(event.target.value)} /></Field>}
+      </>}
       <div className="grid min-w-0 gap-4 sm:grid-cols-2">
         <Field label="Amount"><Input type="number" min="0.01" step="0.01" value={amount} disabled={confirmed || converting} onChange={(event) => setAmount(event.target.value)} /></Field>
         <Field label="Payment date"><Input type="date" value={date} onChange={(event) => setDate(event.target.value)} /></Field>

@@ -154,6 +154,9 @@ export interface Transaction {
   createdAt: string;
   updatedAt: string;
   notes?: string;
+  /** Purpose of this purchase/payment; never changes the bank balance by itself. */
+  savingsGoalId?: string;
+  savingsGoalAmount?: number;
   /** Posted bank transactions already reflected in the linked balance must not move it twice. */
   balanceAlreadySynced?: boolean;
   /** One transfer, with independently confirmed cash and card legs. */
@@ -295,6 +298,25 @@ export interface AppState {
   plannedIncomeOverrides: PlannedIncomeOverride[];
   categoryBudgets: CategoryBudget[];
   categoryBudgetOverrides: CategoryBudgetOverride[];
+  savingsGoals?: SavingsGoal[];
+}
+
+export interface SavingsGoalMovement {
+  id: string;
+  date: string;
+  accountId: string;
+  amount: number; // Positive allocation, negative release or goal-funded spending.
+  kind: "save" | "release" | "spend" | "transfer_in" | "transfer_out";
+  transactionId?: string;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  targetAmount?: number;
+  targetDate?: string;
+  createdAt: string;
+  movements: SavingsGoalMovement[];
 }
 
 export const SCHEMA_VERSION = 1;
@@ -322,4 +344,5 @@ export const emptyState: AppState = {
   plannedIncomeOverrides: [],
   categoryBudgets: [],
   categoryBudgetOverrides: [],
+  savingsGoals: [],
 };

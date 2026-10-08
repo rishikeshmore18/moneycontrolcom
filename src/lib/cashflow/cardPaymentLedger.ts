@@ -2,6 +2,7 @@ import type { AppState, Transaction } from "./types";
 import { cycleForDate } from "./cardLogic";
 import { newId } from "./dates";
 import { validISODate } from "./friendRepayment";
+import { backedGoalInAccount, goalCents, validGoalAmount } from "./savingsGoals";
 
 export interface CardPaymentInput {
   cardId: string;
@@ -17,6 +18,8 @@ export interface CardPaymentInput {
   cardAlreadySynced?: boolean;
   bankDebitId?: string;
   bankCreditId?: string;
+  savingsGoalId?: string;
+  savingsGoalAmount?: number;
 }
 
 const cents = (n: number) => Math.round(n * 100) / 100;
@@ -27,7 +30,11 @@ export function validCardPayment(state: AppState, p: CardPaymentInput): boolean 
     cents(p.amount) > 0 &&
     validISODate(p.date) &&
     state.cards.some((card) => card.id === p.cardId) &&
-    state.accounts.some((account) => account.id === p.sourceAccountId)
+    state.accounts.some((account) => account.id === p.sourceAccountId) &&
+    (!p.savingsGoalId || (validGoalAmount(p.savingsGoalAmount ?? 0) &&
+      goalCents(p.savingsGoalAmount!) <= goalCents(p.amount) &&
+      (state.savingsGoals ?? []).some((goal) => goal.id === p.savingsGoalId &&
+        goalCents(backedGoalInAccount(state, goal.id, p.sourceAccountId)) >= goalCents(p.savingsGoalAmount!))))
   );
 }
 
@@ -61,6 +68,8 @@ export function recordCardPayment(state: AppState, p: CardPaymentInput): AppStat
     cardId: card.id,
     date: p.date,
     notes: p.notes,
+    savingsGoalId: p.savingsGoalId || undefined,
+    savingsGoalAmount: p.savingsGoalId ? p.savingsGoalAmount : undefined,
     createdAt: stamp,
     updatedAt: stamp,
     cycleStart: cycle.cycleStart,
@@ -92,6 +101,10 @@ export function recordCardPayment(state: AppState, p: CardPaymentInput): AppStat
         : item,
     ),
     transactions: [tx, ...state.transactions],
+    savingsGoals: p.savingsGoalId ? (state.savingsGoals ?? []).map((goal) => goal.id === p.savingsGoalId
+      ? { ...goal, movements: [...goal.movements, { id: newId(), date: p.date,
+        accountId: account.id, amount: -p.savingsGoalAmount!, kind: "spend" as const,
+        transactionId: tx.id }] } : goal) : state.savingsGoals,
   };
 }
 
@@ -129,6 +142,8 @@ export function removeCardPayment(state: AppState, tx: Transaction): AppState {
       .map((item) =>
         item.reconciledByPaymentId === tx.id ? { ...item, reconciledByPaymentId: undefined } : item,
       ),
+    savingsGoals: (state.savingsGoals ?? []).map((goal) => ({ ...goal,
+      movements: goal.movements.filter((movement) => movement.transactionId !== tx.id) })),
     plannedExpenseOverrides: state.plannedExpenseOverrides.filter(
       (override) =>
         !(
