@@ -20,7 +20,7 @@ import { isSpendableAccount, plannedDebtPayment, expensesComingBreakdown } from 
 import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
 
-type ExpenseMethod = "credit_card" | "debit" | "cash" | "debt_payment" | "other";
+type ExpenseMethod = "credit_card" | "debit" | "cash" | "debt_payment" | "other" | "transfer";
 type SourcePickerKind = "card" | "account" | null;
 
 export function ExpenseForm({ onDone }: { onDone: () => void }) {
@@ -35,6 +35,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [cardId, setCardId] = useState<string>("");
   const [debtId, setDebtId] = useState<string>("");
   const [sourceAccountId, setSourceAccountId] = useState<string>("");
+  const [targetAccountId, setTargetAccountId] = useState<string>("");
   const [matchedItemId, setMatchedItemId] = useState<string>("");
   const [returnMode, setReturnMode] = useState<"days" | "date">("days");
   const [returnDays, setReturnDays] = useState("");
@@ -141,6 +142,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   function chooseMethod(nextMethod: ExpenseMethod) {
     setMethod(nextMethod);
+    if (nextMethod === "transfer") setMatchedItemId("");
     if (nextMethod === "credit_card" && state.cards.length > 0) {
       setSourcePicker("card");
       return;
@@ -154,6 +156,17 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   function submit() {
     if (amt <= 0) return toast("Enter an amount");
+    if (method === "transfer") {
+      if (!sourceAccountId || !targetAccountId || sourceAccountId === targetAccountId)
+        return toast("Choose two different accounts you own.");
+      dispatch({ type: "ADD_TRANSFER", payload: {
+        fromAccountId: sourceAccountId, toAccountId: targetAccountId,
+        amount: amt, date, notes: description,
+      } });
+      toast(`Internal transfer recorded · ${formatMoney(amt, cur)}`);
+      onDone();
+      return;
+    }
     if (isFriendExpense && !expectedReturn) {
       return toast("Choose a valid return date on or after the date you gave the money.");
     }
@@ -239,7 +252,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="grid gap-4">
-      {upcomingItems.length > 0 && (
+      {method !== "transfer" && upcomingItems.length > 0 && (
         <Field
           label="Match with upcoming (optional)"
           hint="Link this expense to a bill or card payment already on your forecast so nothing is double-counted."
@@ -264,7 +277,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           </Select>
         </Field>
       )}
-      {matchedItem && (
+      {method !== "transfer" && matchedItem && (
         <Notice tone="info">
           Linked to <b>{matchedItem.label}</b>. When you save, this upcoming item will be marked
           paid for the month so it won&apos;t show twice.
@@ -287,14 +300,14 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
       </div>
-      <Field label="Category">
+      {method !== "transfer" && <Field label="Category">
         <Select value={category} onChange={(e) => setCategory(e.target.value)}>
           {categories.map((c) => (
             <option key={c}>{c}</option>
           ))}
         </Select>
-      </Field>
-      {category === "Other" && (
+      </Field>}
+      {method !== "transfer" && category === "Other" && (
         <Field label="Category name" hint="Leave blank to keep this as Other.">
           <Input
             value={otherCategory}
@@ -310,7 +323,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           placeholder={isFriendExpense ? "e.g. Alex" : "What was it?"}
         />
       </Field>
-      {isFriendExpense && (
+      {method !== "transfer" && isFriendExpense && (
         <div className="grid min-w-0 gap-3 rounded-2xl border border-border bg-muted/20 p-3">
           <Field label="When will they return it?">
             <Select
@@ -354,6 +367,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
                 ["cash", "Cash"],
                 ["debt_payment", "Debt payment"],
                 ["other", "Other"],
+                ["transfer", "Internal transfer"],
               ] as const
             ).filter(([id]) => !isFriendExpense || (id !== "other" && id !== "debt_payment")).map(([id, label]) => (
               <button
@@ -392,6 +406,19 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           )}
         </div>
       </Field>
+
+      {method === "transfer" && <div className="grid gap-3 rounded-2xl border border-border bg-muted/20 p-3">
+        <p className="text-sm text-muted-foreground">Move money between your own accounts. This will appear in Activity without counting as income or an expense. Synced bank balances stay unchanged until your bank updates them.</p>
+        <Field label="From account"><Select value={sourceAccountId} onChange={(event) => setSourceAccountId(event.target.value)}>
+          <option value="">Choose source account</option>
+          {state.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}
+        </Select></Field>
+        <Field label="To account"><Select value={targetAccountId} onChange={(event) => setTargetAccountId(event.target.value)}>
+          <option value="">Choose destination account</option>
+          {state.accounts.filter((account) => account.id !== sourceAccountId).map((account) =>
+            <option key={account.id} value={account.id}>{account.name}</option>)}
+        </Select></Field>
+      </div>}
 
       {method === "credit_card" && (
         <>
@@ -459,7 +486,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           Cancel
         </Button>
         <Button variant="primary" onClick={submit}>
-          {method === "debt_payment" ? "Save debt payment" : "Save expense"}
+          {method === "debt_payment" ? "Save debt payment" : method === "transfer" ? "Save transfer" : "Save expense"}
         </Button>
       </div>
       {sourcePicker === "card" && (

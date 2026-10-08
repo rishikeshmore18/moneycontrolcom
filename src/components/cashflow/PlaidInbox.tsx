@@ -167,13 +167,18 @@ function InboxSheet({
   const [friendDaysFor, setFriendDaysFor] = useState<Record<string, string>>({});
   const [friendDateFor, setFriendDateFor] = useState<Record<string, string>>({});
   const [payFrom, setPayFrom] = useState<Record<string, string>>({});
+  const [transferOpenFor, setTransferOpenFor] = useState<Record<string, boolean>>({});
+  const [transferAccountFor, setTransferAccountFor] = useState<Record<string, string>>({});
+  const [transferPairFor, setTransferPairFor] = useState<Record<string, string>>({});
+  const [transferExistingFor, setTransferExistingFor] = useState<Record<string, string>>({});
   const accounts = useMemo(() => connections.flatMap((c) => c.accounts), [connections]);
   const { unmatched: unpaired, matched, rest } = useMemo(
     () => scanCardPayments(items, connections),
     [items, connections],
   );
   const recordedBankIds = new Set(state.transactions.flatMap((tx) =>
-    [tx.cardPayment?.bankCreditId, tx.cardPayment?.bankDebitId].filter(Boolean)));
+    [tx.cardPayment?.bankCreditId, tx.cardPayment?.bankDebitId,
+      tx.accountTransfer?.bankCreditId, tx.accountTransfer?.bankDebitId].filter(Boolean)));
   const unmatched = [...matched, ...unpaired].filter((match) => !recordedBankIds.has(match.cardItem.id));
   const cur = state.profile.currency;
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
@@ -397,6 +402,58 @@ function InboxSheet({
     }
   };
 
+  const recordTransfer = async (item: InboxItem) => {
+    const mapping = mappingFor(item.plaidAccountId);
+    const bankSideId = mapping?.linkedLocalKind === "account" ? mapping.linkedLocalId : undefined;
+    const otherId = transferAccountFor[item.id];
+    if (!bankSideId || !otherId || otherId === bankSideId ||
+        !state.accounts.some((account) => account.id === otherId))
+      return toast("Choose the other account you own.");
+    const fromId = item.amount > 0 ? bankSideId : otherId;
+    const toId = item.amount > 0 ? otherId : bankSideId;
+    const amount = Math.abs(item.amount);
+    if (!Number.isFinite(amount) || amount <= 0 || !validISODate(item.date))
+      return toast("This bank transfer has an invalid amount or date.");
+    const pair = rest.find((candidate) => candidate.id === transferPairFor[item.id] &&
+      !recordedBankIds.has(candidate.id) && candidate.amount * item.amount < 0 &&
+      Math.abs(Math.abs(candidate.amount) - amount) < 0.01 &&
+      mappingFor(candidate.plaidAccountId)?.linkedLocalKind === "account" &&
+      mappingFor(candidate.plaidAccountId)?.linkedLocalId === otherId &&
+      Math.abs(new Date(candidate.date).getTime() - new Date(item.date).getTime()) <= 7 * 86_400_000);
+    if (transferPairFor[item.id] && !pair) return toast("The matching bank entry is no longer available. Choose it again.");
+    const existing = state.transactions.find((tx) => tx.id === transferExistingFor[item.id] &&
+      tx.type === "transfer" && tx.sourceAccountId === fromId && tx.targetAccountId === toId &&
+      Math.abs(tx.amount - amount) < 0.01);
+    if (transferExistingFor[item.id] && !existing) return toast("The selected transfer has changed. Choose it again.");
+    const id = existing?.id ?? `bank-transfer-${item.id}`;
+    const debitId = item.amount > 0 ? item.id : pair?.id;
+    const creditId = item.amount < 0 ? item.id : pair?.id;
+    const linkedBankAccountIds = new Set(accounts.filter((account) =>
+      account.linkedLocalKind === "account" && account.linkedLocalId).map((account) => account.linkedLocalId));
+    setBusy(item.id);
+    try {
+      await resolve({ data: { ids: [item.id, ...(pair ? [pair.id] : [])],
+        status: existing ? "merged" : "accepted", localTransactionId: id } });
+      if (existing) {
+        if (debitId) dispatch({ type: "RECONCILE_ACCOUNT_TRANSFER", id, leg: "debit", bankId: debitId });
+        if (creditId) dispatch({ type: "RECONCILE_ACCOUNT_TRANSFER", id, leg: "credit", bankId: creditId });
+      } else {
+        dispatch({ type: "ADD_TRANSFER", payload: { transactionId: id, fromAccountId: fromId,
+          toAccountId: toId, amount, date: item.date, notes: item.merchantName || item.name,
+          bankDebitId: debitId, bankCreditId: creditId,
+          debitAlreadySynced: linkedBankAccountIds.has(fromId),
+          creditAlreadySynced: linkedBankAccountIds.has(toId) } });
+      }
+      await onResolved();
+      toast(pair ? "Both bank entries linked as one internal transfer." :
+        "Internal transfer saved. Link the other bank entry when it appears in Review.");
+    } catch (error) {
+      toast(`Couldn't link transfer: ${errText(error)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const acceptCardPayment = async (match: CardPaymentMatch) => {
     const key = match.cardItem.id;
     const existing = existingCardPayment(state, match.cardId, match.amount, match.date);
@@ -599,6 +656,24 @@ function InboxSheet({
             const debtCategory = item.amount > 0 && isDebtReviewCategory(category);
             const selectedDebt = payableDebts.find((debt) => debt.id === debtFor[item.id]);
             const expectedReturn = returnDateFor(item, category);
+            const transferOpen = !!transferOpenFor[item.id];
+            const bankAccountId = map?.linkedLocalKind === "account" ? map.linkedLocalId : undefined;
+            const otherAccountId = transferAccountFor[item.id];
+            const otherAccount = state.accounts.find((account) => account.id === otherAccountId);
+            const transferFromId = item.amount > 0 ? bankAccountId : otherAccountId;
+            const transferToId = item.amount > 0 ? otherAccountId : bankAccountId;
+            const transferPairs = otherAccountId ? rest.filter((candidate) =>
+              candidate.id !== item.id && !recordedBankIds.has(candidate.id) &&
+              candidate.amount * item.amount < 0 &&
+              Math.abs(Math.abs(candidate.amount) - Math.abs(item.amount)) < 0.01 &&
+              mappingFor(candidate.plaidAccountId)?.linkedLocalKind === "account" &&
+              mappingFor(candidate.plaidAccountId)?.linkedLocalId === otherAccountId &&
+              Math.abs(new Date(candidate.date).getTime() - new Date(item.date).getTime()) <= 7 * 86_400_000) : [];
+            const existingTransfers = state.transactions.filter((tx) => tx.type === "transfer" &&
+              tx.sourceAccountId === transferFromId && tx.targetAccountId === transferToId &&
+              Math.abs(tx.amount - Math.abs(item.amount)) < 0.01 &&
+              Math.abs(new Date(tx.date).getTime() - new Date(item.date).getTime()) <= 7 * 86_400_000 &&
+              !(item.amount > 0 ? tx.accountTransfer?.bankDebitId : tx.accountTransfer?.bankCreditId));
             return (
               <div key={item.id} className="grid min-w-0 gap-2 rounded-2xl border border-border p-3 [overflow-wrap:anywhere]">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -624,7 +699,7 @@ function InboxSheet({
                   </div>
                 )}
 
-                {dup && (!debtCategory || (dup.type === "debt_payment" && dup.debtId === selectedDebt?.id)) && (
+                {!transferOpen && dup && (!debtCategory || (dup.type === "debt_payment" && dup.debtId === selectedDebt?.id)) && (
                   <div className="rounded-xl bg-muted p-2 text-xs">
                     Looks like one you already entered:{" "}
                     <strong>
@@ -645,7 +720,7 @@ function InboxSheet({
                   </p>
                 )}
 
-                {!debtCategory && plannedMatches.length > 0 && (
+                {!transferOpen && !debtCategory && plannedMatches.length > 0 && (
                   <div className="grid gap-2 rounded-xl bg-muted p-3 text-sm">
                     <p>Also in Expenses coming. If this is the same bill, mark it paid so it no longer appears as upcoming.</p>
                     {plannedMatches.map((planned) => (
@@ -662,7 +737,49 @@ function InboxSheet({
                   </div>
                 )}
 
-                {item.amount > 0 && map?.linkedLocalId && (
+                {bankAccountId && (
+                  <div className="grid gap-2 rounded-xl border border-border bg-muted/20 p-3">
+                    <Button variant="soft" className="justify-self-start" onClick={() => setTransferOpenFor((previous) =>
+                      ({ ...previous, [item.id]: !previous[item.id] }))} disabled={busy === item.id}>
+                      {transferOpen ? "Cancel internal transfer" : "Internal transfer between my accounts"}
+                    </Button>
+                    {transferOpen && <>
+                      <p className="text-xs text-muted-foreground">A transfer moves money between your accounts. It is not income or an expense. Synced bank balances stay as reported by each bank.</p>
+                      <Field label={item.amount > 0 ? "Transferred to" : "Transferred from"}>
+                        <Select value={otherAccountId ?? ""} onChange={(event) => {
+                          setTransferAccountFor((previous) => ({ ...previous, [item.id]: event.target.value }));
+                          setTransferPairFor((previous) => ({ ...previous, [item.id]: "" }));
+                          setTransferExistingFor((previous) => ({ ...previous, [item.id]: "" }));
+                        }}>
+                          <option value="">Choose your other account</option>
+                          {state.accounts.filter((account) => account.id !== bankAccountId).map((account) =>
+                            <option key={account.id} value={account.id}>{account.name}</option>)}
+                        </Select>
+                      </Field>
+                      {otherAccount && transferPairs.length > 0 && <Field label="Matching bank entry (optional)">
+                        <Select value={transferPairFor[item.id] ?? ""} onChange={(event) => setTransferPairFor((previous) => ({ ...previous, [item.id]: event.target.value }))}>
+                          <option value="">Other entry has not appeared yet</option>
+                          {transferPairs.map((candidate) => <option key={candidate.id} value={candidate.id}>
+                            {formatDate(candidate.date)} · {candidate.name} · {formatMoney(Math.abs(candidate.amount), cur)}
+                          </option>)}
+                        </Select>
+                      </Field>}
+                      {otherAccount && existingTransfers.length > 0 && <Field label="Existing transfer (optional)">
+                        <Select value={transferExistingFor[item.id] ?? ""} onChange={(event) => setTransferExistingFor((previous) => ({ ...previous, [item.id]: event.target.value }))}>
+                          <option value="">Record a new transfer</option>
+                          {existingTransfers.map((tx) => <option key={tx.id} value={tx.id}>
+                            {formatDate(tx.date)} · {formatMoney(tx.amount, cur)}
+                          </option>)}
+                        </Select>
+                      </Field>}
+                      <Button variant="primary" className="justify-self-start" onClick={() => recordTransfer(item)} disabled={busy === item.id || !otherAccount}>
+                        {busy === item.id ? "Linking..." : "Save internal transfer"}
+                      </Button>
+                    </>}
+                  </div>
+                )}
+
+                {!transferOpen && item.amount > 0 && map?.linkedLocalId && (
                   <div className="grid gap-1">
                     <div className="text-xs text-muted-foreground">
                       Category (auto-detected — change it if it's wrong)
@@ -757,7 +874,7 @@ function InboxSheet({
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2">
+                {!transferOpen && <div className="flex flex-wrap gap-2">
                   <Button
                     variant="primary"
                     onClick={() => accept(item, category)}
@@ -768,7 +885,7 @@ function InboxSheet({
                   <Button variant="ghost" onClick={() => dismiss(item)} disabled={busy === item.id}>
                     Dismiss
                   </Button>
-                </div>
+                </div>}
               </div>
             );
           })}
