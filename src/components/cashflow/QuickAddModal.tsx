@@ -16,9 +16,10 @@ import {
   cycleForDate,
   expensesInCycle,
 } from "@/lib/cashflow/cardLogic";
-import { isSpendableAccount, plannedDebtPayment, expensesComingBreakdown } from "@/lib/cashflow/forecast";
+import { plannedDebtPayment, expensesComingBreakdown } from "@/lib/cashflow/forecast";
 import type { CashFlowBreakdownItem } from "@/lib/cashflow/forecast";
 import { toast } from "./Toast";
+import { backedGoalInAccount, goalAvailable, goalBalanceInAccount } from "@/lib/cashflow/savingsGoals";
 
 type ExpenseMethod = "credit_card" | "debit" | "cash" | "debt_payment" | "other" | "transfer";
 type SourcePickerKind = "card" | "account" | null;
@@ -40,12 +41,14 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
   const [returnMode, setReturnMode] = useState<"days" | "date">("days");
   const [returnDays, setReturnDays] = useState("");
   const [returnDate, setReturnDate] = useState("");
+  const [savingsGoalId, setSavingsGoalId] = useState("");
 
   const amt = toNumber(amount);
   const cur = state.profile.currency;
 
-  const cashAccount = state.accounts.find((a) => a.type === "cash" && isSpendableAccount(a));
-  const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash" && isSpendableAccount(a));
+  const cashAccounts = state.accounts.filter((a) => a.type === "cash");
+  const cashAccount = cashAccounts.find((a) => a.id === sourceAccountId) ?? cashAccounts[0];
+  const nonCashAccounts = state.accounts.filter((a) => a.type !== "cash");
   const baseCategories = state.categories?.length ? state.categories : ["Groceries", "Other"];
   const categories = Array.from(
     new Set([...baseCategories, FRIEND_EXPENSE_CATEGORY, "Miscellaneous"]),
@@ -159,9 +162,12 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
     if (method === "transfer") {
       if (!sourceAccountId || !targetAccountId || sourceAccountId === targetAccountId)
         return toast("Choose two different accounts you own.");
+      const selected = state.savingsGoals?.find((goal) => goal.id === savingsGoalId);
+      if (selected && amt > backedGoalInAccount(state, selected.id, sourceAccountId))
+        return toast("Not enough of this goal is saved in the source account.");
       dispatch({ type: "ADD_TRANSFER", payload: {
         fromAccountId: sourceAccountId, toAccountId: targetAccountId,
-        amount: amt, date, notes: description,
+        amount: amt, date, notes: description, savingsGoalId: savingsGoalId || undefined,
       } });
       toast(`Internal transfer recorded · ${formatMoney(amt, cur)}`);
       onDone();
@@ -179,6 +185,13 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
       return toast("Select an account");
     if (method === "debt_payment" && !debtId) return toast("Select a debt");
     if (method === "cash" && !cashAccount) return toast("Add a cash account first");
+    const spendingGoal = state.savingsGoals?.find((goal) => goal.id === savingsGoalId);
+    if (spendingGoal && method !== "debt_payment" && method !== "other") {
+      const source = method === "cash" ? cashAccount?.id : sourceAccountId;
+      if (amt > goalAvailable(state, spendingGoal) ||
+          (method !== "credit_card" && (!source || amt > goalBalanceInAccount(spendingGoal, source))))
+        return toast("This goal does not have enough uncommitted savings at the selected source.");
+    }
 
     // If matched to an upcoming card bill, route through PAY_CREDIT_CARD so the
     // cycle is reconciled and the planned item is cleared. Requires an account.
@@ -196,6 +209,8 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
           date,
           notes: description,
           plannedExpenseItemId: matchedItem.id,
+          savingsGoalId: savingsGoalId || undefined,
+          savingsGoalAmount: savingsGoalId ? amt : undefined,
         },
       });
       toast(`Paid ${formatMoney(amt, cur)} to ${matchedItem.label}`);
@@ -233,6 +248,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         sourceAccountId:
           method === "debit" ? sourceAccountId : method === "cash" ? cashAccount?.id : undefined,
         friendRepaymentDate: expectedReturn ?? undefined,
+        savingsGoalId: savingsGoalId || undefined,
       },
     });
     // Link this expense to a matched upcoming bill (recurring / one-time)
@@ -420,6 +436,15 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
         </Select></Field>
       </div>}
 
+      {(method === "credit_card" || method === "debit" || method === "cash" || method === "transfer") &&
+        (state.savingsGoals ?? []).length > 0 && <Field label={method === "transfer" ? "Move savings goal with transfer (optional)" : "Use savings goal (optional)"}>
+          <Select value={savingsGoalId} onChange={(event) => setSavingsGoalId(event.target.value)}>
+            <option value="">No goal</option>
+            {state.savingsGoals!.map((goal) => <option key={goal.id} value={goal.id}>{goal.name} · {formatMoney(goalAvailable(state, goal), cur)} free</option>)}
+          </Select>
+          {method === "transfer" && <p className="text-xs text-muted-foreground">Moves the goal allocation from one source to the other. The bank transfer is recorded separately from spending.</p>}
+        </Field>}
+
       {method === "credit_card" && (
         <>
           {state.cards.length === 0 ? (
@@ -474,6 +499,7 @@ export function ExpenseForm({ onDone }: { onDone: () => void }) {
       {method === "cash" && !cashAccount && (
         <Notice tone="warn">No cash account exists. Add one in profile.</Notice>
       )}
+      {method === "cash" && cashAccounts.length > 1 && <Field label="Cash bucket"><Select value={cashAccount?.id ?? ""} onChange={(event) => setSourceAccountId(event.target.value)}>{cashAccounts.map((account) => <option key={account.id} value={account.id}>{account.name} · {formatMoney(account.balance, cur)}</option>)}</Select></Field>}
 
       {(method === "debit" || method === "debt_payment") && nonCashAccounts.length === 0 && (
         <Notice tone="warn">No spendable bank accounts available. Add one in Profile first.</Notice>
@@ -706,9 +732,11 @@ function CardPaymentForm({ onDone, initialCardId }: { onDone: () => void; initia
     "cycle" | "minimum" | "statement" | "current" | "target" | "custom"
   >("cycle");
   const [custom, setCustom] = useState("");
-  const spendableAccounts = state.accounts.filter(isSpendableAccount);
+  const spendableAccounts = state.accounts;
   const [sourceAccountId, setSourceAccountId] = useState(spendableAccounts[0]?.id ?? "");
   const [date, setDate] = useState(todayISO());
+  const [savingsGoalId, setSavingsGoalId] = useState("");
+  const [goalAmount, setGoalAmount] = useState("");
 
   if (state.cards.length === 0)
     return <div className="text-sm text-muted-foreground">No cards configured.</div>;
@@ -737,9 +765,16 @@ function CardPaymentForm({ onDone, initialCardId }: { onDone: () => void; initia
   function submit() {
     if (!card) return;
     if (payAmount <= 0) return toast("Enter a positive amount");
+    const allocated = toNumber(goalAmount);
+    const selected = state.savingsGoals?.find((goal) => goal.id === savingsGoalId);
+    if (savingsGoalId && (!selected || allocated <= 0 || allocated > payAmount ||
+        allocated > goalBalanceInAccount(selected, sourceAccountId)))
+      return toast("Enter a goal amount held in this payment account.");
     dispatch({
       type: "PAY_CREDIT_CARD",
-      payload: { cardId: card.id, amount: payAmount, sourceAccountId, date },
+      payload: { cardId: card.id, amount: payAmount, sourceAccountId, date,
+        savingsGoalId: savingsGoalId || undefined,
+        savingsGoalAmount: savingsGoalId ? allocated : undefined },
     });
     toast(`Recorded ${formatMoney(payAmount, cur)} to ${card.name}. Awaiting card confirmation.`);
     onDone();
@@ -823,6 +858,10 @@ function CardPaymentForm({ onDone, initialCardId }: { onDone: () => void; initia
           ))}
         </Select>
       </Field>
+      {(state.savingsGoals ?? []).some((goal) => goalBalanceInAccount(goal, sourceAccountId) > 0) && <>
+        <Field label="Use saved money from a goal (optional)"><Select value={savingsGoalId} onChange={(e) => setSavingsGoalId(e.target.value)}><option value="">No goal</option>{state.savingsGoals!.filter((goal) => goalBalanceInAccount(goal, sourceAccountId) > 0).map((goal) => <option key={goal.id} value={goal.id}>{goal.name} · {formatMoney(goalBalanceInAccount(goal, sourceAccountId), cur)} here</option>)}</Select></Field>
+        {savingsGoalId && <Field label="Amount paid from this goal"><Input type="number" min="0" inputMode="decimal" value={goalAmount} onChange={(e) => setGoalAmount(e.target.value)} /></Field>}
+      </>}
 
       <Field label="Payment date" hint="We use this to match the right cycle.">
         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
@@ -849,14 +888,19 @@ function TransferForm({ onDone }: { onDone: () => void }) {
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
+  const [savingsGoalId, setSavingsGoalId] = useState("");
 
   function submit() {
     const amt = toNumber(amount);
     if (amt <= 0) return toast("Enter an amount");
     if (!fromId || !toId || fromId === toId) return toast("Pick two different accounts");
+    const selected = state.savingsGoals?.find((goal) => goal.id === savingsGoalId);
+    if (selected && amt > backedGoalInAccount(state, selected.id, fromId))
+      return toast("Not enough of this goal is saved in the source account.");
     dispatch({
       type: "ADD_TRANSFER",
-      payload: { fromAccountId: fromId, toAccountId: toId, amount: amt, date, notes },
+      payload: { fromAccountId: fromId, toAccountId: toId, amount: amt, date, notes,
+        savingsGoalId: savingsGoalId || undefined },
     });
     toast(`Transferred ${formatMoney(amt, cur)}`);
     onDone();
@@ -903,6 +947,7 @@ function TransferForm({ onDone }: { onDone: () => void }) {
       <Field label="Notes">
         <Input value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
+      {(state.savingsGoals ?? []).length > 0 && <Field label="Move a savings goal (optional)" hint="Carry this goal's saved money to the destination account."><Select value={savingsGoalId} onChange={(event) => setSavingsGoalId(event.target.value)}><option value="">No goal</option>{state.savingsGoals!.map((goal) => <option key={goal.id} value={goal.id}>{goal.name} · {formatMoney(goalBalanceInAccount(goal, fromId), cur)} here</option>)}</Select></Field>}
       <div className="flex justify-end gap-2 pt-2">
         <Button variant="ghost" onClick={onDone}>
           Cancel

@@ -12,6 +12,7 @@ import {
   RecurringBill,
   TimesheetEntry,
   Transaction,
+  SavingsGoal,
   emptyState,
 } from "./types";
 import { clampNonNegative } from "./money";
@@ -20,6 +21,8 @@ import { expensesComingBreakdown } from "./forecast";
 import { isFriendExpenseCategory, validISODate } from "./friendRepayment";
 import { canMergeExpenses, canMergeIncome } from "./transactionMerge";
 import { assignablePlannedExpenses, assignablePlannedIncome } from "./activityAssignment";
+import { allocatedInAccount, backedGoalInAccount, goalAvailable, goalAvailableInAccount, goalBalanceInAccount,
+  goalCents, goalMoney, validGoalAmount } from "./savingsGoals";
 import {
   recordCardPayment,
   removeCardPayment,
@@ -32,6 +35,11 @@ export type Action =
   | { type: "RESET" }
   | { type: "COMPLETE_ONBOARDING"; payload: Partial<AppState> }
   | { type: "UPDATE_PROFILE"; payload: Partial<AppState["profile"]> }
+  | { type: "ADD_SAVINGS_GOAL"; payload: { name: string; targetAmount?: number; targetDate?: string } }
+  | { type: "UPDATE_SAVINGS_GOAL"; id: string; payload: { name: string; targetAmount?: number; targetDate?: string } }
+  | { type: "ALLOCATE_GOAL"; goalId: string; accountId: string; amount: number; date: string }
+  | { type: "RELEASE_GOAL"; goalId: string; accountId: string; amount: number; date: string }
+  | { type: "DELETE_SAVINGS_GOAL"; id: string }
   | { type: "ADD_ACCOUNT"; payload: Omit<Account, "id" | "createdAt" | "updatedAt"> }
   | { type: "UPDATE_ACCOUNT"; payload: Account }
   | { type: "DELETE_ACCOUNT"; id: string }
@@ -90,6 +98,7 @@ export type Action =
         cardId?: string;
         /** Null removes a linked expectation; undefined leaves its date alone. */
         friendRepaymentDate?: string | null;
+        savingsGoalId?: string;
       };
     }
   | { type: "DELETE_TRANSACTION"; id: string }
@@ -134,6 +143,7 @@ export type Action =
         cardId?: string;
         balanceAlreadySynced?: boolean;
         friendRepaymentDate?: string;
+        savingsGoalId?: string;
       };
     }
   | {
@@ -177,6 +187,7 @@ export type Action =
         bankCreditId?: string;
         debitAlreadySynced?: boolean;
         creditAlreadySynced?: boolean;
+        savingsGoalId?: string;
       };
     }
   | {
@@ -383,7 +394,20 @@ function normalizeState(state: AppState): AppState {
     plannedIncomeOverrides: state.plannedIncomeOverrides ?? [],
     categoryBudgets: state.categoryBudgets ?? [],
     categoryBudgetOverrides: state.categoryBudgetOverrides ?? [],
+    savingsGoals: state.savingsGoals ?? [],
   };
+}
+
+function addGoalMovement(state: AppState, goalId: string, accountId: string, amount: number,
+  date: string, kind: SavingsGoal["movements"][number]["kind"], transactionId?: string): AppState {
+  return { ...state, savingsGoals: (state.savingsGoals ?? []).map((goal) => goal.id === goalId
+    ? { ...goal, movements: [...goal.movements, { id: newId(), accountId, amount,
+      date, kind, transactionId }] } : goal) };
+}
+
+function removeGoalTransactionMovements(state: AppState, transactionId: string): AppState {
+  return { ...state, savingsGoals: (state.savingsGoals ?? []).map((goal) => ({ ...goal,
+    movements: goal.movements.filter((movement) => movement.transactionId !== transactionId) })) };
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -396,6 +420,45 @@ export function reducer(state: AppState, action: Action): AppState {
       return normalizeState({ ...state, ...action.payload, onboarded: true });
     case "UPDATE_PROFILE":
       return { ...state, profile: { ...state.profile, ...action.payload } };
+
+    case "ADD_SAVINGS_GOAL": {
+      const { name, targetAmount, targetDate } = action.payload;
+      if (!name.trim() || name.trim().length > 80 ||
+          (targetAmount !== undefined && !validGoalAmount(targetAmount)) ||
+          (targetDate && !validISODate(targetDate))) return state;
+      return { ...state, savingsGoals: [...(state.savingsGoals ?? []), {
+        id: newId(), name: name.trim(), targetAmount, targetDate,
+        createdAt: now(), movements: [],
+      }] };
+    }
+    case "UPDATE_SAVINGS_GOAL": {
+      if (!state.savingsGoals?.some((goal) => goal.id === action.id)) return state;
+      const { name, targetAmount, targetDate } = action.payload;
+      if (!name.trim() || name.trim().length > 80 ||
+          (targetAmount !== undefined && !validGoalAmount(targetAmount)) ||
+          (targetDate && !validISODate(targetDate))) return state;
+      return { ...state, savingsGoals: state.savingsGoals.map((goal) => goal.id === action.id
+        ? { ...goal, name: name.trim(), targetAmount, targetDate } : goal) };
+    }
+    case "ALLOCATE_GOAL":
+    case "RELEASE_GOAL": {
+      const { goalId, accountId, amount, date } = action;
+      const goal = state.savingsGoals?.find((item) => item.id === goalId);
+      const account = state.accounts.find((item) => item.id === accountId);
+      if (!goal || !account || !validGoalAmount(amount) || !validISODate(date)) return state;
+      if (action.type === "ALLOCATE_GOAL" && goalCents(amount) >
+          goalCents(Math.max(0, account.balance - allocatedInAccount(state, accountId)))) return state;
+      if (action.type === "RELEASE_GOAL" && goalCents(amount) >
+          goalCents(goalAvailableInAccount(state, goal, accountId))) return state;
+      return addGoalMovement(state, goalId, accountId,
+        action.type === "ALLOCATE_GOAL" ? amount : -amount, date,
+        action.type === "ALLOCATE_GOAL" ? "save" : "release");
+    }
+    case "DELETE_SAVINGS_GOAL": {
+      const goal = state.savingsGoals?.find((item) => item.id === action.id);
+      if (!goal || goal.movements.length || state.transactions.some((tx) => tx.savingsGoalId === goal.id)) return state;
+      return { ...state, savingsGoals: state.savingsGoals!.filter((item) => item.id !== goal.id) };
+    }
 
     case "SYNC_ACCOUNT_BALANCE":
       return {
@@ -682,6 +745,13 @@ export function reducer(state: AppState, action: Action): AppState {
       const p = action.payload;
       const existing = state.transactions.find((transaction) => transaction.id === p.id);
       if (!existing || existing.type !== "expense") return state;
+      const goal = p.savingsGoalId ? state.savingsGoals?.find((item) => item.id === p.savingsGoalId) : undefined;
+      const unlinked = removeGoalTransactionMovements(state, p.id);
+      const candidate = { ...unlinked, transactions: unlinked.transactions.filter((tx) => tx.id !== p.id) };
+      const restoredGoal = candidate.savingsGoals?.find((item) => item.id === p.savingsGoalId);
+      if (p.savingsGoalId && (!goal || !validGoalAmount(p.amount) ||
+          !restoredGoal || (p.cardId ? goalCents(goalAvailable(candidate, restoredGoal)) < goalCents(p.amount) :
+            !p.sourceAccountId || goalCents(goalAvailableInAccount(candidate, restoredGoal, p.sourceAccountId)) < goalCents(p.amount)))) return state;
       const linkedRepayment = (state.plannedIncomeOverrides ?? []).find(
         (override) => override.kind === "friend_repayment" && override.linkedExpenseId === p.id,
       );
@@ -694,7 +764,7 @@ export function reducer(state: AppState, action: Action): AppState {
       )
         return state;
 
-      let next = state;
+      let next = unlinked;
 
       if (!existing.balanceAlreadySynced && existing.cardId) {
         next = {
@@ -759,7 +829,7 @@ export function reducer(state: AppState, action: Action): AppState {
           accountId: p.sourceAccountId,
         });
       }
-      return {
+      const result: AppState = {
         ...next,
         categories: mergeCategories(next.categories, [p.category]),
         plannedIncomeOverrides: editedRepayments,
@@ -774,11 +844,15 @@ export function reducer(state: AppState, action: Action): AppState {
                 notes: p.notes?.trim() ? p.notes.trim() : undefined,
                 sourceAccountId: p.sourceAccountId,
                 cardId: p.cardId,
+                savingsGoalId: goal?.id,
+                savingsGoalAmount: goal ? p.amount : undefined,
                 updatedAt: now(),
               }
             : transaction,
         ),
       };
+      return goal && !p.cardId && p.sourceAccountId ? addGoalMovement(result,
+        goal.id, p.sourceAccountId, -p.amount, p.date, "spend", p.id) : result;
     }
 
     case "DELETE_TRANSACTION": {
@@ -786,7 +860,7 @@ export function reducer(state: AppState, action: Action): AppState {
       if (transaction?.type === "transfer") {
         const fromApplied = transaction.accountTransfer?.fromLocalApplied ?? transaction.amount;
         const toApplied = transaction.accountTransfer?.toLocalApplied ?? transaction.amount;
-        return { ...state,
+        return { ...removeGoalTransactionMovements(state, transaction.id),
           accounts: state.accounts.map((account) => account.id === transaction.sourceAccountId && !account.bankLinked
             ? { ...account, balance: Math.round((account.balance + fromApplied) * 100) / 100 }
             : account.id === transaction.targetAccountId && !account.bankLinked
@@ -837,7 +911,7 @@ export function reducer(state: AppState, action: Action): AppState {
         next = { ...next, accounts: updateAccount(next, expense.sourceAccountId, expense.amount) };
       }
       return {
-        ...next,
+        ...removeGoalTransactionMovements(next, expense.id),
         transactions: next.transactions.filter((tx) => tx.id !== expense.id),
         plannedIncomeOverrides: (next.plannedIncomeOverrides ?? []).filter(
           (override) => override.linkedExpenseId !== expense.id,
@@ -1149,6 +1223,9 @@ export function reducer(state: AppState, action: Action): AppState {
       );
       return {
         ...next,
+        savingsGoals: (next.savingsGoals ?? []).map((goal) => ({ ...goal,
+          movements: goal.movements.flatMap((movement) => movement.transactionId === source.id
+            ? target.savingsGoalId ? [] : [{ ...movement, transactionId: target.id }] : [movement]) })),
         transactions: next.transactions
           .filter((tx) => tx.id !== source.id)
           .map((tx) =>
@@ -1159,6 +1236,8 @@ export function reducer(state: AppState, action: Action): AppState {
                     source.balanceAlreadySynced || target.balanceAlreadySynced,
                   ),
                   linkedPlannedExpense: tx.linkedPlannedExpense ?? source.linkedPlannedExpense,
+                  savingsGoalId: tx.savingsGoalId ?? source.savingsGoalId,
+                  savingsGoalAmount: tx.savingsGoalAmount ?? source.savingsGoalAmount,
                   updatedAt: now(),
                 }
               : tx,
@@ -1183,6 +1262,11 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "ADD_EXPENSE": {
       const p = action.payload;
+      const goal = p.savingsGoalId ? state.savingsGoals?.find((item) => item.id === p.savingsGoalId) : undefined;
+      if (p.savingsGoalId && (!goal || !validGoalAmount(p.amount) ||
+          (p.method !== "credit_card" && (!p.sourceAccountId ||
+            goalCents(goalAvailableInAccount(state, goal, p.sourceAccountId)) < goalCents(p.amount))) ||
+          (p.method === "credit_card" && goalCents(goalAvailable(state, goal)) < goalCents(p.amount)))) return state;
       if (
         p.friendRepaymentDate &&
         (!isFriendExpenseCategory(p.category) ||
@@ -1217,6 +1301,8 @@ export function reducer(state: AppState, action: Action): AppState {
         sourceAccountId: p.sourceAccountId,
         cardId: p.cardId,
         balanceAlreadySynced: p.balanceAlreadySynced,
+        savingsGoalId: goal?.id,
+        savingsGoalAmount: goal ? p.amount : undefined,
       };
       const transactionId = newId();
       const timestamp = now();
@@ -1235,7 +1321,7 @@ export function reducer(state: AppState, action: Action): AppState {
             },
           ]
         : [];
-      return {
+      const result: AppState = {
         ...next,
         categories: mergeCategories(next.categories, [p.category]),
         plannedIncomeOverrides: [...(next.plannedIncomeOverrides ?? []), ...repayment],
@@ -1244,6 +1330,9 @@ export function reducer(state: AppState, action: Action): AppState {
           ...next.transactions,
         ],
       };
+      return goal && p.method !== "credit_card" && p.sourceAccountId
+        ? addGoalMovement(result, goal.id, p.sourceAccountId, -p.amount, p.date,
+          "spend", transactionId) : result;
     }
 
     case "PAY_CREDIT_CARD":
@@ -1251,7 +1340,7 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "UPDATE_CARD_PAYMENT": {
       const tx = state.transactions.find((item) => item.id === action.id);
-      if (!tx || tx.type !== "card_payment" || !validCardPayment(state, action.payload))
+      if (!tx || tx.type !== "card_payment")
         return state;
       // Bank-linked evidence is immutable: correcting metadata must not invent a different transfer.
       if (
@@ -1262,8 +1351,10 @@ export function reducer(state: AppState, action: Action): AppState {
       )
         return state;
       const undone = removeCardPayment(state, tx);
-      const result = recordCardPayment(undone, {
+      const updated = {
         ...action.payload,
+        savingsGoalId: action.payload.savingsGoalId === "" ? undefined : action.payload.savingsGoalId ?? tx.savingsGoalId,
+        savingsGoalAmount: action.payload.savingsGoalId === "" ? undefined : action.payload.savingsGoalAmount ?? tx.savingsGoalAmount,
         transactionId: tx.id,
         cashPosted: tx.cardPayment?.bankDebitId ? true : action.payload.cashPosted,
         cardPosted: tx.cardPayment?.bankCreditId ? true : action.payload.cardPosted,
@@ -1271,7 +1362,9 @@ export function reducer(state: AppState, action: Action): AppState {
         bankCreditId: tx.cardPayment?.bankCreditId,
         cashAlreadySynced: Boolean(tx.cardPayment?.bankDebitId),
         cardAlreadySynced: Boolean(tx.cardPayment?.bankCreditId),
-      });
+      };
+      if (!validCardPayment(undone, updated)) return state;
+      const result = recordCardPayment(undone, updated);
       return {
         ...result,
         transactions: result.transactions.map((item) =>
@@ -1327,8 +1420,7 @@ export function reducer(state: AppState, action: Action): AppState {
         expense.type !== "expense" ||
         expense.cardId ||
         expense.linkedPlannedExpense ||
-        expense.reconciledByPaymentId ||
-        !validCardPayment(state, action.payload)
+        expense.reconciledByPaymentId
       )
         return state;
       const kept = action.mergeIntoId
@@ -1345,14 +1437,14 @@ export function reducer(state: AppState, action: Action): AppState {
         return state;
       const account = state.accounts.find((item) => item.id === expense.sourceAccountId);
       // Undo the local expense, then replace it with one transfer, never a second expense.
-      const undone = {
+      const undone = removeGoalTransactionMovements({
         ...state,
         accounts:
           !expense.balanceAlreadySynced && account && !account.bankLinked
             ? updateAccountCents(state, account.id, expense.amount)
             : state.accounts,
         transactions: state.transactions.filter((item) => item.id !== expense.id),
-      };
+      }, expense.id);
       if (kept) {
         const applyCash =
           kept.cardPayment?.cashPosted === false &&
@@ -1386,6 +1478,8 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return recordCardPayment(undone, {
         ...action.payload,
+        savingsGoalId: action.payload.savingsGoalId || expense.savingsGoalId,
+        savingsGoalAmount: action.payload.savingsGoalAmount ?? expense.savingsGoalAmount,
         amount: expense.amount,
         sourceAccountId: expense.sourceAccountId!,
         transactionId: expense.id,
@@ -1478,12 +1572,14 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case "ADD_TRANSFER": {
       const p = action.payload;
+      const goal = state.savingsGoals?.find((item) => item.id === p.savingsGoalId);
       if (!Number.isFinite(p.amount) || p.amount <= 0 ||
           Math.abs(p.amount * 100 - Math.round(p.amount * 100)) > 0.00001 ||
           !validISODate(p.date) || p.fromAccountId === p.toAccountId ||
           !state.accounts.some((account) => account.id === p.fromAccountId) ||
           !state.accounts.some((account) => account.id === p.toAccountId) ||
-          (p.transactionId && state.transactions.some((tx) => tx.id === p.transactionId))) return state;
+          (p.transactionId && state.transactions.some((tx) => tx.id === p.transactionId)) ||
+          (p.savingsGoalId && (!goal || goalCents(backedGoalInAccount(state, goal.id, p.fromAccountId)) < goalCents(p.amount)))) return state;
       const fromLocalApplied = state.accounts.find((a) => a.id === p.fromAccountId)?.bankLinked ||
         p.debitAlreadySynced ? 0 : p.amount;
       const toLocalApplied = state.accounts.find((a) => a.id === p.toAccountId)?.bankLinked ||
@@ -1506,13 +1602,19 @@ export function reducer(state: AppState, action: Action): AppState {
         date: p.date,
         sourceAccountId: p.fromAccountId,
         targetAccountId: p.toAccountId,
+        savingsGoalId: goal?.id,
+        savingsGoalAmount: goal ? p.amount : undefined,
         notes: p.notes,
         accountTransfer: { version: 1, bankDebitId: p.bankDebitId,
           bankCreditId: p.bankCreditId, fromLocalApplied, toLocalApplied },
       };
       const stamp = now();
-      return { ...next, transactions: [{ ...tx, id: p.transactionId ?? newId(),
+      const transactionId = p.transactionId ?? newId();
+      const result = { ...next, transactions: [{ ...tx, id: transactionId,
         createdAt: stamp, updatedAt: stamp }, ...next.transactions] };
+      return goal ? addGoalMovement(addGoalMovement(result, goal.id, p.fromAccountId,
+        -p.amount, p.date, "transfer_out", transactionId), goal.id, p.toAccountId,
+        p.amount, p.date, "transfer_in", transactionId) : result;
     }
 
     case "RECONCILE_ACCOUNT_TRANSFER": {

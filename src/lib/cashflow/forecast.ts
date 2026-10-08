@@ -27,6 +27,7 @@ import { formatMoney } from "./money";
 import { timesheetEntryAmount, visibleIncomeEntriesForMonth } from "./timesheetLogic";
 import { monthlyBudgetSummary } from "./budget";
 import { pendingCashForAccount, pendingCardPayments, pendingTransferCashForAccount } from "./cardPaymentLedger";
+import { backedGoalReserve, goalCoverageByCard } from "./savingsGoals";
 
 export type CashFlowPeriod = "this_month" | "next_30_days" | "next_6_months" | "custom";
 
@@ -105,7 +106,7 @@ export function spendableCash(state: AppState): number {
   return state.accounts
     .filter(isSpendableAccount)
     .reduce((s, a) => s + a.balance - pendingCashForAccount(state, a.id) -
-      pendingTransferCashForAccount(state, a.id), 0);
+      pendingTransferCashForAccount(state, a.id) - backedGoalReserve(state, a.id), 0);
 }
 
 export function spendableCashBreakdown(state: AppState): CashFlowBreakdownSection[] {
@@ -119,7 +120,7 @@ export function spendableCashBreakdown(state: AppState): CashFlowBreakdownSectio
           ? `${account.bankName} - ${account.type}`
           : account.type,
     amount: account.balance - pendingCashForAccount(state, account.id) -
-      pendingTransferCashForAccount(state, account.id),
+      pendingTransferCashForAccount(state, account.id) - backedGoalReserve(state, account.id),
   }));
   const reservedAccounts = state.accounts
     .filter((account) => !isSpendableAccount(account))
@@ -136,6 +137,14 @@ export function spendableCashBreakdown(state: AppState): CashFlowBreakdownSectio
   if (spendableAccounts.length > 0) {
     sections.push({ title: "Spendable accounts", items: spendableAccounts });
   }
+  const allocations = state.accounts.filter(isSpendableAccount).flatMap((account) =>
+    (state.savingsGoals ?? []).map((goal) => ({ id: `${goal.id}:${account.id}`, label: goal.name,
+      detail: `Set aside in ${account.name}; already excluded from spendable accounts`,
+      amount: backedGoalReserve(state, account.id) > 0
+        ? Math.min(Math.max(0, goal.movements.filter((movement) => movement.accountId === account.id)
+          .reduce((sum, movement) => sum + movement.amount, 0)), backedGoalReserve(state, account.id)) : 0 }))
+      .filter((item) => item.amount > 0));
+  if (allocations.length) sections.push({ title: "Savings goals (already excluded)", items: allocations });
   if (reservedAccounts.length > 0) {
     sections.push({ title: "Excluded accounts (not counted)", items: reservedAccounts });
   }
@@ -1231,6 +1240,8 @@ function expenseSectionsForRange(
   if (oneTimeItems.length > 0)
     sections.push({ title: "One-time planned expenses", items: oneTimeItems });
   if (cardItems.length > 0) sections.push({ title: "Upcoming card bills", items: cardItems });
+  const covered = goalCoverageItems(state, cardItems);
+  if (covered.length) sections.push({ title: "Covered by savings goals", items: covered });
   if (cardFundedBills.length > 0)
     sections.push({ title: "Card-funded bills", items: cardFundedBills });
   if (debtItems.length > 0) sections.push({ title: "Debt plan", items: debtItems });
@@ -1238,6 +1249,21 @@ function expenseSectionsForRange(
 }
 
 export const SPENDABLE_TODAY_HORIZON_DAYS = 90;
+
+function goalCoverageItems(state: AppState, cardItems: CashFlowBreakdownItem[]): CashFlowBreakdownItem[] {
+  const remaining = goalCoverageByCard(state);
+  return sortByDueDate(cardItems).flatMap((item) => {
+    const cardId = item.sourceId;
+    const eligible = cardId && state.transactions.some((tx) => tx.type === "expense" &&
+      tx.savingsGoalId && tx.cardId === cardId && tx.date <= (item.cycleEnd ?? item.dueDate ?? ""));
+    const covered = eligible ? Math.min(Math.max(0, item.amount), remaining.get(cardId ?? "") ?? 0) : 0;
+    if (!cardId || covered <= 0) return [];
+    remaining.set(cardId, Math.round(((remaining.get(cardId) ?? 0) - covered) * 100) / 100);
+    return [{ id: `goal-coverage:${item.id}`, label: `${item.label} savings coverage`,
+      detail: "Already set aside for this card purchase; the full bill remains due",
+      amount: -covered, dueDate: item.dueDate, periodDate: item.periodDate }];
+  });
+}
 
 function safetyExpenseSectionsForRange(
   state: AppState,
@@ -1251,7 +1277,7 @@ function safetyExpenseSectionsForRange(
   };
   const allSections = expenseSectionsForRange(state, ref, collectionRange);
   const directSections = allSections
-    .filter((section) => section.title !== "Upcoming card bills")
+    .filter((section) => section.title !== "Upcoming card bills" && section.title !== "Covered by savings goals")
     .map((section) => ({
       ...section,
       items: section.items
@@ -1345,8 +1371,15 @@ function safetyExpenseSectionsForRange(
     });
   });
 
+  const goalCoverage = goalCoverageItems(state, cardItems);
+  const coverageByItem = new Map(goalCoverage.map((item) =>
+    [item.id.slice("goal-coverage:".length), -item.amount]));
   if (cardItems.length > 0) {
-    directSections.push({ title: "Upcoming card bills", items: sortByDueDate(cardItems) });
+    directSections.push({ title: "Upcoming card bills", items: sortByDueDate(cardItems.map((item) => {
+      const covered = coverageByItem.get(item.id) ?? 0;
+      return covered ? { ...item, amount: Math.max(0, item.amount - covered),
+        detail: `${item.detail ?? "Card bill"} - ${formatMoney(covered, state.profile.currency)} already saved toward the full ${formatMoney(item.amount, state.profile.currency)} due` } : item;
+    })) });
   }
 
   const rangeEndMonth = range.end.slice(0, 7);
@@ -1610,7 +1643,7 @@ function spendableTodayProjection(
       .map((account) => [
         account.id,
         { account, balance: account.balance - pendingCashForAccount(state, account.id) -
-          pendingTransferCashForAccount(state, account.id) },
+          pendingTransferCashForAccount(state, account.id) - backedGoalReserve(state, account.id) },
       ]),
   );
   const accountFundingWarnings: AccountFundingWarning[] = [];

@@ -29,6 +29,7 @@ import {
   type CardPaymentMatch,
 } from "@/lib/plaid/cardPayments";
 import { applyBankBalances } from "@/lib/plaid/bankBalances";
+import { backedGoalInAccount, goalAvailable, goalAvailableInAccount, goalBalanceInAccount } from "@/lib/cashflow/savingsGoals";
 
 function formatDate(iso: string): string {
   if (!iso) return "";
@@ -160,6 +161,7 @@ function InboxSheet({
     return () => window.cancelAnimationFrame(frame);
   }, [confirmation]);
   const [catFor, setCatFor] = useState<Record<string, string>>({});
+  const [goalFor, setGoalFor] = useState<Record<string, string>>({});
   const [otherCategoryFor, setOtherCategoryFor] = useState<Record<string, string>>({});
   const [debtFor, setDebtFor] = useState<Record<string, string>>({});
   const [principalFor, setPrincipalFor] = useState<Record<string, string>>({});
@@ -261,6 +263,10 @@ function InboxSheet({
       return;
     }
     const category = chosenCategory || item.plaidCategory || "Miscellaneous";
+    const selectedGoal = state.savingsGoals?.find((goal) => goal.id === goalFor[item.id]);
+    if (selectedGoal && item.amount > (map.linkedLocalKind === "card" ?
+      goalAvailable(state, selectedGoal) : goalAvailableInAccount(state, selectedGoal, map.linkedLocalId)))
+      return toast("Not enough uncommitted savings in this goal for this transaction.");
     if (item.amount > 0 && isDebtReviewCategory(category)) {
       if (map.linkedLocalKind !== "account" || !state.accounts.some((account) => account.id === map.linkedLocalId)) {
         toast("Choose a linked bank account to record a debt payment.");
@@ -328,6 +334,7 @@ function InboxSheet({
             description: label,
             date,
             friendRepaymentDate: expectedReturn ?? undefined,
+            savingsGoalId: selectedGoal?.id,
             method: map.linkedLocalKind === "card" ? "credit_card" : "debit",
             balanceAlreadySynced: !item.pending,
             ...(map.linkedLocalKind === "card"
@@ -425,6 +432,9 @@ function InboxSheet({
       tx.type === "transfer" && tx.sourceAccountId === fromId && tx.targetAccountId === toId &&
       Math.abs(tx.amount - amount) < 0.01);
     if (transferExistingFor[item.id] && !existing) return toast("The selected transfer has changed. Choose it again.");
+    const goal = state.savingsGoals?.find((candidate) => candidate.id === goalFor[item.id]);
+    if (!existing && goalFor[item.id] && (!goal || amount > backedGoalInAccount(state, goal.id, fromId)))
+      return toast("Not enough of this goal is saved in the source account.");
     const id = existing?.id ?? `bank-transfer-${item.id}`;
     const debitId = item.amount > 0 ? item.id : pair?.id;
     const creditId = item.amount < 0 ? item.id : pair?.id;
@@ -442,7 +452,8 @@ function InboxSheet({
           toAccountId: toId, amount, date: item.date, notes: item.merchantName || item.name,
           bankDebitId: debitId, bankCreditId: creditId,
           debitAlreadySynced: linkedBankAccountIds.has(fromId),
-          creditAlreadySynced: linkedBankAccountIds.has(toId) } });
+          creditAlreadySynced: linkedBankAccountIds.has(toId),
+          savingsGoalId: goal?.id } });
       }
       await onResolved();
       toast(pair ? "Both bank entries linked as one internal transfer." :
@@ -772,6 +783,12 @@ function InboxSheet({
                           </option>)}
                         </Select>
                       </Field>}
+                      {!transferExistingFor[item.id] && (state.savingsGoals ?? []).length > 0 && <Field label="Move saved goal money with transfer (optional)">
+                        <Select value={goalFor[item.id] ?? ""} onChange={(event) => setGoalFor((previous) => ({ ...previous, [item.id]: event.target.value }))}>
+                          <option value="">No goal</option>
+                          {state.savingsGoals!.map((goal) => <option key={goal.id} value={goal.id}>{goal.name} · {formatMoney(goalBalanceInAccount(goal, transferFromId ?? ""), cur)} in source</option>)}
+                        </Select>
+                      </Field>}
                       <Button variant="primary" className="justify-self-start" onClick={() => recordTransfer(item)} disabled={busy === item.id || !otherAccount}>
                         {busy === item.id ? "Linking..." : "Save internal transfer"}
                       </Button>
@@ -803,6 +820,12 @@ function InboxSheet({
                         />
                       </Field>
                     )}
+                    {(state.savingsGoals ?? []).length > 0 && !debtCategory && <Field label="Savings goal (optional)" hint="If this was a purchase for a goal, attach it before accepting. Card purchases remain due until paid.">
+                      <Select value={goalFor[item.id] ?? ""} onChange={(event) => setGoalFor((previous) => ({ ...previous, [item.id]: event.target.value }))}>
+                        <option value="">No goal</option>
+                        {state.savingsGoals!.map((goal) => <option key={goal.id} value={goal.id}>{goal.name}</option>)}
+                      </Select>
+                    </Field>}
                     {debtCategory && (
                       <div className="grid min-w-0 gap-3 rounded-2xl border border-border bg-muted/20 p-3">
                         {map?.linkedLocalKind !== "account" && (
