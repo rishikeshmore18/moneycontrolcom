@@ -628,6 +628,12 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
                               c.zeroAprEndDate!,
                             )
                           : [],
+                        initial?.id
+                          ? state.plannedExpenseOverrides.filter((override) =>
+                              override.sourceType === "card_due" && override.action === "skip" &&
+                              override.sourceId?.startsWith(`${initial.id}:`),
+                            ).map((override) => override.sourceId!)
+                          : [],
                       );
                       return plan.projectedBalanceAtDeadline === 0
                         ? `At this pace, the card is projected to be paid by ${plan.payoffDate ? new Date(`${plan.payoffDate}T12:00:00`).toLocaleDateString() : "the promo deadline"}.`

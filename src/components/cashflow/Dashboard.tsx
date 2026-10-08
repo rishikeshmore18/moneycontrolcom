@@ -91,6 +91,7 @@ type ExpenseAction =
   | { type: "delete_recurring"; item: CashFlowBreakdownItem }
   | { type: "pay_bill"; item: CashFlowBreakdownItem }
   | { type: "pay_card"; item: CashFlowBreakdownItem }
+  | { type: "skip_card"; item: CashFlowBreakdownItem }
   | { type: "view_card"; item: CashFlowBreakdownItem }
   | { type: "skip_debt"; item: CashFlowBreakdownItem }
   | { type: "pay_debt"; item: CashFlowBreakdownItem }
@@ -221,6 +222,10 @@ export function Dashboard() {
   function skipItemForMonth(item: CashFlowBreakdownItem) {
     if (!item.sourceType || (!item.sourceId && item.sourceType !== "one_time")) return;
     const itemMonth =
+      (item.sourceType === "card_due" && item.overrideId
+        ? state.plannedExpenseOverrides.find((override) => override.id === item.overrideId)?.month
+        : undefined) ??
+      (item.sourceType === "card_due" ? item.dueDate?.slice(0, 7) : undefined) ??
       item.occurrenceMonth ??
       item.periodDate?.slice(0, 7) ??
       item.dueDate?.slice(0, 7) ??
@@ -234,9 +239,10 @@ export function Dashboard() {
       type: "ADD_PLANNED_EXPENSE_OVERRIDE",
       payload: {
         sourceType: item.sourceType,
-        sourceId: item.sourceId,
+        sourceId: item.sourceType === "card_due" ? item.id : item.sourceId,
         month: itemMonth,
         action: "skip",
+        ...(item.sourceType === "card_due" ? { manualCardSkip: true } : {}),
       },
     });
     toast("Skipped for this month");
@@ -1309,6 +1315,7 @@ function ExpenseItemActions({
           icon={Pencil}
           onClick={() => onAction({ type: "edit_card", item })}
         />
+        <MiniAction label="Skip" onClick={() => onAction({ type: "skip_card", item })} />
       </div>
     );
   }
@@ -2033,6 +2040,27 @@ function ExpenseActionSheets({
 
   if (action.type === "pay_card") {
     return <PayCardSheet item={action.item} onClose={onClose} />;
+  }
+
+  if (action.type === "skip_card") {
+    return (
+      <Sheet open onClose={onClose} title="Skip card payment?"
+        footer={<>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={() => {
+            skipItemForMonth(action.item);
+            onClose();
+          }}>Skip this payment</Button>
+        </>}
+      >
+        <p className="text-sm text-foreground">
+          Remove <strong>{action.item.label} · {formatMoney(action.item.amount, state.profile.currency)}</strong>
+          {" "}due {formatDisplayDate(action.item.dueDate)} from this occurrence only?
+          No payment is recorded. Your card balance remains owed, and a skipped due date can still
+          result in bank fees or interest. Future payments stay on the plan.
+        </p>
+      </Sheet>
+    );
   }
 
   if (action.type === "view_card") {

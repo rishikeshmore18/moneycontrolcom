@@ -81,6 +81,10 @@ function payoffPlanForCard(card: CardType, state: AppState, ref = new Date()) {
     state.transactions,
     ref,
     card.zeroAprEndDate ? plannedCardChargesForRange(state, card.id, ref, card.zeroAprEndDate) : [],
+    state.plannedExpenseOverrides.filter((override) =>
+      override.sourceType === "card_due" && override.action === "skip" &&
+      override.sourceId?.startsWith(`${card.id}:`),
+    ).map((override) => override.sourceId!),
   );
 }
 
@@ -2421,7 +2425,7 @@ function AlertExplanation({ alert }: { alert: ForecastAlert }) {
 
 function ExtraPaymentSheet({ card, onClose }: { card: CardType; onClose: () => void }) {
   const { state, dispatch } = useApp();
-  const plan = zeroAprPayoffPlan(card, state.transactions);
+  const plan = payoffPlanForCard(card, state);
   const spendableAccounts = state.accounts.filter(
     (account) => account.availableForSpending !== false,
   );
