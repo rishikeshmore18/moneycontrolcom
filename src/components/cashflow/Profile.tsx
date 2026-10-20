@@ -518,6 +518,15 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
             onChange={(e) => up("minimumDue", toNumber(e.target.value))}
           />
         </Field>
+        <Field label="When to plan card payment" hint="Only schedules cash in this app. It does not send a payment to the issuer.">
+          <Select
+            value={c.paymentTiming ?? "statement"}
+            onChange={(e) => up("paymentTiming", e.target.value as "statement" | "due")}
+          >
+            <option value="statement">When the statement is generated</option>
+            <option value="due">On the payment due date</option>
+          </Select>
+        </Field>
         <Field label="Billing day (1–31)">
           <Input
             type="number"
