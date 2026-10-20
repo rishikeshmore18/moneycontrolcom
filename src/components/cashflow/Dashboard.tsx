@@ -172,7 +172,7 @@ export function Dashboard() {
       },
       expenses_coming: {
         title: "Expenses coming",
-        helper: "Bills, upcoming card bills, and debt plan",
+        helper: "Bills, scheduled payments, and all unpaid card balances (balance-only reminders excluded from total)",
         total: expensesComing,
         tone: "orange" as const,
         sections: expensesComingBreakdown(state, new Date(), cashFlowPeriod, customRange),
@@ -215,12 +215,13 @@ export function Dashboard() {
     selectedExpenseSections
       .filter((section) => titles.includes(section.title))
       .reduce(
-        (sum, section) => sum + section.items.reduce((itemSum, item) => itemSum + item.amount, 0),
+        (sum, section) => sum + section.items.reduce((itemSum, item) => itemSum + (item.balanceReminder ? 0 : item.amount), 0),
         0,
       );
 
   function skipItemForMonth(item: CashFlowBreakdownItem) {
     if (!item.sourceType || (!item.sourceId && item.sourceType !== "one_time")) return;
+    if (item.balanceReminder) return;
     const itemMonth =
       (item.sourceType === "card_due" && item.overrideId
         ? state.plannedExpenseOverrides.find((override) => override.id === item.overrideId)?.month
@@ -985,7 +986,7 @@ function BreakdownSheet({
         )}
         {sections.map((section) => {
           const sectionTotal = section.items.reduce(
-            (sum, item) => sum + (item.includedInCardPayment ? 0 : item.amount),
+            (sum, item) => sum + (item.includedInCardPayment || item.balanceReminder ? 0 : item.amount),
             0,
           );
           return (
@@ -998,7 +999,9 @@ function BreakdownSheet({
                 <div className="min-w-0 break-words text-sm font-bold text-muted-foreground">
                   {section.title === "Card-funded bills"
                     ? "Cash counted on card due date"
-                    : formatMoney(sectionTotal)}
+                    : section.title === "Other unpaid card balances"
+                      ? "Balance only, not due this period"
+                      : formatMoney(sectionTotal)}
                 </div>
               </div>
               <div className="min-w-0 divide-y divide-border">
@@ -1302,6 +1305,14 @@ function ExpenseItemActions({
     );
   }
   if (item.sourceType === "card_due") {
+    if (item.balanceReminder) {
+      return (
+        <div className="flex flex-wrap gap-2">
+          <MiniAction label="Pay" onClick={() => onAction({ type: "pay_card", item })} />
+          <MiniAction label="Edit card" icon={Pencil} onClick={() => onAction({ type: "edit_card", item })} />
+        </div>
+      );
+    }
     return (
       <div className="flex flex-wrap gap-2">
         <MiniAction label="Pay" onClick={() => onAction({ type: "pay_card", item })} />
