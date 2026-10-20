@@ -53,6 +53,8 @@ export interface Card {
   minimumDue: number;
   billingDate: number; // day of month
   dueDate: number; // day of month
+  /** When the user intends to pay this card. Defaults to statement closing for existing cards. */
+  paymentTiming?: "statement" | "due";
   apr: number;
   zeroAprEndDate?: string;
   zeroAprPaymentMode?: "utilization" | "fixed";

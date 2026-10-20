@@ -540,21 +540,25 @@ function cardCashFlowItemsForRange(
           amount: generatedStatementAmount,
           sourceType: "card_due",
           sourceId: card.id,
-          dueDate: today,
+          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : today,
           accountId: paymentAccountId,
           cycleStart: generatedCycle.cycleStart,
           cycleEnd: generatedCycle.cycleEnd,
-          periodDate: today,
+          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : today,
         });
       }
       const cycle = currentOpenCycle(card, ref);
-      const rawDueDate = cycle.cycleEnd >= today ? cycle.cycleEnd : today;
+      const rawDueDate = card.paymentTiming === "due"
+        ? cycle.dueDate
+        : cycle.cycleEnd >= today ? cycle.cycleEnd : today;
       const openCycleBalance = Math.max(0, card.currentBalance - generatedStatementAmount);
       if (openCycleBalance <= 0) return;
       pushCardItem({
         id: `${card.id}:cash-payoff:${rawDueDate}`,
         label: card.name,
-        detail: `Statement closes ${formatDisplayDate(cycle.cycleEnd)} - planned for payment when generated`,
+        detail: card.paymentTiming === "due"
+          ? `Statement closes ${formatDisplayDate(cycle.cycleEnd)} - planned for payment ${formatDisplayDate(cycle.dueDate)}`
+          : `Statement closes ${formatDisplayDate(cycle.cycleEnd)} - planned for payment when generated`,
         amount: openCycleBalance,
         sourceType: "card_due",
         sourceId: card.id,
@@ -1479,11 +1483,12 @@ export function expensesComingBreakdown(
     .filter((card) => !isZeroAprCard(card) && card.currentBalance > 0.005)
     .filter((card) => !scheduledCardIds.has(card.id))
     .map((card) => ({ card, cycle: cycleForDate(card, ref) }))
-    .filter(({ cycle }) =>
-      cycle.cycleEnd >= periodRange.start &&
-      cycle.cycleEnd <= periodRange.end &&
-      cycle.cycleEnd <= today,
-    )
+    .filter(({ card, cycle }) => {
+      const paymentDate = card.paymentTiming === "due" ? cycle.dueDate : cycle.cycleEnd;
+      return paymentDate >= periodRange.start &&
+        paymentDate <= periodRange.end &&
+        cycle.cycleEnd <= today;
+    })
     .map(({ card, cycle }) => ({
       id: `statement-estimate:${card.id}:${cycle.cycleEnd}`,
       label: card.name,
@@ -1493,7 +1498,7 @@ export function expensesComingBreakdown(
       sourceId: card.id,
       accountId: card.defaultPaymentAccountId,
       dueDate: cycle.dueDate,
-      periodDate: cycle.cycleEnd,
+      periodDate: card.paymentTiming === "due" ? cycle.dueDate : cycle.cycleEnd,
       cycleStart: cycle.cycleStart,
       cycleEnd: cycle.cycleEnd,
       balanceReminder: true,
@@ -1509,6 +1514,10 @@ export function expensesComingBreakdown(
   const outstanding = state.cards
     .filter((card) => Number.isFinite(card.currentBalance) && card.currentBalance > 0.005)
     .filter((card) => !scheduledCardIds.has(card.id))
+    .filter((card) =>
+      card.paymentTiming !== "due" ||
+      cycleForDate(card, ref).dueDate <= periodRange.end
+    )
     .map((card) => ({
       id: `unpaid-card-balance:${card.id}`,
       label: card.name,
