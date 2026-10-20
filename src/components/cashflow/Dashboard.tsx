@@ -2395,7 +2395,7 @@ function PayCardSheet({ item, onClose }: { item: CashFlowBreakdownItem; onClose:
         amount: amt,
         sourceAccountId,
         date,
-        plannedExpenseItemId: item.id,
+        plannedExpenseItemId: item.balanceReminder ? undefined : item.id,
         savingsGoalId: goalId || undefined,
         savingsGoalAmount: goalId ? fromGoal : undefined,
       },
