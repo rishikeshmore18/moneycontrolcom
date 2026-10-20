@@ -41,6 +41,6 @@ describe("Per-card payment timing", () => {
     const november = items(s, "next_month").filter(i => i.sourceType === "card_due");
     expect(november.length).toBeGreaterThan(0);
     expect(november.every(i => i.balanceReminder)).toBe(true);
-    expect(expensesComingTotal(s, reference, "next_month")).toBe(0);
+    expect(expensesComingTotal(s, reference, "custom", novemberRange)).toBe(0);
   });
 });
