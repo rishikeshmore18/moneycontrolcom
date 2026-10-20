@@ -11,8 +11,10 @@ function card(timing?: "statement" | "due", statementBalance = 47.45): Card {
     preferredCategories: [], paymentTiming: timing,
   };
 }
+const novemberRange = { start: "2026-11-01", end: "2026-11-30" };
 const items = (s: AppState, period: "this_month" | "next_month") =>
-  expensesComingBreakdown(s, reference, period).flatMap(section => section.items);
+  expensesComingBreakdown(s, reference, period === "next_month" ? "custom" : "this_month",
+    period === "next_month" ? novemberRange : undefined).flatMap(section => section.items);
 
 describe("Per-card payment timing", () => {
   it("does not list an October statement due November 15 among October expenses", () => {
@@ -25,7 +27,7 @@ describe("Per-card payment timing", () => {
     const november = items(s, "next_month").filter(i => i.sourceType === "card_due");
     expect(november).toHaveLength(1);
     expect(november[0]).toMatchObject({ amount: 47.45, dueDate: "2026-11-15" });
-    expect(expensesComingTotal(s, reference, "next_month")).toBe(47.45);
+    expect(expensesComingTotal(s, reference, "custom", novemberRange)).toBe(47.45);
   });
   it("preserves statement-generation payments by default", () => {
     const s: AppState = { ...emptyState, cards: [card()] };
