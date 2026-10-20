@@ -72,6 +72,8 @@ export interface CashFlowBreakdownItem {
   isOverdue?: boolean;
   /** The cash payment is already represented by this card's payment schedule. */
   includedInCardPayment?: boolean;
+  /** Unpaid balance reminder. Display only, never counted as a second cash expense. */
+  balanceReminder?: boolean;
   /** Month of the bill occurrence, even if its due date was moved. */
   occurrenceMonth?: string;
 }
@@ -1461,7 +1463,30 @@ export function expensesComingBreakdown(
   period: CashFlowPeriod = "this_month",
   customRange?: ForecastDateRange,
 ): CashFlowBreakdownSection[] {
-  return expenseSectionsForRange(state, ref, cashFlowPeriodRange(period, ref, customRange));
+  const sections = expenseSectionsForRange(state, ref, cashFlowPeriodRange(period, ref, customRange));
+  const scheduledCardIds = new Set(
+    sections.flatMap((section) => section.items)
+      .filter((item) => item.sourceType === "card_due" && item.sourceId)
+      .map((item) => item.sourceId!),
+  );
+  // Keep unpaid card balances visible when the next payment falls outside
+  // the selected period, without adding that debt again to cash expenses.
+  const outstanding = state.cards
+    .filter((card) => Number.isFinite(card.currentBalance) && card.currentBalance > 0.005)
+    .filter((card) => !scheduledCardIds.has(card.id))
+    .map((card) => ({
+      id: `unpaid-card-balance:${card.id}`,
+      label: card.name,
+      detail: "Unpaid card balance. No payment is scheduled in this period; shown for reference, not charged again.",
+      amount: card.currentBalance,
+      sourceType: "card_due" as const,
+      sourceId: card.id,
+      accountId: card.defaultPaymentAccountId,
+      balanceReminder: true,
+    }));
+  return outstanding.length
+    ? [...sections, { title: "Other unpaid card balances", items: outstanding }]
+    : sections;
 }
 
 export function expensesComingTotal(
@@ -1474,7 +1499,7 @@ export function expensesComingTotal(
     (sum, section) =>
       sum +
       section.items.reduce(
-        (sectionSum, item) => sectionSum + (item.includedInCardPayment ? 0 : item.amount),
+        (sectionSum, item) => sectionSum + (item.includedInCardPayment || item.balanceReminder ? 0 : item.amount),
         0,
       ),
     0,
