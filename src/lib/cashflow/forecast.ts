@@ -1469,6 +1469,41 @@ export function expensesComingBreakdown(
       .filter((item) => item.sourceType === "card_due" && item.sourceId)
       .map((item) => item.sourceId!),
   );
+  // A statement that closed earlier in this period must not be lost just
+  // because currentOpenCycle has advanced to next month's statement.
+  // A zero statementBalance does not prove a payment is due: show an
+  // estimated, informational line instead of an invented cash obligation.
+  const periodRange = cashFlowPeriodRange(period, ref, customRange);
+  const today = toISO(ref);
+  const recentlyClosed = state.cards
+    .filter((card) => !isZeroAprCard(card) && card.currentBalance > 0.005)
+    .filter((card) => !scheduledCardIds.has(card.id))
+    .map((card) => ({ card, cycle: cycleForDate(card, ref) }))
+    .filter(({ cycle }) =>
+      cycle.cycleEnd >= periodRange.start &&
+      cycle.cycleEnd <= periodRange.end &&
+      cycle.cycleEnd <= today,
+    )
+    .map(({ card, cycle }) => ({
+      id: `statement-estimate:${card.id}:${cycle.cycleEnd}`,
+      label: card.name,
+      detail: `Statement closed ${formatDisplayDate(cycle.cycleEnd)} - payment due ${formatDisplayDate(cycle.dueDate)}. Estimated from current balance; no statement amount confirmed.`,
+      amount: card.currentBalance,
+      sourceType: "card_due" as const,
+      sourceId: card.id,
+      accountId: card.defaultPaymentAccountId,
+      dueDate: cycle.dueDate,
+      periodDate: cycle.cycleEnd,
+      cycleStart: cycle.cycleStart,
+      cycleEnd: cycle.cycleEnd,
+      balanceReminder: true,
+    }));
+  if (recentlyClosed.length) {
+    const upcoming = sections.find((section) => section.title === "Upcoming card bills");
+    if (upcoming) upcoming.items.push(...recentlyClosed);
+    else sections.push({ title: "Upcoming card bills", items: recentlyClosed });
+    recentlyClosed.forEach((item) => scheduledCardIds.add(item.sourceId));
+  }
   // Keep unpaid card balances visible when the next payment falls outside
   // the selected period, without adding that debt again to cash expenses.
   const outstanding = state.cards
