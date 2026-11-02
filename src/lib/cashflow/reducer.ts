@@ -272,7 +272,7 @@ function undoIncomeLink(state: AppState, tx: Transaction): AppState {
     [candidate.linkedPlannedIncome, ...(candidate.linkedPlannedIncomes ?? [])]
       .some((candidateLink) => candidateLink?.shared && candidateLink.itemId === link.itemId));
   if (replacementTx) {
-    const takeOwnership = (candidateLink: typeof link) =>
+    const takeOwnership = (candidateLink: typeof link | undefined) =>
       candidateLink?.shared && candidateLink.itemId === link.itemId
         ? { ...link, shared: undefined } : candidateLink;
     return {
@@ -338,7 +338,7 @@ function undoExpenseLink(state: AppState, tx: Transaction): AppState {
         (candidateLink.sourceType === "one_time" ? candidateLink.originalOverride?.id :
           `${candidateLink.sourceId}:${candidateLink.month}`) === key));
   if (replacementTx) {
-    const takeOwnership = (candidateLink: typeof link) =>
+    const takeOwnership = (candidateLink: typeof link | undefined) =>
       candidateLink?.shared &&
       (candidateLink.sourceType === "one_time" ? candidateLink.originalOverride?.id :
         `${candidateLink.sourceId}:${candidateLink.month}`) === key
