@@ -272,14 +272,15 @@ function undoIncomeLink(state: AppState, tx: Transaction): AppState {
     [candidate.linkedPlannedIncome, ...(candidate.linkedPlannedIncomes ?? [])]
       .some((candidateLink) => candidateLink?.shared && candidateLink.itemId === link.itemId));
   if (replacementTx) {
-    const takeOwnership = (candidateLink: typeof link | undefined) =>
+    const takeOwnership = (candidateLink: typeof link) =>
       candidateLink?.shared && candidateLink.itemId === link.itemId
         ? { ...link, shared: undefined } : candidateLink;
     return {
       ...state,
       transactions: state.transactions.map((candidate) => candidate.id === replacementTx.id
         ? { ...candidate,
-            linkedPlannedIncome: takeOwnership(candidate.linkedPlannedIncome),
+            linkedPlannedIncome: candidate.linkedPlannedIncome
+              ? takeOwnership(candidate.linkedPlannedIncome) : undefined,
             linkedPlannedIncomes: candidate.linkedPlannedIncomes?.map(takeOwnership),
             updatedAt: now() } : candidate),
       timesheet: state.timesheet.map((entry) =>
@@ -338,14 +339,15 @@ function undoExpenseLink(state: AppState, tx: Transaction): AppState {
         (candidateLink.sourceType === "one_time" ? candidateLink.originalOverride?.id :
           `${candidateLink.sourceId}:${candidateLink.month}`) === key));
   if (replacementTx) {
-    const takeOwnership = (candidateLink: typeof link | undefined) =>
+    const takeOwnership = (candidateLink: typeof link) =>
       candidateLink?.shared &&
       (candidateLink.sourceType === "one_time" ? candidateLink.originalOverride?.id :
         `${candidateLink.sourceId}:${candidateLink.month}`) === key
         ? { ...link, shared: undefined } : candidateLink;
     return { ...state, transactions: state.transactions.map((candidate) =>
       candidate.id === replacementTx.id ? {
-        ...candidate, linkedPlannedExpense: takeOwnership(candidate.linkedPlannedExpense),
+        ...candidate, linkedPlannedExpense: candidate.linkedPlannedExpense
+          ? takeOwnership(candidate.linkedPlannedExpense) : undefined,
         linkedPlannedExpenses: candidate.linkedPlannedExpenses?.map(takeOwnership),
         updatedAt: now(),
       } : candidate) };
