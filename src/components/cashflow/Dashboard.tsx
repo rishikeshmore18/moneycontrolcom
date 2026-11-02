@@ -2964,16 +2964,20 @@ function AssignmentChoices({ items, selectedIds, onChange, mode, onModeChange, a
   return (
     <div className="grid gap-3">
       <p className="text-sm text-muted-foreground">
-        Choose every upcoming {kind === "income" ? "income item" : "bill"} covered by this
-        transaction. The bank transaction stays one payment.
+        Choose an upcoming or previously assigned {kind === "income" ? "income item" : "bill"}.
+        You can link another transaction to the same item, even when the actual amount differs.
+        This does not create new income or spending.
       </p>
-      <div className="grid max-h-64 gap-2 overflow-y-auto" role="group" aria-label="Upcoming items">
+      <div className="grid max-h-64 gap-2 overflow-y-auto" role="group" aria-label="Upcoming and previously assigned items">
         {items.map((item) => (
           <label key={item.id} className="flex min-w-0 items-start gap-3 rounded-xl border border-border p-3 text-sm">
             <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)}
               onChange={(event) => onChange(event.target.checked
                 ? [...selectedIds, item.id] : selectedIds.filter((id) => id !== item.id))} />
-            <span className="min-w-0 break-words">{item.label} · {formatDisplayDate(item.dueDate ?? item.payDate ?? item.periodDate)} · {formatMoney(item.amount, currency)}</span>
+            <span className="min-w-0 break-words">
+              <span className="block">{item.label} · {formatDisplayDate(item.dueDate ?? item.payDate ?? item.periodDate)} · {formatMoney(item.amount, currency)}</span>
+              {item.historicalMatch && <span className="mt-1 block text-xs text-muted-foreground">Previously assigned · {item.detail}</span>}
+            </span>
           </label>
         ))}
       </div>
@@ -3116,7 +3120,7 @@ function EditIncomeTransactionSheet({
     if (!validPlans) return;
     dispatch({ type: "ASSIGN_PLANNED_ITEMS", id: currentTx.id,
       itemIds: chosenIds, mode: assignmentMode });
-    toast("Selected income marked received. The deposit was counted once.");
+    toast("Income matched. Existing deposits remain unchanged; any earlier match is kept.");
     onDone();
   }
 
@@ -3426,7 +3430,7 @@ function EditTransactionSheet({
       mode: assignmentMode,
       updateFutureBillAmount: selectedPlans.length === 1 && selectedPlan?.sourceType === "recurring_bill" && updateFutureAmount,
     });
-    toast("Selected bills marked paid. The transaction was counted once.");
+    toast("Expense matched. Existing payments remain unchanged; any earlier match is kept.");
     onRemoved();
   }
 
