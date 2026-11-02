@@ -46,7 +46,7 @@ function nearestFirst(items: CashFlowBreakdownItem[], tx: Transaction): CashFlow
  * These rows are read from existing assignment links; no new planned income or expense is created.
  */
 function historicalMatches(state: AppState, tx: Transaction): CashFlowBreakdownItem[] {
-  const seen = new Map<string, CashFlowBreakdownItem & { count: number; actual: number }>();
+  const seen = new Map<string, CashFlowBreakdownItem & { count: number }>();
   for (const owner of state.transactions) {
     if (owner.id === tx.id || owner.type !== tx.type) continue;
     const links = owner.type === "expense"
@@ -83,14 +83,13 @@ function historicalMatches(state: AppState, tx: Transaction): CashFlowBreakdownI
       keys.add(item.id);
       const existing = seen.get(item.id);
       if (existing) {
-        existing.actual += owner.amount;
         existing.count += 1;
       } else {
-        seen.set(item.id, { ...item, count: 1, actual: owner.amount });
+        seen.set(item.id, { ...item, count: 1 });
       }
     }
   }
-  return [...seen.values()].map(({ count, actual, ...item }) => ({
+  return [...seen.values()].map(({ count, ...item }) => ({
     ...item,
     detail: `Previously assigned to ${count} transaction${count === 1 ? "" : "s"}. Add another real transaction without creating money again.`,
   }));
