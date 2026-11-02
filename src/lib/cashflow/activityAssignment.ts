@@ -42,22 +42,79 @@ function nearestFirst(items: CashFlowBreakdownItem[], tx: Transaction): CashFlow
     (a.dueDate ?? a.payDate ?? "").localeCompare(b.dueDate ?? b.payDate ?? ""));
 }
 
+/** Paid plans remain selectable for later installments and corrections.
+ * These rows are read from existing assignment links; no new planned income or expense is created.
+ */
+function historicalMatches(state: AppState, tx: Transaction): CashFlowBreakdownItem[] {
+  const seen = new Map<string, CashFlowBreakdownItem & { count: number }>();
+  for (const owner of state.transactions) {
+    if (owner.id === tx.id || owner.type !== tx.type) continue;
+    const links = owner.type === "expense"
+      ? [owner.linkedPlannedExpense, ...(owner.linkedPlannedExpenses ?? [])].filter(Boolean)
+      : [owner.linkedPlannedIncome, ...(owner.linkedPlannedIncomes ?? [])].filter(Boolean);
+    const keys = new Set<string>();
+    for (const link of links) {
+      if (!link) continue;
+      let item: CashFlowBreakdownItem;
+      if ("month" in link) {
+        const id = link.sourceType === "one_time" ? link.originalOverride?.id
+          : `${link.sourceId}:${link.month}`;
+        if (!id) continue;
+        const bill = state.recurringBills.find((candidate) => candidate.id === link.sourceId);
+        item = {
+          id, label: link.label, amount: link.originalOverride?.amount ??
+            link.matchedRecurringAmount ?? bill?.amount ?? owner.amount,
+          sourceType: link.sourceType, sourceId: link.sourceId,
+          overrideId: link.sourceType === "one_time" ? id : undefined,
+          dueDate: link.originalOverride?.dueDate ?? owner.date,
+          historicalMatch: true,
+        };
+      } else {
+        item = {
+          id: link.itemId, label: link.label,
+          amount: link.originalOverride?.amount ??
+            (link.originalEntries?.reduce((sum, entry) => sum + entry.expectedAmount, 0) || owner.amount),
+          payDate: link.originalOverride?.payDate ?? owner.date,
+          incomeSourceType: link.originalOverride ? "one_time" : "salary_paycheck",
+          historicalMatch: true,
+        };
+      }
+      if (keys.has(item.id)) continue;
+      keys.add(item.id);
+      const existing = seen.get(item.id);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        seen.set(item.id, { ...item, count: 1 });
+      }
+    }
+  }
+  return [...seen.values()].map(({ count, ...item }) => ({
+    ...item,
+    detail: `Previously assigned to ${count} transaction${count === 1 ? "" : "s"}. Add another real transaction without creating money again.`,
+  }));
+}
+
 /** Explicit assignment allows a changed price or payment source; it never chooses a match for the user. */
 export function assignablePlannedExpenses(state: AppState, tx: Transaction): CashFlowBreakdownItem[] {
   if (tx.type !== "expense" || tx.linkedPlannedExpense || !validISODate(tx.date)) return [];
   const reference = fromISODate(tx.date);
   const range = { start: toISODate(addDays(reference, -31)), end: toISODate(addDays(reference, 45)) };
-  return nearestFirst(expensesComingBreakdown(state, reference, "custom", range)
+  const upcoming = expensesComingBreakdown(state, reference, "custom", range)
     .flatMap((section) => section.items)
     .filter((item) => (item.sourceType === "one_time" || item.sourceType === "recurring_bill") &&
-      !!item.dueDate && item.dueDate >= range.start && item.dueDate <= range.end), tx);
+      !!item.dueDate && item.dueDate >= range.start && item.dueDate <= range.end);
+  const ids = new Set(upcoming.map((item) => item.id));
+  return nearestFirst([...upcoming, ...historicalMatches(state, tx).filter((item) => !ids.has(item.id))], tx);
 }
 
 export function assignablePlannedIncome(state: AppState, tx: Transaction): CashFlowBreakdownItem[] {
   if (tx.type !== "income" || tx.linkedPlannedIncome || !validISODate(tx.date)) return [];
   const reference = fromISODate(tx.date);
   const range = { start: toISODate(addDays(reference, -31)), end: toISODate(addDays(reference, 31)) };
-  return nearestFirst(pendingIncomeBreakdown(state, reference, "custom", range)
+  const upcoming = pendingIncomeBreakdown(state, reference, "custom", range)
     .flatMap((section) => section.items)
-    .filter((item) => !!item.payDate && item.payDate >= range.start && item.payDate <= range.end), tx);
+    .filter((item) => !!item.payDate && item.payDate >= range.start && item.payDate <= range.end);
+  const ids = new Set(upcoming.map((item) => item.id));
+  return nearestFirst([...upcoming, ...historicalMatches(state, tx).filter((item) => !ids.has(item.id))], tx);
 }

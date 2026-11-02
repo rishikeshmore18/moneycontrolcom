@@ -264,6 +264,33 @@ function undoIncomeLink(state: AppState, tx: Transaction): AppState {
   }
   const link = tx.linkedPlannedIncome;
   if (!link) return state;
+  if (link.shared) return state;
+  // When the first linked transaction is removed, pass ownership of its paid
+  // occurrence to another real transaction that references the same plan.
+  const replacementTx = state.transactions.find((candidate) =>
+    candidate.id !== tx.id && candidate.type === "income" &&
+    [candidate.linkedPlannedIncome, ...(candidate.linkedPlannedIncomes ?? [])]
+      .some((candidateLink) => candidateLink?.shared && candidateLink.itemId === link.itemId));
+  if (replacementTx) {
+    const takeOwnership = (candidateLink: typeof link) =>
+      candidateLink?.shared && candidateLink.itemId === link.itemId
+        ? { ...link, shared: undefined } : candidateLink;
+    return {
+      ...state,
+      transactions: state.transactions.map((candidate) => candidate.id === replacementTx.id
+        ? { ...candidate,
+            linkedPlannedIncome: candidate.linkedPlannedIncome
+              ? takeOwnership(candidate.linkedPlannedIncome) : undefined,
+            linkedPlannedIncomes: candidate.linkedPlannedIncomes?.map(takeOwnership),
+            updatedAt: now() } : candidate),
+      timesheet: state.timesheet.map((entry) =>
+        entry.linkedTransactionId === tx.id &&
+        (!link.linkedEntryIds || link.linkedEntryIds.includes(entry.id))
+          ? { ...entry, linkedTransactionId: replacementTx.id,
+              paidAccountId: replacementTx.targetAccountId, updatedAt: now() }
+          : entry),
+    };
+  }
   const previous = new Map((link.originalEntries ?? []).map((entry) => [entry.id, entry]));
   const added = new Set(link.addedEntryIds ?? []);
   return {
@@ -302,6 +329,29 @@ function undoExpenseLink(state: AppState, tx: Transaction): AppState {
   }
   const link = tx.linkedPlannedExpense;
   if (!link) return state;
+  if (link.shared) return state;
+  const key = link.sourceType === "one_time" ? link.originalOverride?.id
+    : `${link.sourceId}:${link.month}`;
+  const replacementTx = state.transactions.find((candidate) =>
+    candidate.id !== tx.id && candidate.type === "expense" &&
+    [candidate.linkedPlannedExpense, ...(candidate.linkedPlannedExpenses ?? [])]
+      .some((candidateLink) => candidateLink?.shared &&
+        (candidateLink.sourceType === "one_time" ? candidateLink.originalOverride?.id :
+          `${candidateLink.sourceId}:${candidateLink.month}`) === key));
+  if (replacementTx) {
+    const takeOwnership = (candidateLink: typeof link) =>
+      candidateLink?.shared &&
+      (candidateLink.sourceType === "one_time" ? candidateLink.originalOverride?.id :
+        `${candidateLink.sourceId}:${candidateLink.month}`) === key
+        ? { ...link, shared: undefined } : candidateLink;
+    return { ...state, transactions: state.transactions.map((candidate) =>
+      candidate.id === replacementTx.id ? {
+        ...candidate, linkedPlannedExpense: candidate.linkedPlannedExpense
+          ? takeOwnership(candidate.linkedPlannedExpense) : undefined,
+        linkedPlannedExpenses: candidate.linkedPlannedExpenses?.map(takeOwnership),
+        updatedAt: now(),
+      } : candidate) };
+  }
   if (link.sourceType === "one_time") {
     return {
       ...state,
@@ -1088,6 +1138,23 @@ export function reducer(state: AppState, action: Action): AppState {
         (candidate) => candidate.id === action.itemId,
       );
       if (!item) return state;
+      if (item.historicalMatch) {
+        const already = [tx.linkedPlannedIncome, ...(tx.linkedPlannedIncomes ?? [])]
+          .some((link) => link?.itemId === item.id);
+        if (already) return state;
+        const link: NonNullable<Transaction["linkedPlannedIncome"]> = {
+          itemId: item.id, label: item.label, shared: true,
+        };
+        return { ...state, transactions: state.transactions.map((candidate) =>
+          candidate.id === tx.id ? {
+            ...candidate,
+            linkedPlannedIncome: candidate.linkedPlannedIncome ?? link,
+            linkedPlannedIncomes: candidate.linkedPlannedIncome
+              ? [...(candidate.linkedPlannedIncomes ?? []), link]
+              : candidate.linkedPlannedIncomes,
+            updatedAt: now(),
+          } : candidate) };
+      }
       if (item.incomeSourceType === "one_time") {
         const override = state.plannedIncomeOverrides.find(
           (candidate) => candidate.id === item.overrideId,
@@ -1189,6 +1256,28 @@ export function reducer(state: AppState, action: Action): AppState {
       );
       if (!item || (item.sourceType !== "one_time" && item.sourceType !== "recurring_bill"))
         return state;
+      if (item.historicalMatch) {
+        const known = state.transactions.flatMap((candidate) =>
+          [candidate.linkedPlannedExpense, ...(candidate.linkedPlannedExpenses ?? [])])
+          .find((link) => link && (link.sourceType === "one_time"
+            ? link.originalOverride?.id : `${link.sourceId}:${link.month}`) === item.id);
+        if (!known || [tx.linkedPlannedExpense, ...(tx.linkedPlannedExpenses ?? [])]
+          .some((link) => link && (link.sourceType === "one_time"
+            ? link.originalOverride?.id : `${link.sourceId}:${link.month}`) === item.id)) return state;
+        const link: NonNullable<Transaction["linkedPlannedExpense"]> = {
+          label: known.label, sourceType: known.sourceType, sourceId: known.sourceId,
+          month: known.month, originalOverride: known.originalOverride, shared: true,
+        };
+        return { ...state, transactions: state.transactions.map((candidate) =>
+          candidate.id === tx.id ? {
+            ...candidate,
+            linkedPlannedExpense: candidate.linkedPlannedExpense ?? link,
+            linkedPlannedExpenses: candidate.linkedPlannedExpense
+              ? [...(candidate.linkedPlannedExpenses ?? []), link]
+              : candidate.linkedPlannedExpenses,
+            updatedAt: now(),
+          } : candidate) };
+      }
       // A monthly bill can have a due-date override in the following month.
       // The occurrence key, not the displayed due date, controls which month is paid.
       const month =
