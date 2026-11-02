@@ -2959,8 +2959,12 @@ function AssignmentChoices({ items, selectedIds, onChange, mode, onModeChange, a
   onModeChange: (mode: "combined" | "duplicates") => void;
   amount: number; currency: string; kind: "income" | "expense";
 }) {
+  const [search, setSearch] = useState("");
   const selected = selectedIds.map((id) => items.find((item) => item.id === id)).filter((item) => !!item);
   const valid = validAssignmentSelection(amount, selected, mode);
+  const visible = items.filter((item) => !search.trim() ||
+    [item.label, item.detail ?? "", item.amount.toFixed(2), item.dueDate ?? item.payDate ?? ""]
+      .join(" ").toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   return (
     <div className="grid gap-3">
       <p className="text-sm text-muted-foreground">
@@ -2968,8 +2972,12 @@ function AssignmentChoices({ items, selectedIds, onChange, mode, onModeChange, a
         You can link another transaction to the same item, even when the actual amount differs.
         This does not create new income or spending.
       </p>
+      <Field label="Find a planned item">
+        <Input value={search} onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search name, date, or amount" />
+      </Field>
       <div className="grid max-h-64 gap-2 overflow-y-auto" role="group" aria-label="Upcoming and previously assigned items">
-        {items.map((item) => (
+        {visible.map((item) => (
           <label key={item.id} className="flex min-w-0 items-start gap-3 rounded-xl border border-border p-3 text-sm">
             <input type="checkbox" className="mt-1" checked={selectedIds.includes(item.id)}
               onChange={(event) => onChange(event.target.checked
