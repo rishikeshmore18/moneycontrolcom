@@ -92,7 +92,7 @@ function historicalMatches(state: AppState, tx: Transaction): CashFlowBreakdownI
   }
   return [...seen.values()].map(({ count, actual, ...item }) => ({
     ...item,
-    detail: `Previously assigned to ${count} transaction${count === 1 ? "" : "s"} totaling ${actual.toFixed(2)}. Add another transaction without creating new money.`,
+    detail: `Previously assigned to ${count} transaction${count === 1 ? "" : "s"}. Add another real transaction without creating money again.`,
   }));
 }
 
