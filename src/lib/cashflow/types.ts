@@ -185,6 +185,8 @@ export interface Transaction {
   linkedPlannedIncome?: {
     itemId: string;
     label: string;
+    /** Additional real deposit toward the same previously matched income. */
+    shared?: boolean;
     originalOverride?: PlannedIncomeOverride;
     originalEntries?: TimesheetEntry[];
     addedEntryIds?: string[];
@@ -197,6 +199,8 @@ export interface Transaction {
     sourceType: "recurring_bill" | "one_time";
     sourceId?: string;
     month: string;
+    /** Additional real payment toward an already matched planned expense. */
+    shared?: boolean;
     createdOverrideId?: string;
     originalOverride?: PlannedExpenseOverride;
     /** Only restore the estimate if it has not been independently edited since this match. */
