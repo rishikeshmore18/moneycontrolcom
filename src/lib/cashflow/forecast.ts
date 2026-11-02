@@ -74,6 +74,8 @@ export interface CashFlowBreakdownItem {
   includedInCardPayment?: boolean;
   /** Unpaid balance reminder. Display only, never counted as a second cash expense. */
   balanceReminder?: boolean;
+  /** Past planned item that has already been assigned to another activity. */
+  historicalMatch?: boolean;
   /** Month of the bill occurrence, even if its due date was moved. */
   occurrenceMonth?: string;
 }
