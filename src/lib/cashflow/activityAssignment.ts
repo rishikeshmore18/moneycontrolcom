@@ -49,47 +49,50 @@ function historicalMatches(state: AppState, tx: Transaction): CashFlowBreakdownI
   const seen = new Map<string, CashFlowBreakdownItem & { count: number; actual: number }>();
   for (const owner of state.transactions) {
     if (owner.id === tx.id || owner.type !== tx.type) continue;
-    const links = tx.type === "expense"
+    const links = owner.type === "expense"
       ? [owner.linkedPlannedExpense, ...(owner.linkedPlannedExpenses ?? [])].filter(Boolean)
       : [owner.linkedPlannedIncome, ...(owner.linkedPlannedIncomes ?? [])].filter(Boolean);
     const keys = new Set<string>();
     for (const link of links) {
       if (!link) continue;
-      const id = "itemId" in link ? link.itemId : link.sourceType === "one_time"
-        ? link.originalOverride?.id : `${link.sourceId}:${link.month}`;
-      if (!id || keys.has(id)) continue;
-      keys.add(id);
-      const existing = seen.get(id);
+      let item: CashFlowBreakdownItem;
+      if ("month" in link) {
+        const id = link.sourceType === "one_time" ? link.originalOverride?.id
+          : `${link.sourceId}:${link.month}`;
+        if (!id) continue;
+        const bill = state.recurringBills.find((candidate) => candidate.id === link.sourceId);
+        item = {
+          id, label: link.label, amount: link.originalOverride?.amount ??
+            link.matchedRecurringAmount ?? bill?.amount ?? owner.amount,
+          sourceType: link.sourceType, sourceId: link.sourceId,
+          overrideId: link.sourceType === "one_time" ? id : undefined,
+          dueDate: link.originalOverride?.dueDate ?? owner.date,
+          historicalMatch: true,
+        };
+      } else {
+        item = {
+          id: link.itemId, label: link.label,
+          amount: link.originalOverride?.amount ??
+            (link.originalEntries?.reduce((sum, entry) => sum + entry.expectedAmount, 0) || owner.amount),
+          payDate: link.originalOverride?.payDate ?? owner.date,
+          incomeSourceType: link.originalOverride ? "one_time" : "salary_paycheck",
+          historicalMatch: true,
+        };
+      }
+      if (keys.has(item.id)) continue;
+      keys.add(item.id);
+      const existing = seen.get(item.id);
       if (existing) {
         existing.actual += owner.amount;
         existing.count += 1;
-        continue;
+      } else {
+        seen.set(item.id, { ...item, count: 1, actual: owner.amount });
       }
-      const expense = "month" in link;
-      const source = expense
-        ? state.recurringBills.find((bill) => bill.id === link.sourceId)
-        : undefined;
-      const expected = expense
-        ? link.originalOverride?.amount ?? ("matchedRecurringAmount" in link ? link.matchedRecurringAmount : undefined)
-          ?? source?.amount ?? owner.amount
-        : link.originalOverride?.amount ??
-          (link.originalEntries?.reduce((sum, entry) => sum + entry.expectedAmount, 0) || owner.amount);
-      const date = expense
-        ? link.originalOverride?.dueDate ?? owner.date
-        : link.originalOverride?.payDate ?? owner.date;
-      seen.set(id, {
-        id, label: link.label, amount: expected, detail: "", historicalMatch: true,
-        ...(expense ? { sourceType: link.sourceType, sourceId: link.sourceId, dueDate: date,
-          overrideId: link.sourceType === "one_time" ? id : undefined }
-        : { incomeSourceType: link.originalOverride ? "one_time" as const : "salary_paycheck" as const,
-          payDate: date }),
-        count: 1, actual: owner.amount,
-      });
     }
   }
   return [...seen.values()].map(({ count, actual, ...item }) => ({
     ...item,
-    detail: `Previously assigned to ${count} transaction${count === 1 ? "" : "s"} totaling ${actual.toFixed(2)}. Add another payment or deposit without counting money twice.`,
+    detail: `Previously assigned to ${count} transaction${count === 1 ? "" : "s"} totaling ${actual.toFixed(2)}. Add another transaction without creating new money.`,
   }));
 }
 
