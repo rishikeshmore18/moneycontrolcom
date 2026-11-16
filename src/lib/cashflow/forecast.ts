@@ -114,18 +114,44 @@ export function spendableCash(state: AppState): number {
 }
 
 export function spendableCashBreakdown(state: AppState): CashFlowBreakdownSection[] {
-  const spendableAccounts = state.accounts.filter(isSpendableAccount).map((account) => ({
-    id: account.id,
-    label: account.name,
-    detail:
-      pendingCashForAccount(state, account.id) + pendingTransferCashForAccount(state, account.id) > 0
-        ? `${account.bankName || account.type} - ${formatMoney(pendingCashForAccount(state, account.id) + pendingTransferCashForAccount(state, account.id), state.profile.currency)} reserved for payments or transfers awaiting withdrawal`
-        : account.bankName
-          ? `${account.bankName} - ${account.type}`
-          : account.type,
-    amount: account.balance - pendingCashForAccount(state, account.id) -
-      pendingTransferCashForAccount(state, account.id) - backedGoalReserve(state, account.id),
-  }));
+  const spendableAccounts = state.accounts.filter(isSpendableAccount).flatMap((account) => {
+    const awaitingWithdrawal = pendingCashForAccount(state, account.id) +
+      pendingTransferCashForAccount(state, account.id);
+    const goalReserve = backedGoalReserve(state, account.id);
+    if (account.type !== "cash") {
+      return [{
+        id: account.id,
+        label: account.name,
+        detail: awaitingWithdrawal > 0
+          ? `${account.bankName || account.type} - ${formatMoney(awaitingWithdrawal, state.profile.currency)} reserved for payments or transfers awaiting withdrawal`
+          : account.bankName ? `${account.bankName} - ${account.type}` : account.type,
+        amount: account.balance - awaitingWithdrawal - goalReserve,
+      }];
+    }
+    // Cash is entered manually in Profile. Show that same gross cash balance
+    // here; display its protected amounts as separate deductions instead of
+    // silently changing the cash balance the user sees.
+    return [
+      {
+        id: account.id,
+        label: account.name,
+        detail: "Cash balance from Profile; protected amounts shown separately below",
+        amount: account.balance,
+      },
+      ...(goalReserve > 0 ? [{
+        id: `${account.id}:goal-reserve`,
+        label: "Cash reserved for savings goals",
+        detail: `Set aside in ${account.name}; not available to spend`,
+        amount: -goalReserve,
+      }] : []),
+      ...(awaitingWithdrawal > 0 ? [{
+        id: `${account.id}:pending-withdrawal`,
+        label: "Cash awaiting withdrawal",
+        detail: `Pending payments or transfers from ${account.name}`,
+        amount: -awaitingWithdrawal,
+      }] : []),
+    ];
+  });
   const reservedAccounts = state.accounts
     .filter((account) => !isSpendableAccount(account))
     .map((account) => ({
