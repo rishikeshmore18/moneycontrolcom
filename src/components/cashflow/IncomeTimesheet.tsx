@@ -300,6 +300,7 @@ function DayDetailSheet({
   const { state, dispatch } = useApp();
   const cur = state.profile.currency;
   const [payOpen, setPayOpen] = useState<TimesheetEntry | null>(null);
+  const [removeSalaryId, setRemoveSalaryId] = useState<string | null>(null);
 
   if (!date) return null;
   const plannedTotal = entries.reduce((sum, entry) => sum + timesheetEntryAmount(entry), 0);
@@ -342,11 +343,21 @@ function DayDetailSheet({
                     <div className="min-w-0">
                       <div className="break-words text-sm font-extrabold">{jobName ?? tx.description}</div>
                       <div className="break-words text-xs text-muted-foreground">
-                        {jobName ? `Matched to ${jobName} · ${tx.description}` : "Bank income · Not matched to a job"}
+                        {jobName
+                          ? `Matched to ${jobName} · ${tx.description}`
+                          : "Linked to a paycheck in Activity · Job not explicitly selected"}
                       </div>
                     </div>
-                    <div className="shrink-0 text-sm font-black text-[color:var(--good)]">
-                      +{formatMoney(tx.amount, cur)}
+                    <div className="grid shrink-0 justify-items-end gap-2">
+                      <div className="text-sm font-black text-[color:var(--good)]">
+                        +{formatMoney(tx.amount, cur)}
+                      </div>
+                      <button
+                        className="text-xs font-bold text-[color:var(--bad)] hover:underline"
+                        onClick={() => setRemoveSalaryId(tx.id)}
+                      >
+                        Remove salary
+                      </button>
                     </div>
                   </div>
                 );
@@ -456,6 +467,28 @@ function DayDetailSheet({
         </div>
       </Sheet>
 
+      <Sheet
+        open={!!removeSalaryId}
+        onClose={() => setRemoveSalaryId(null)}
+        title="Remove salary from calendar?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setRemoveSalaryId(null)}>Cancel</Button>
+            <Button variant="danger" onClick={() => {
+              if (!removeSalaryId) return;
+              dispatch({ type: "REMOVE_FROM_SALARY_CALENDAR", id: removeSalaryId });
+              toast("Removed from salary calendar. Bank deposit and Activity are unchanged.");
+              setRemoveSalaryId(null);
+            }}>Remove salary</Button>
+          </>
+        }
+      >
+        <p className="text-sm text-muted-foreground">
+          This only removes the salary label from this calendar.
+          The original bank deposit stays in Activity, and your bank balance
+          and any income matches stay unchanged.
+        </p>
+      </Sheet>
       <MarkPaidSheet entry={payOpen} onClose={() => setPayOpen(null)} />
     </>
   );
