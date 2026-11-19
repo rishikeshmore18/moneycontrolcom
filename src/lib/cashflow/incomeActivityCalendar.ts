@@ -16,6 +16,7 @@ export function receivedIncomeForMonth(
   );
   return state.transactions.filter((tx) =>
     tx.type === "income" && Number.isFinite(tx.amount) && tx.amount > 0 &&
+    !tx.salaryCalendarExcluded &&
     tx.date.slice(0, 7) === month &&
     ((!!tx.incomeJobId && jobIds.has(tx.incomeJobId)) ||
       paidByTransaction.has(tx.id) ||
