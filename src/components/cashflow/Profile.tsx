@@ -370,7 +370,7 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
           />
         </Field>
         <Field label="Type">
-          <Select value={type} onChange={(e) => setType(e.target.value as AccountType)}>
+          <Select value={type} disabled={!!initial?.bankLinked} onChange={(e) => setType(e.target.value as AccountType)}>
             <option value="checking">Checking</option>
             <option value="savings">Savings</option>
             <option value="cash">Cash</option>
@@ -382,8 +382,16 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
             type="number"
             inputMode="decimal"
             value={balance}
+            disabled={!!initial?.bankLinked}
             onChange={(e) => setBalance(e.target.value)}
           />
+          <p className="text-xs text-muted-foreground">
+            {initial?.bankLinked
+              ? "Bank-synced balance is the source of truth. Update it by syncing your bank; expense and income logs cannot overwrite it."
+              : type === "cash"
+                ? "Cash is manually maintained. Edit this balance here after money changes hands; transaction entries do not automatically overwrite it."
+                : "This account is not bank-synced. Its balance is manually maintained."}
+          </p>
         </Field>
         <div className="rounded-2xl border border-border bg-muted/40 p-3">
           <button
