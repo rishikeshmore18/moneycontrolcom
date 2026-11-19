@@ -50,7 +50,7 @@ export function recordCardPayment(state: AppState, p: CardPaymentInput): AppStat
   const amount = cents(p.amount);
   const cashPosted = p.cashPosted ?? !account.bankLinked;
   const cardPosted = p.cardPosted ?? false;
-  const cashLocalApplied = cashPosted && !p.cashAlreadySynced && !account.bankLinked && account.type !== "cash" ? amount : 0;
+  const cashLocalApplied = cashPosted && !p.cashAlreadySynced && !account.bankLinked ? amount : 0;
   const cardLocalApplied =
     cardPosted && !p.cardAlreadySynced && !card.bankLinked
       ? Math.min(amount, card.currentBalance)
@@ -115,7 +115,7 @@ export function removeCardPayment(state: AppState, tx: Transaction): AppState {
   return {
     ...state,
     accounts: state.accounts.map((account) =>
-      account.id === tx.sourceAccountId && !account.bankLinked && account.type !== "cash"
+      account.id === tx.sourceAccountId && !account.bankLinked
         ? {
             ...account,
             balance: cents(
