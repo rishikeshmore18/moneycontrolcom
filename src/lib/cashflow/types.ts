@@ -164,6 +164,9 @@ export interface Transaction {
   /** Job selected for a received income deposit, including off-cycle paydays. This only labels
    * the posted transaction; it never creates a timesheet entry or moves cash. */
   incomeJobId?: string;
+  /** User explicitly removed this receipt from the salary calendar.
+   * Other planned-income links and actual bank transactions remain untouched. */
+  salaryCalendarExcluded?: boolean;
   /** One transfer, with independently confirmed cash and card legs. */
   cardPayment?: {
     version: 2;
