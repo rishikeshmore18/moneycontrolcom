@@ -20,8 +20,8 @@ export function receivedIncomeForMonth(
     ((!!tx.incomeJobId && jobIds.has(tx.incomeJobId)) ||
       paidByTransaction.has(tx.id) ||
       [tx.linkedPlannedIncome, ...(tx.linkedPlannedIncomes ?? [])].some((link) =>
-        link?.originalEntries?.some((entry) => jobIds.has(entry.jobId))),
-    ),
+        link?.originalEntries?.some((entry) => jobIds.has(entry.jobId)))
+    )
   );
 }
 
