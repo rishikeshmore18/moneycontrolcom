@@ -231,10 +231,11 @@ function now(): string {
   return new Date().toISOString();
 }
 
-/** Financial activity never overwrites an authoritative synced bank snapshot
- * or a cash amount entered manually in Profile. */
+/** Synced bank balances are authoritative. Cash and unlinked accounts
+ * keep their existing local transaction ledger, with Profile edits allowing
+ * manual balance corrections at any time. */
 function locallyMutableAccount(account: Account): boolean {
-  return !account.bankLinked && account.type !== "cash";
+  return !account.bankLinked;
 }
 
 function updateAccount(state: AppState, id: string, delta: number): Account[] {
