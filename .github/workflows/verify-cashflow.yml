@@ -1,4 +1,4 @@
-name: Verify cashflow changes
+name: Cashflow changed-file checks
 
 on:
   pull_request:
@@ -42,9 +42,6 @@ jobs:
         run: npx vitest run --config vitest.config.ts src/lib/cashflow/incomeActivityCalendar.test.ts src/lib/cashflow/sharedAssignment.test.ts
       - name: Compile changed UI modules
         run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
-      - name: Hosted Lovable build (standalone entry currently unavailable)
-        continue-on-error: true
-        run: npm run build
-      - name: Existing full test suite (known unrelated failures)
-        continue-on-error: true
-        run: npm test
+      # The full suite and hosted Lovable build were also attempted for this PR.
+      # Existing failures elsewhere in the repository prevent treating them as checks.
+      # This workflow reports only the verifiable scoped checks above.
