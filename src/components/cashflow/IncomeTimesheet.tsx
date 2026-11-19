@@ -273,6 +273,7 @@ function DayDetailSheet({
   open,
   date,
   entries,
+  deposits,
   onClose,
   onAdd,
   onEdit,
@@ -280,6 +281,7 @@ function DayDetailSheet({
   open: boolean;
   date: string | null;
   entries: TimesheetEntry[];
+  deposits: Transaction[];
   onClose: () => void;
   onAdd: (d: string) => void;
   onEdit: (e: TimesheetEntry) => void;
@@ -289,8 +291,9 @@ function DayDetailSheet({
   const [payOpen, setPayOpen] = useState<TimesheetEntry | null>(null);
 
   if (!date) return null;
-  const total = entries.reduce((s, e) => s + timesheetEntryAmount(e), 0);
-  const hours = entries.filter((e) => e.entryType !== "time_off").reduce((s, e) => s + e.hours, 0);
+  const plannedTotal = entries.reduce((sum, entry) => sum + timesheetEntryAmount(entry), 0);
+  const receivedTotal = deposits.reduce((sum, tx) => sum + Math.round(tx.amount * 100), 0) / 100;
+  const hours = entries.filter((entry) => entry.entryType !== "time_off").reduce((sum, entry) => sum + entry.hours, 0);
 
   return (
     <>
@@ -302,8 +305,12 @@ function DayDetailSheet({
               <div className="text-2xl font-black mt-1">{hours.toFixed(1)}h</div>
             </div>
             <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
-              <div className="text-xs text-muted-foreground font-bold uppercase">Total</div>
-              <div className="mt-1 break-words text-2xl font-black">{formatMoney(total, cur)}</div>
+              <div className="text-xs text-muted-foreground font-bold uppercase">
+                {deposits.length ? "Deposits received" : "Planned earnings"}
+              </div>
+              <div className="mt-1 break-words text-2xl font-black">
+                {formatMoney(deposits.length ? receivedTotal : plannedTotal, cur)}
+              </div>
             </div>
           </div>
 
@@ -311,6 +318,31 @@ function DayDetailSheet({
             <Plus size={16} /> Add another entry on this day
           </Button>
 
+          {deposits.length > 0 && (
+            <div className="grid gap-2" aria-label="Received income from Activity">
+              <div className="text-sm font-extrabold">Received income · Activity</div>
+              {deposits.map((tx) => {
+                const jobName = state.jobs.find((job) => job.id === tx.incomeJobId)?.name;
+                return (
+                  <div key={tx.id} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-[color:var(--good)]/30 bg-[color:var(--good)]/8 p-3">
+                    <div className="min-w-0">
+                      <div className="break-words text-sm font-extrabold">{jobName ?? tx.description}</div>
+                      <div className="break-words text-xs text-muted-foreground">
+                        {jobName ? `Matched to ${jobName} · ${tx.description}` : "Bank income · Not matched to a job"}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-sm font-black text-[color:var(--good)]">
+                      +{formatMoney(tx.amount, cur)}
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-xs text-muted-foreground">
+                To match an off-cycle deposit, go to Dashboard → Activity → Edit income → Assign to income.
+                This receipt is already in your bank balance; no money is added again.
+              </p>
+            </div>
+          )}
           <div className="grid gap-2.5">
             {entries.map((e) => {
               const amt = timesheetEntryAmount(e);
