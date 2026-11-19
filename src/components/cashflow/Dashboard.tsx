@@ -3035,6 +3035,7 @@ function EditIncomeTransactionSheet({
   const [plannedId, setPlannedId] = useState("");
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [assignmentMode, setAssignmentMode] = useState<"combined" | "duplicates">("combined");
+  const [receivedJobId, setReceivedJobId] = useState("");
 
   useEffect(() => {
     setView(initialView);
@@ -3046,12 +3047,14 @@ function EditIncomeTransactionSheet({
     setPlannedId("");
     setSelectedPlanIds([]);
     setAssignmentMode("combined");
+    setReceivedJobId(tx?.incomeJobId ?? "");
   }, [tx?.id, initialView]);
 
   if (!tx || tx.type !== "income") return null;
   const currentTx = tx;
   const fm = (amount: number) => formatMoney(amount, state.profile.currency);
   const account = state.accounts.find((item) => item.id === tx.targetAccountId);
+  const matchedJob = state.jobs.find((job) => job.id === tx.incomeJobId);
   const candidates = state.transactions.filter(
     (candidate) =>
       canMergeIncome(tx, candidate) && !(tx.linkedPlannedIncome && candidate.linkedPlannedIncome),
@@ -3124,6 +3127,15 @@ function EditIncomeTransactionSheet({
     }
   }
 
+  function matchReceivedJob() {
+    if (receivedJobId && !state.jobs.some((job) => job.id === receivedJobId)) return;
+    dispatch({ type: "SET_INCOME_JOB", id: currentTx.id, jobId: receivedJobId || undefined });
+    toast(receivedJobId
+      ? "Deposit linked to job on its actual bank date. No cash or new paycheck added."
+      : "Job label cleared. Bank deposit unchanged.");
+    onDone();
+  }
+
   function link() {
     if (!validPlans) return;
     dispatch({ type: "ASSIGN_PLANNED_ITEMS", id: currentTx.id,
@@ -3154,7 +3166,7 @@ function EditIncomeTransactionSheet({
             : view === "confirmUnlink"
               ? "Remove income match?"
               : view === "link" || view === "confirmLink"
-                ? "Match upcoming income"
+                ? "Match received income"
                 : "Merge income"
       }
       footer={
@@ -3175,10 +3187,10 @@ function EditIncomeTransactionSheet({
             </Button>
             <Button
               variant="soft"
-              disabled={planned.length === 0}
+              disabled={planned.length === 0 && state.jobs.length === 0}
               onClick={() => {
                 setPlannedId("");
-                setSelectedPlanIds(existingIds.length ? existingIds : planned[0] ? [planned[0].id] : []);
+                setSelectedPlanIds(existingIds);
                 setView("link");
               }}
             >
@@ -3254,9 +3266,10 @@ function EditIncomeTransactionSheet({
             {fm(tx.amount)} deposited to {account?.name ?? "an account"}. Edit the activity details
             without changing the bank amount.
           </p>
-          {tx.linkedPlannedIncome && (
+          {(tx.linkedPlannedIncome || matchedJob) && (
             <p className="rounded-xl bg-muted p-3 text-sm">
-              Matched to {plannedMatchLabels(tx)}.
+              Matched to {[plannedMatchLabels(tx), matchedJob?.name].filter(Boolean).join(" · ")}.
+              {matchedJob && " Job label follows the actual deposit date."}
             </p>
           )}
           <Field label="Name">
@@ -3295,10 +3308,45 @@ function EditIncomeTransactionSheet({
           </Field>
         </div>
       ) : view === "link" ? (
-        <AssignmentChoices items={planned} selectedIds={chosenIds}
-          onChange={(ids) => { setSelectedPlanIds(ids); setPlannedId(""); }}
-          mode={assignmentMode} onModeChange={setAssignmentMode}
-          amount={tx.amount} currency={state.profile.currency} kind="income" />
+        <div className="grid gap-4">
+          {planned.length > 0 && (
+            <AssignmentChoices items={planned} selectedIds={chosenIds}
+              onChange={(ids) => { setSelectedPlanIds(ids); setPlannedId(""); }}
+              mode={assignmentMode} onModeChange={setAssignmentMode}
+              amount={tx.amount} currency={state.profile.currency} kind="income" />
+          )}
+          <div className="grid gap-3 rounded-xl border border-border bg-muted/20 p-3">
+            <p className="text-sm font-extrabold">Received on {formatDisplayDate(tx.date)}</p>
+            <p className="text-sm text-muted-foreground">
+              No planned payday for this date? Match the existing deposit directly to a job.
+              This shows the job on the calendar without changing the balance or creating another paycheck.
+              If this deposit paid an already scheduled paycheck early, select that payday above
+              instead so the expected payment is marked received. A job label alone does not
+              clear future planned income.
+            </p>
+            {state.jobs.length ? (
+              <>
+                <Field label="Which job paid you?">
+                  <Select value={receivedJobId} onChange={(event) => setReceivedJobId(event.target.value)}>
+                    <option value="">No job · other income</option>
+                    {state.jobs.map((job) => (
+                      <option key={job.id} value={job.id}>{job.name}</option>
+                    ))}
+                  </Select>
+                </Field>
+                <Button variant="soft" onClick={matchReceivedJob}
+                  disabled={receivedJobId === (tx.incomeJobId ?? "")}>
+                  {receivedJobId ? "Match deposit to job" : "Clear job label"}
+                </Button>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Add a job in Profile to match this deposit to an employer.
+                It still appears on the calendar as received income.
+              </p>
+            )}
+          </div>
+        </div>
       ) : (
         <p className="text-sm" role="alert">
           {view === "confirmMerge" ? (

@@ -111,6 +111,7 @@ export type Action =
       date: string;
       notes?: string;
     }
+  | { type: "SET_INCOME_JOB"; id: string; jobId?: string }
   | {
       type: "MERGE_INCOME_TRANSACTIONS";
       sourceId: string;
@@ -1016,6 +1017,17 @@ export function reducer(state: AppState, action: Action): AppState {
       };
     }
 
+    case "SET_INCOME_JOB": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || tx.type !== "income" ||
+          (action.jobId && !state.jobs.some((job) => job.id === action.jobId))) return state;
+      return {
+        ...state,
+        transactions: state.transactions.map((item) => item.id === tx.id
+          ? { ...item, incomeJobId: action.jobId || undefined, updatedAt: now() } : item),
+      };
+    }
+
     case "DELETE_INCOME_TRANSACTION": {
       const tx = state.transactions.find((item) => item.id === action.id);
       if (!tx || tx.type !== "income") return state;
@@ -1114,6 +1126,7 @@ export function reducer(state: AppState, action: Action): AppState {
               ? {
                   ...item,
                   balanceAlreadySynced: synced,
+                  incomeJobId: item.incomeJobId ?? source.incomeJobId,
                   updatedAt: now(),
                   linkedPlannedIncome: item.linkedPlannedIncome ?? source.linkedPlannedIncome,
                   linkedPlannedIncomes: item.linkedPlannedIncome

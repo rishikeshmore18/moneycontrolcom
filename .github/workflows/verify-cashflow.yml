@@ -1,0 +1,47 @@
+name: Cashflow changed-file checks
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/cashflow/**"
+      - "src/components/cashflow/**"
+      - ".github/workflows/verify-cashflow.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      # The existing lockfile omits an npm transitive dependency.
+      # Install without rewriting it here; lockfile repair is separate.
+      - run: npm install --no-save --package-lock=false --legacy-peer-deps
+      - name: TypeScript (allow only known pre-existing errors)
+        shell: bash
+        run: |
+          set +e
+          npx tsc --noEmit > /tmp/tsc.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/tsc.log
+          if [ "$result" -ne 0 ]; then
+            unexpected=$(grep "error TS" /tmp/tsc.log | grep -Ev 'src/lib/api/example.functions.ts|src/lib/plaid/plaid.functions.ts|src/routes/__root.tsx' || true)
+            if [ -n "$unexpected" ]; then
+              echo "::error::New TypeScript errors in files outside the baseline exceptions"
+              exit 1
+            fi
+            echo "::warning::Existing TanStack API typing errors remain outside this PR"
+          fi
+      - name: New income reconciliation regression tests
+        run: npx vitest run --config vitest.config.ts src/lib/cashflow/incomeActivityCalendar.test.ts src/lib/cashflow/sharedAssignment.test.ts
+      - name: Compile changed UI modules
+        run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
+      # The full suite and hosted Lovable build were also attempted for this PR.
+      # Existing failures elsewhere in the repository prevent treating them as checks.
+      # This workflow reports only the verifiable scoped checks above.

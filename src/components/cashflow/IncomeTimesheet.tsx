@@ -23,7 +23,8 @@ import {
   visibleIncomeEntriesForMonth,
 } from "@/lib/cashflow/timesheetLogic";
 import { payDateForTimesheetEntry, paydayItemsOnDate } from "@/lib/cashflow/forecast";
-import type { TimesheetEntry } from "@/lib/cashflow/types";
+import { receivedIncomeForMonth, incomeCalendarPaidTotal } from "@/lib/cashflow/incomeActivityCalendar";
+import type { TimesheetEntry, Transaction } from "@/lib/cashflow/types";
 import { toast } from "./Toast";
 
 export function IncomeTimesheet() {
@@ -43,6 +44,20 @@ export function IncomeTimesheet() {
     [state.timesheet, state.jobs, monthDate],
   );
 
+  const deposits = useMemo(
+    () => receivedIncomeForMonth(state, monthDate),
+    [state.transactions, monthDate],
+  );
+  const receivedByDate = useMemo(() => {
+    const map = new Map<string, Transaction[]>();
+    deposits.forEach((tx) => {
+      const existing = map.get(tx.date) ?? [];
+      existing.push(tx);
+      map.set(tx.date, existing);
+    });
+    return map;
+  }, [deposits]);
+
   const byDate = useMemo(() => {
     const map = new Map<string, TimesheetEntry[]>();
     entries.forEach((e) => {
@@ -54,20 +69,22 @@ export function IncomeTimesheet() {
   }, [entries]);
 
   const totals = useMemo(() => {
-    let hours = 0,
-      paid = 0,
-      pending = 0;
-    entries.forEach((e) => {
-      if (e.entryType !== "time_off") hours += e.hours;
-      const amt = timesheetEntryAmount(e);
-      if (e.paid) paid += amt;
-      else pending += amt;
+    let hours = 0;
+    let pending = 0;
+    entries.forEach((entry) => {
+      if (entry.entryType !== "time_off") hours += entry.hours;
+      if (!entry.paid) pending += timesheetEntryAmount(entry);
     });
-    return { hours, paid, pending };
-  }, [entries]);
+    return {
+      hours,
+      paid: incomeCalendarPaidTotal(state, monthDate, entries),
+      pending,
+    };
+  }, [entries, state.transactions, monthDate]);
 
   const days = useMemo(() => monthDays(monthDate), [monthDate]);
   const dayEntries = selectedDate ? (byDate.get(selectedDate) ?? []) : [];
+  const dayDeposits = selectedDate ? (receivedByDate.get(selectedDate) ?? []) : [];
 
   function persistAndSave(entry: TimesheetEntry) {
     dispatch({ type: "UPSERT_TIMESHEET", payload: entry });
@@ -95,7 +112,7 @@ export function IncomeTimesheet() {
 
       <div className="grid min-w-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2 md:grid-cols-3">
         <Stat label="This month hours" value={`${totals.hours.toFixed(1)}h`} />
-        <Stat label="Earnings paid" value={formatMoney(totals.paid, cur)} tone="good" />
+        <Stat label="Income received" value={formatMoney(totals.paid, cur)} tone="good" />
         <Stat label="Pending income" value={formatMoney(totals.pending, cur)} tone="warn" />
       </div>
 
@@ -131,7 +148,10 @@ export function IncomeTimesheet() {
         <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 sm:gap-1.5">
           {days.map((d) => {
             const list = byDate.get(d.iso) ?? [];
-            const hasPaid = list.some((e) => e.paid);
+            const dayReceived = receivedByDate.get(d.iso) ?? [];
+            const shownEntries = list.slice(0, dayReceived.length ? 1 : 2);
+            const shownDeposits = dayReceived.slice(0, Math.max(0, 2 - shownEntries.length));
+            const hasPaid = list.some((e) => e.paid) || dayReceived.length > 0;
             const hasUnpaid = list.some((e) => !e.paid && e.entryType !== "time_off");
             const cls = !d.inMonth
               ? "opacity-30 pointer-events-none"
@@ -144,7 +164,7 @@ export function IncomeTimesheet() {
               <button
                 key={d.iso}
                 onClick={() => {
-                  if (list.length === 0) {
+                  if (list.length === 0 && dayReceived.length === 0) {
                     setAddDate(d.iso);
                     setAddOpen(true);
                   } else {
@@ -154,7 +174,7 @@ export function IncomeTimesheet() {
                 className={`min-w-0 min-h-[52px] rounded-xl border p-1 text-left transition hover:-translate-y-0.5 sm:min-h-[78px] sm:rounded-2xl sm:p-2 ${cls}`}
               >
                 <div className="font-extrabold text-sm">{d.date.getDate()}</div>
-                {list.slice(0, 2).map((e) => (
+                {shownEntries.map((e) => (
                   <div
                     key={e.id}
                     className={`mt-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
@@ -173,9 +193,18 @@ export function IncomeTimesheet() {
                     {e.jobName}
                   </div>
                 ))}
-                {list.length > 2 && (
+                {shownDeposits.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="mt-1 truncate rounded-md bg-[color:var(--good)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--good)]"
+                    title={`${tx.description} · ${formatMoney(tx.amount, cur)}`}
+                  >
+                    Received {formatMoney(tx.amount, cur)}
+                  </div>
+                ))}
+                {list.length + dayReceived.length > shownEntries.length + shownDeposits.length && (
                   <div className="mt-0.5 text-[10px] text-muted-foreground">
-                    +{list.length - 2} more
+                    +{list.length + dayReceived.length - shownEntries.length - shownDeposits.length} more
                   </div>
                 )}
               </button>
@@ -188,6 +217,7 @@ export function IncomeTimesheet() {
         open={!!selectedDate}
         date={selectedDate}
         entries={dayEntries}
+        deposits={dayDeposits}
         onClose={() => setSelectedDate(null)}
         onAdd={(date) => {
           setSelectedDate(null);
@@ -243,6 +273,7 @@ function DayDetailSheet({
   open,
   date,
   entries,
+  deposits,
   onClose,
   onAdd,
   onEdit,
@@ -250,6 +281,7 @@ function DayDetailSheet({
   open: boolean;
   date: string | null;
   entries: TimesheetEntry[];
+  deposits: Transaction[];
   onClose: () => void;
   onAdd: (d: string) => void;
   onEdit: (e: TimesheetEntry) => void;
@@ -259,8 +291,9 @@ function DayDetailSheet({
   const [payOpen, setPayOpen] = useState<TimesheetEntry | null>(null);
 
   if (!date) return null;
-  const total = entries.reduce((s, e) => s + timesheetEntryAmount(e), 0);
-  const hours = entries.filter((e) => e.entryType !== "time_off").reduce((s, e) => s + e.hours, 0);
+  const plannedTotal = entries.reduce((sum, entry) => sum + timesheetEntryAmount(entry), 0);
+  const receivedTotal = deposits.reduce((sum, tx) => sum + Math.round(tx.amount * 100), 0) / 100;
+  const hours = entries.filter((entry) => entry.entryType !== "time_off").reduce((sum, entry) => sum + entry.hours, 0);
 
   return (
     <>
@@ -272,8 +305,12 @@ function DayDetailSheet({
               <div className="text-2xl font-black mt-1">{hours.toFixed(1)}h</div>
             </div>
             <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
-              <div className="text-xs text-muted-foreground font-bold uppercase">Total</div>
-              <div className="mt-1 break-words text-2xl font-black">{formatMoney(total, cur)}</div>
+              <div className="text-xs text-muted-foreground font-bold uppercase">
+                {deposits.length ? "Deposits received" : "Planned earnings"}
+              </div>
+              <div className="mt-1 break-words text-2xl font-black">
+                {formatMoney(deposits.length ? receivedTotal : plannedTotal, cur)}
+              </div>
             </div>
           </div>
 
@@ -281,6 +318,31 @@ function DayDetailSheet({
             <Plus size={16} /> Add another entry on this day
           </Button>
 
+          {deposits.length > 0 && (
+            <div className="grid gap-2" aria-label="Received income from Activity">
+              <div className="text-sm font-extrabold">Received income · Activity</div>
+              {deposits.map((tx) => {
+                const jobName = state.jobs.find((job) => job.id === tx.incomeJobId)?.name;
+                return (
+                  <div key={tx.id} className="flex min-w-0 items-start justify-between gap-3 rounded-xl border border-[color:var(--good)]/30 bg-[color:var(--good)]/8 p-3">
+                    <div className="min-w-0">
+                      <div className="break-words text-sm font-extrabold">{jobName ?? tx.description}</div>
+                      <div className="break-words text-xs text-muted-foreground">
+                        {jobName ? `Matched to ${jobName} · ${tx.description}` : "Bank income · Not matched to a job"}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-sm font-black text-[color:var(--good)]">
+                      +{formatMoney(tx.amount, cur)}
+                    </div>
+                  </div>
+                );
+              })}
+              <p className="text-xs text-muted-foreground">
+                To match an off-cycle deposit, go to Dashboard → Activity → Edit income → Assign to income.
+                This receipt is already in your bank balance; no money is added again.
+              </p>
+            </div>
+          )}
           <div className="grid gap-2.5">
             {entries.map((e) => {
               const amt = timesheetEntryAmount(e);
