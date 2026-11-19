@@ -21,7 +21,7 @@ jobs:
           cache: npm
       # The existing lockfile omits an npm transitive dependency.
       # Install without rewriting it here; lockfile repair is separate.
-      - run: npm install --no-save --package-lock=false
+      - run: npm install --no-save --package-lock=false --legacy-peer-deps
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
