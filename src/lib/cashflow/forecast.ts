@@ -118,36 +118,30 @@ export function spendableCashBreakdown(state: AppState): CashFlowBreakdownSectio
     const awaitingWithdrawal = pendingCashForAccount(state, account.id) +
       pendingTransferCashForAccount(state, account.id);
     const goalReserve = backedGoalReserve(state, account.id);
-    if (account.type !== "cash") {
-      return [{
-        id: account.id,
-        label: account.name,
-        detail: awaitingWithdrawal > 0
-          ? `${account.bankName || account.type} - ${formatMoney(awaitingWithdrawal, state.profile.currency)} reserved for payments or transfers awaiting withdrawal`
-          : account.bankName ? `${account.bankName} - ${account.type}` : account.type,
-        amount: account.balance - awaitingWithdrawal - goalReserve,
-      }];
-    }
-    // Cash is entered manually in Profile. Show that same gross cash balance
-    // here; display its protected amounts as separate deductions instead of
-    // silently changing the cash balance the user sees.
+    // Account rows always represent actual account balances: bank-synced
+    // snapshots for bank accounts and Profile-entered amounts for Cash.
+    // Reservations adjust spendable cash, NOT the account's balance.
     return [
       {
         id: account.id,
         label: account.name,
-        detail: "Cash balance from Profile; protected amounts shown separately below",
+        detail: account.type === "cash"
+          ? "Manually entered cash balance from Profile"
+          : account.bankLinked
+            ? `${account.bankName || account.type} - synced bank balance`
+            : `${account.bankName || account.type} - manually maintained bank balance`,
         amount: account.balance,
       },
       ...(goalReserve > 0 ? [{
         id: `${account.id}:goal-reserve`,
-        label: "Cash reserved for savings goals",
-        detail: `Set aside in ${account.name}; not available to spend`,
+        label: "Savings goals reserved",
+        detail: `Set aside in ${account.name}; excluded from spendable cash`,
         amount: -goalReserve,
       }] : []),
       ...(awaitingWithdrawal > 0 ? [{
         id: `${account.id}:pending-withdrawal`,
-        label: "Cash awaiting withdrawal",
-        detail: `Pending payments or transfers from ${account.name}`,
+        label: "Pending payments or transfers",
+        detail: `Reserved from ${account.name} until posted; does not change its synced balance`,
         amount: -awaitingWithdrawal,
       }] : []),
     ];
