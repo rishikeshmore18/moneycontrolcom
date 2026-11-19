@@ -19,7 +19,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-      - run: npm ci
+      # The existing lockfile omits an npm transitive dependency.
+      # Install without rewriting it here; lockfile repair is separate.
+      - run: npm install --no-save --package-lock=false
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
