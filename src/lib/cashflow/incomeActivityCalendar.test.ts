@@ -123,6 +123,67 @@ describe("Actual income on the calendar and off-cycle job assignment", () => {
     expect(incomeCalendarPaidTotal(part, NOVEMBER, [])).toBe(90);
   });
 
+  it("does not force a bank deposit onto the calendar solely because an old paycheck match exists after removal", () => {
+    const s = state();
+    const linked = {
+      ...deposit,
+      linkedPlannedIncome: {
+        itemId: "historical-pay", label: "Full-time",
+        originalEntries: [{
+          id: "old-pay", jobId: "full", jobName: "Full-time",
+          entryType: "salary_paycheck" as const, date: "2026-11-12",
+          hours: 0, rate: 0, expectedAmount: 1164.74,
+          paid: true, payStatus: "paid" as const,
+          createdAt: "2026-11-12", updatedAt: "2026-11-12",
+          userEdited: true,
+        }],
+      },
+    };
+    const historical = { ...s, transactions: [linked] };
+    expect(receivedIncomeForMonth(historical, NOVEMBER)).toHaveLength(1);
+    const removed = reducer(historical, {
+      type: "REMOVE_FROM_SALARY_CALENDAR", id: deposit.id,
+    });
+    expect(receivedIncomeForMonth(removed, NOVEMBER)).toEqual([]);
+    expect(incomeCalendarPaidTotal(removed, NOVEMBER, [])).toBe(0);
+    expect(removed.transactions).toHaveLength(1);
+    expect(removed.transactions[0].linkedPlannedIncome).toEqual(linked.linkedPlannedIncome);
+    expect(removed.transactions[0].salaryCalendarExcluded).toBe(true);
+    expect(removed.accounts).toEqual(historical.accounts);
+    const assignedAgain = reducer(removed, {
+      type: "SET_INCOME_JOB", id: deposit.id, jobId: "full",
+    });
+    expect(assignedAgain.transactions[0].salaryCalendarExcluded).toBeUndefined();
+    expect(receivedIncomeForMonth(assignedAgain, NOVEMBER)).toHaveLength(1);
+    expect(assignedAgain.accounts).toEqual(historical.accounts);
+  });
+
+  it("removes an incorrect job tag without allowing old linked entries to redisplay salary", () => {
+    const s = state();
+    const bank = reducer(s, {
+      type: "SET_INCOME_JOB", id: deposit.id, jobId: "full",
+    });
+    const cleared = reducer(bank, {
+      type: "REMOVE_FROM_SALARY_CALENDAR", id: deposit.id,
+    });
+    expect(cleared.transactions[0].incomeJobId).toBeUndefined();
+    expect(cleared.transactions[0].salaryCalendarExcluded).toBe(true);
+    expect(receivedIncomeForMonth(cleared, NOVEMBER)).toEqual([]);
+    expect(cleared.transactions[0].amount).toBe(deposit.amount);
+    expect(cleared.accounts).toEqual(s.accounts);
+    expect(cleared.timesheet).toEqual(s.timesheet);
+  });
+
+  it("clearing a job label opts a deposit out of the salary calendar until reassigned", () => {
+    const s = state();
+    const tagged = reducer(s, { type: "SET_INCOME_JOB", id: deposit.id, jobId: "full" });
+    const cleared = reducer(tagged, { type: "SET_INCOME_JOB", id: deposit.id });
+    expect(cleared.transactions[0].salaryCalendarExcluded).toBe(true);
+    expect(receivedIncomeForMonth(cleared, NOVEMBER)).toEqual([]);
+    const restored = reducer(cleared, { type: "SET_INCOME_JOB", id: deposit.id, jobId: "full" });
+    expect(receivedIncomeForMonth(restored, NOVEMBER)).toHaveLength(1);
+  });
+
   it("rejects nonexistent job IDs and allows clearing a job label", () => {
     const s = state();
     expect(reducer(s, { type: "SET_INCOME_JOB", id: deposit.id, jobId: "missing" })).toBe(s);
