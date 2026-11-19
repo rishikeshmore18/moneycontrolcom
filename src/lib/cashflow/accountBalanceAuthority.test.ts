@@ -82,6 +82,27 @@ describe("Bank sync is authoritative; Cash is manually maintainable", () => {
     expect(spendableItems(synced).find((row) => row.id === "bank")?.amount).toBe(1393.38);
   });
 
+  it("rejects a manual adjustment to a synced bank but allows a cash correction", () => {
+    const state = fixture();
+    const bad = reducer(state, { type: "ADD_ADJUSTMENT", payload: {
+      accountId: "bank", newBalance: 1, reason: "Correction", date: "2026-11-19",
+    } });
+    expect(bad).toBe(state);
+    const corrected = reducer(state, { type: "ADD_ADJUSTMENT", payload: {
+      accountId: "cash", newBalance: 3200, reason: "Cash count", date: "2026-11-19",
+    } });
+    expect(corrected.accounts[0].balance).toBe(2407.05);
+    expect(corrected.accounts[1].balance).toBe(3200);
+    expect(spendableItems(corrected).find((row) => row.id === "cash")?.amount).toBe(3200);
+  });
+
+  it("ignores a bank-sync action mistakenly sent to the physical Cash account", () => {
+    const state = fixture();
+    const next = reducer(state, { type: "SYNC_ACCOUNT_BALANCE", id: "cash", balance: 10 });
+    expect(next.accounts[1].balance).toBe(3111);
+    expect(next.accounts[1].bankLinked).toBeUndefined();
+  });
+
   it("keeps the bank balance unchanged while a card payment awaits withdrawal", () => {
     const state = fixture();
     const paid = reducer(state, { type: "PAY_CREDIT_CARD",
