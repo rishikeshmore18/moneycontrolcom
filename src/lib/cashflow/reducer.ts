@@ -1126,6 +1126,7 @@ export function reducer(state: AppState, action: Action): AppState {
               ? {
                   ...item,
                   balanceAlreadySynced: synced,
+                  incomeJobId: item.incomeJobId ?? source.incomeJobId,
                   updatedAt: now(),
                   linkedPlannedIncome: item.linkedPlannedIncome ?? source.linkedPlannedIncome,
                   linkedPlannedIncomes: item.linkedPlannedIncome
