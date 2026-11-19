@@ -3190,7 +3190,7 @@ function EditIncomeTransactionSheet({
               disabled={planned.length === 0 && state.jobs.length === 0}
               onClick={() => {
                 setPlannedId("");
-                setSelectedPlanIds(existingIds.length ? existingIds : planned[0] ? [planned[0].id] : []);
+                setSelectedPlanIds(existingIds);
                 setView("link");
               }}
             >
