@@ -23,7 +23,8 @@ import {
   visibleIncomeEntriesForMonth,
 } from "@/lib/cashflow/timesheetLogic";
 import { payDateForTimesheetEntry, paydayItemsOnDate } from "@/lib/cashflow/forecast";
-import type { TimesheetEntry } from "@/lib/cashflow/types";
+import { receivedIncomeForMonth, incomeCalendarPaidTotal } from "@/lib/cashflow/incomeActivityCalendar";
+import type { TimesheetEntry, Transaction } from "@/lib/cashflow/types";
 import { toast } from "./Toast";
 
 export function IncomeTimesheet() {
@@ -43,6 +44,20 @@ export function IncomeTimesheet() {
     [state.timesheet, state.jobs, monthDate],
   );
 
+  const deposits = useMemo(
+    () => receivedIncomeForMonth(state, monthDate),
+    [state.transactions, monthDate],
+  );
+  const receivedByDate = useMemo(() => {
+    const map = new Map<string, Transaction[]>();
+    deposits.forEach((tx) => {
+      const existing = map.get(tx.date) ?? [];
+      existing.push(tx);
+      map.set(tx.date, existing);
+    });
+    return map;
+  }, [deposits]);
+
   const byDate = useMemo(() => {
     const map = new Map<string, TimesheetEntry[]>();
     entries.forEach((e) => {
@@ -54,20 +69,22 @@ export function IncomeTimesheet() {
   }, [entries]);
 
   const totals = useMemo(() => {
-    let hours = 0,
-      paid = 0,
-      pending = 0;
-    entries.forEach((e) => {
-      if (e.entryType !== "time_off") hours += e.hours;
-      const amt = timesheetEntryAmount(e);
-      if (e.paid) paid += amt;
-      else pending += amt;
+    let hours = 0;
+    let pending = 0;
+    entries.forEach((entry) => {
+      if (entry.entryType !== "time_off") hours += entry.hours;
+      if (!entry.paid) pending += timesheetEntryAmount(entry);
     });
-    return { hours, paid, pending };
-  }, [entries]);
+    return {
+      hours,
+      paid: incomeCalendarPaidTotal(state, monthDate, entries),
+      pending,
+    };
+  }, [entries, state.transactions, monthDate]);
 
   const days = useMemo(() => monthDays(monthDate), [monthDate]);
   const dayEntries = selectedDate ? (byDate.get(selectedDate) ?? []) : [];
+  const dayDeposits = selectedDate ? (receivedByDate.get(selectedDate) ?? []) : [];
 
   function persistAndSave(entry: TimesheetEntry) {
     dispatch({ type: "UPSERT_TIMESHEET", payload: entry });
@@ -95,7 +112,7 @@ export function IncomeTimesheet() {
 
       <div className="grid min-w-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2 md:grid-cols-3">
         <Stat label="This month hours" value={`${totals.hours.toFixed(1)}h`} />
-        <Stat label="Earnings paid" value={formatMoney(totals.paid, cur)} tone="good" />
+        <Stat label="Income received" value={formatMoney(totals.paid, cur)} tone="good" />
         <Stat label="Pending income" value={formatMoney(totals.pending, cur)} tone="warn" />
       </div>
 
@@ -131,7 +148,10 @@ export function IncomeTimesheet() {
         <div className="grid grid-cols-[repeat(7,minmax(0,1fr))] gap-1 sm:gap-1.5">
           {days.map((d) => {
             const list = byDate.get(d.iso) ?? [];
-            const hasPaid = list.some((e) => e.paid);
+            const dayReceived = receivedByDate.get(d.iso) ?? [];
+            const shownEntries = list.slice(0, dayReceived.length ? 1 : 2);
+            const shownDeposits = dayReceived.slice(0, Math.max(0, 2 - shownEntries.length));
+            const hasPaid = list.some((e) => e.paid) || dayReceived.length > 0;
             const hasUnpaid = list.some((e) => !e.paid && e.entryType !== "time_off");
             const cls = !d.inMonth
               ? "opacity-30 pointer-events-none"
@@ -144,7 +164,7 @@ export function IncomeTimesheet() {
               <button
                 key={d.iso}
                 onClick={() => {
-                  if (list.length === 0) {
+                  if (list.length === 0 && dayReceived.length === 0) {
                     setAddDate(d.iso);
                     setAddOpen(true);
                   } else {
@@ -154,7 +174,7 @@ export function IncomeTimesheet() {
                 className={`min-w-0 min-h-[52px] rounded-xl border p-1 text-left transition hover:-translate-y-0.5 sm:min-h-[78px] sm:rounded-2xl sm:p-2 ${cls}`}
               >
                 <div className="font-extrabold text-sm">{d.date.getDate()}</div>
-                {list.slice(0, 2).map((e) => (
+                {shownEntries.map((e) => (
                   <div
                     key={e.id}
                     className={`mt-1 truncate rounded-md px-1.5 py-0.5 text-[10px] font-bold ${
@@ -173,9 +193,18 @@ export function IncomeTimesheet() {
                     {e.jobName}
                   </div>
                 ))}
-                {list.length > 2 && (
+                {shownDeposits.map((tx) => (
+                  <div
+                    key={tx.id}
+                    className="mt-1 truncate rounded-md bg-[color:var(--good)]/15 px-1.5 py-0.5 text-[10px] font-bold text-[color:var(--good)]"
+                    title={`${tx.description} · ${formatMoney(tx.amount, cur)}`}
+                  >
+                    Received {formatMoney(tx.amount, cur)}
+                  </div>
+                ))}
+                {list.length + dayReceived.length > shownEntries.length + shownDeposits.length && (
                   <div className="mt-0.5 text-[10px] text-muted-foreground">
-                    +{list.length - 2} more
+                    +{list.length + dayReceived.length - shownEntries.length - shownDeposits.length} more
                   </div>
                 )}
               </button>
@@ -188,6 +217,7 @@ export function IncomeTimesheet() {
         open={!!selectedDate}
         date={selectedDate}
         entries={dayEntries}
+        deposits={dayDeposits}
         onClose={() => setSelectedDate(null)}
         onAdd={(date) => {
           setSelectedDate(null);
