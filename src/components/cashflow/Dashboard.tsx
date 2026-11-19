@@ -3320,6 +3320,9 @@ function EditIncomeTransactionSheet({
             <p className="text-sm text-muted-foreground">
               No planned payday for this date? Match the existing deposit directly to a job.
               This shows the job on the calendar without changing the balance or creating another paycheck.
+              If this deposit paid an already scheduled paycheck early, select that payday above
+              instead so the expected payment is marked received. A job label alone does not
+              clear future planned income.
             </p>
             {state.jobs.length ? (
               <>
