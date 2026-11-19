@@ -128,6 +128,7 @@ export type Action =
       updateFutureBillAmount?: boolean;
     }
   | { type: "UNLINK_PLANNED_TRANSACTION"; id: string }
+  | { type: "REMOVE_FROM_SALARY_CALENDAR"; id: string }
   | {
       type: "MERGE_TRANSACTIONS";
       sourceId: string;
@@ -1024,7 +1025,25 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         transactions: state.transactions.map((item) => item.id === tx.id
-          ? { ...item, incomeJobId: action.jobId || undefined, updatedAt: now() } : item),
+          ? {
+              ...item,
+              incomeJobId: action.jobId || undefined,
+              salaryCalendarExcluded: action.jobId ? undefined : true,
+              updatedAt: now(),
+            } : item),
+      };
+    }
+
+    case "REMOVE_FROM_SALARY_CALENDAR": {
+      const tx = state.transactions.find((item) => item.id === action.id);
+      if (!tx || tx.type !== "income") return state;
+      // Remove only the calendar classification, not the posted deposit,
+      // historical payroll link, bank balance, or upcoming-income settlement.
+      return {
+        ...state,
+        transactions: state.transactions.map((item) => item.id === tx.id
+          ? { ...item, incomeJobId: undefined, salaryCalendarExcluded: true, updatedAt: now() }
+          : item),
       };
     }
 
