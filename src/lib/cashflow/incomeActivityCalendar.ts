@@ -21,7 +21,8 @@ export function incomeCalendarPaidTotal(
   entries: TimesheetEntry[],
 ): number {
   const received = receivedIncomeForMonth(state, monthDate);
-  const ids = new Set(received.map((tx) => tx.id));
+  // Also exclude paid entries whose linked deposit is dated in a different month.
+  const ids = new Set(state.transactions.filter((tx) => tx.type === "income").map((tx) => tx.id));
   const cents = received.reduce((sum, tx) => sum + Math.round(tx.amount * 100), 0);
   const additional = entries
     .filter((entry) => entry.paid && entry.entryType !== "time_off" &&
