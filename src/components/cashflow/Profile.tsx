@@ -389,7 +389,7 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
             {initial?.bankLinked
               ? "Bank-synced balance is the source of truth. Update it by syncing your bank; expense and income logs cannot overwrite it."
               : type === "cash"
-                ? "Cash is manually maintained. Edit this balance here after money changes hands; transaction entries do not automatically overwrite it."
+                ? "Cash is manually maintained. Transactions can update it locally; you can correct the final cash balance here at any time."
                 : "This account is not bank-synced. Its balance is manually maintained."}
           </p>
         </Field>
