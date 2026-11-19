@@ -541,10 +541,11 @@ export function reducer(state: AppState, action: Action): AppState {
     }
 
     case "SYNC_ACCOUNT_BALANCE":
+      if (!Number.isFinite(action.balance)) return state;
       return {
         ...state,
         accounts: state.accounts.map((account) =>
-          account.id === action.id
+          account.id === action.id && account.type !== "cash"
             ? { ...account, balance: action.balance, bankLinked: true, updatedAt: now() }
             : account,
         ),
@@ -1845,7 +1846,9 @@ export function reducer(state: AppState, action: Action): AppState {
       let label = "Manual adjustment";
       if (p.accountId) {
         const a = state.accounts.find((x) => x.id === p.accountId);
-        if (!a) return state;
+        // A manual adjustment is not allowed to overwrite a synced bank balance.
+        // Correct the transaction record or refresh the bank connection instead.
+        if (!a || a.bankLinked || !Number.isFinite(p.newBalance)) return state;
         delta = p.newBalance - a.balance;
         next = {
           ...next,
