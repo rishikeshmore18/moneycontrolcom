@@ -161,6 +161,9 @@ export interface Transaction {
   savingsGoalAmount?: number;
   /** Posted bank transactions already reflected in the linked balance must not move it twice. */
   balanceAlreadySynced?: boolean;
+  /** Job selected for a received income deposit, including off-cycle paydays. This only labels
+   * the posted transaction; it never creates a timesheet entry or moves cash. */
+  incomeJobId?: string;
   /** One transfer, with independently confirmed cash and card legs. */
   cardPayment?: {
     version: 2;
