@@ -231,15 +231,22 @@ function now(): string {
   return new Date().toISOString();
 }
 
+/** Financial activity never overwrites an authoritative synced bank snapshot
+ * or a cash amount entered manually in Profile. */
+function locallyMutableAccount(account: Account): boolean {
+  return !account.bankLinked && account.type !== "cash";
+}
+
 function updateAccount(state: AppState, id: string, delta: number): Account[] {
   return state.accounts.map((a) =>
-    a.id === id ? { ...a, balance: a.balance + delta, updatedAt: now() } : a,
+    a.id === id && locallyMutableAccount(a)
+      ? { ...a, balance: a.balance + delta, updatedAt: now() } : a,
   );
 }
 
 function updateAccountCents(state: AppState, id: string, delta: number): Account[] {
   return state.accounts.map((account) =>
-    account.id === id
+    account.id === id && locallyMutableAccount(account)
       ? { ...account, balance: Math.round((account.balance + delta) * 100) / 100, updatedAt: now() }
       : account,
   );
@@ -565,7 +572,16 @@ export function reducer(state: AppState, action: Action): AppState {
       return {
         ...state,
         accounts: state.accounts.map((a) =>
-          a.id === action.payload.id ? { ...action.payload, updatedAt: now() } : a,
+          a.id === action.payload.id
+            ? {
+                ...action.payload,
+                // A linked bank snapshot must not be overwritten from Profile.
+                balance: a.bankLinked ? a.balance : action.payload.balance,
+                bankLinked: a.bankLinked,
+                type: a.bankLinked ? a.type : action.payload.type,
+                updatedAt: now(),
+              }
+            : a,
         ),
       };
     case "DELETE_ACCOUNT":
@@ -933,9 +949,9 @@ export function reducer(state: AppState, action: Action): AppState {
         const fromApplied = transaction.accountTransfer?.fromLocalApplied ?? transaction.amount;
         const toApplied = transaction.accountTransfer?.toLocalApplied ?? transaction.amount;
         return { ...removeGoalTransactionMovements(state, transaction.id),
-          accounts: state.accounts.map((account) => account.id === transaction.sourceAccountId && !account.bankLinked
+          accounts: state.accounts.map((account) => account.id === transaction.sourceAccountId && locallyMutableAccount(account)
             ? { ...account, balance: Math.round((account.balance + fromApplied) * 100) / 100 }
-            : account.id === transaction.targetAccountId && !account.bankLinked
+            : account.id === transaction.targetAccountId && locallyMutableAccount(account)
               ? { ...account, balance: Math.round((account.balance - toApplied) * 100) / 100 }
               : account),
           transactions: state.transactions.filter((tx) => tx.id !== transaction.id) };
@@ -1771,10 +1787,10 @@ export function reducer(state: AppState, action: Action): AppState {
           !state.accounts.some((account) => account.id === p.toAccountId) ||
           (p.transactionId && state.transactions.some((tx) => tx.id === p.transactionId)) ||
           (p.savingsGoalId && (!goal || goalCents(backedGoalInAccount(state, goal.id, p.fromAccountId)) < goalCents(p.amount)))) return state;
-      const fromLocalApplied = state.accounts.find((a) => a.id === p.fromAccountId)?.bankLinked ||
-        p.debitAlreadySynced ? 0 : p.amount;
-      const toLocalApplied = state.accounts.find((a) => a.id === p.toAccountId)?.bankLinked ||
-        p.creditAlreadySynced ? 0 : p.amount;
+      const fromAccount = state.accounts.find((a) => a.id === p.fromAccountId)!;
+      const fromLocalApplied = !locallyMutableAccount(fromAccount) || p.debitAlreadySynced ? 0 : p.amount;
+      const toAccount = state.accounts.find((a) => a.id === p.toAccountId)!;
+      const toLocalApplied = !locallyMutableAccount(toAccount) || p.creditAlreadySynced ? 0 : p.amount;
       const next: AppState = {
         ...state,
         accounts: state.accounts.map((a) => {
