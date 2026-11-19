@@ -33,8 +33,9 @@ describe("Actual income on the calendar and off-cycle job assignment", () => {
     const s = state();
     const projected = visibleIncomeEntriesForMonth(s.timesheet, s.jobs, NOVEMBER, "2026-11-19");
     expect(projected.some((entry) => entry.date === "2026-11-12")).toBe(false);
-    expect(receivedIncomeForMonth(s, NOVEMBER).map((tx) => tx.date)).toEqual(["2026-11-12"]);
-    expect(incomeCalendarPaidTotal(s, NOVEMBER, projected)).toBe(1164.74);
+    // A generic incoming deposit must NOT be assumed to be wages.
+    expect(receivedIncomeForMonth(s, NOVEMBER)).toEqual([]);
+    expect(incomeCalendarPaidTotal(s, NOVEMBER, projected)).toBe(0);
   });
 
   it("labels the deposit with its job without moving bank cash or creating income", () => {
@@ -48,6 +49,8 @@ describe("Actual income on the calendar and off-cycle job assignment", () => {
     expect(tagged.accounts).toEqual(s.accounts);
     expect(tagged.timesheet).toEqual(s.timesheet);
     expect(pendingIncome(tagged, TODAY, "this_month")).toBe(before);
+    expect(receivedIncomeForMonth(tagged, NOVEMBER).map((tx) => tx.date))
+      .toEqual(["2026-11-12"]);
     expect(incomeCalendarPaidTotal(tagged, NOVEMBER, [])).toBe(1164.74);
   });
 
@@ -61,7 +64,10 @@ describe("Actual income on the calendar and off-cycle job assignment", () => {
       paidAccountId: "mnt-saving", linkedTransactionId: deposit.id,
       createdAt: "2026-11-12", updatedAt: "2026-11-12", userEdited: true,
     };
-    expect(incomeCalendarPaidTotal(s, NOVEMBER, [paid])).toBe(1164.74);
+    expect(receivedIncomeForMonth({ ...s, timesheet: [paid] }, NOVEMBER))
+      .toEqual([deposit]);
+    expect(incomeCalendarPaidTotal({ ...s, timesheet: [paid] }, NOVEMBER, [paid]))
+      .toBe(1164.74);
   });
 
   it("moves a receipt after an Activity date correction and removes it after deletion", () => {
@@ -70,12 +76,51 @@ describe("Actual income on the calendar and off-cycle job assignment", () => {
       type: "UPDATE_INCOME_TRANSACTION", id: deposit.id, date: "2026-11-13",
       description: deposit.description, category: deposit.category,
     });
-    expect(receivedIncomeForMonth(corrected, NOVEMBER)[0].date).toBe("2026-11-13");
-    const removed = reducer(corrected, {
+    const tagged = reducer(corrected, {
+      type: "SET_INCOME_JOB", id: deposit.id, jobId: "full",
+    });
+    expect(receivedIncomeForMonth(tagged, NOVEMBER)[0].date).toBe("2026-11-13");
+    const removed = reducer(tagged, {
       type: "DELETE_INCOME_TRANSACTION", id: deposit.id, bankBalanceAuthoritative: true,
     });
     expect(receivedIncomeForMonth(removed, NOVEMBER)).toEqual([]);
     expect(removed.accounts).toEqual(s.accounts);
+  });
+
+  it("excludes unrelated deposits even after another receipt is explicitly assigned as salary", () => {
+    const s = state();
+    const other: Transaction = {
+      ...deposit, id: "refund", description: "Refund", amount: 75,
+      category: "Refund",
+    };
+    const s2 = { ...s, transactions: [deposit, other] };
+    const tagged = reducer(s2, {
+      type: "SET_INCOME_JOB", id: deposit.id, jobId: "full",
+    });
+    expect(receivedIncomeForMonth(tagged, NOVEMBER).map((tx) => tx.id))
+      .toEqual(["bank-nov-12"]);
+    expect(incomeCalendarPaidTotal(tagged, NOVEMBER, [])).toBe(1164.74);
+    expect(tagged.transactions).toHaveLength(2);
+    expect(tagged.accounts).toEqual(s.accounts);
+  });
+
+  it("shows each part-time salary only when assigned, not arbitrary incoming payments", () => {
+    const s = state();
+    s.jobs.push({
+      id: "part", name: "Saturday job", type: "part_time",
+      netHourlyRate: 15, netPaycheckAmount: 0, payFrequency: "weekly",
+      paydayWeekday: 6, defaultDepositAccountId: "mnt-saving",
+    });
+    s.transactions.push({
+      ...deposit, id: "part-11-14", date: "2026-11-14", amount: 90,
+      description: "CASH DEPOSIT",
+    });
+    const part = reducer(s, {
+      type: "SET_INCOME_JOB", id: "part-11-14", jobId: "part",
+    });
+    expect(receivedIncomeForMonth(part, NOVEMBER).map((tx) => tx.id))
+      .toEqual(["part-11-14"]);
+    expect(incomeCalendarPaidTotal(part, NOVEMBER, [])).toBe(90);
   });
 
   it("rejects nonexistent job IDs and allows clearing a job label", () => {
@@ -84,6 +129,7 @@ describe("Actual income on the calendar and off-cycle job assignment", () => {
     const tagged = reducer(s, { type: "SET_INCOME_JOB", id: deposit.id, jobId: "full" });
     const cleared = reducer(tagged, { type: "SET_INCOME_JOB", id: deposit.id });
     expect(cleared.transactions[0].incomeJobId).toBeUndefined();
+    expect(receivedIncomeForMonth(cleared, NOVEMBER)).toEqual([]);
     expect(cleared.accounts).toEqual(s.accounts);
   });
 });

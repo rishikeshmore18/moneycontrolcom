@@ -38,6 +38,7 @@ export function IncomeTimesheet() {
   const [addOpen, setAddOpen] = useState(false);
   const [addDate, setAddDate] = useState<string>(todayISO());
   const [editEntry, setEditEntry] = useState<TimesheetEntry | null>(null);
+  const [salaryDate, setSalaryDate] = useState<string | null>(null);
 
   const entries = useMemo(
     () => visibleIncomeEntriesForMonth(state.timesheet, state.jobs, monthDate, todayISO()),
@@ -46,7 +47,7 @@ export function IncomeTimesheet() {
 
   const deposits = useMemo(
     () => receivedIncomeForMonth(state, monthDate),
-    [state.transactions, monthDate],
+    [state.transactions, state.jobs, state.timesheet, monthDate],
   );
   const receivedByDate = useMemo(() => {
     const map = new Map<string, Transaction[]>();
@@ -80,7 +81,7 @@ export function IncomeTimesheet() {
       paid: incomeCalendarPaidTotal(state, monthDate, entries),
       pending,
     };
-  }, [entries, state.transactions, monthDate]);
+  }, [entries, state.transactions, state.jobs, state.timesheet, monthDate]);
 
   const days = useMemo(() => monthDays(monthDate), [monthDate]);
   const dayEntries = selectedDate ? (byDate.get(selectedDate) ?? []) : [];
@@ -96,18 +97,23 @@ export function IncomeTimesheet() {
         <div>
           <h1 className="text-3xl font-black tracking-tight">Timesheet</h1>
           <p className="text-sm text-muted-foreground">
-            Tap a day to add a shift, time off, or mark paid.
+            Only salary from your jobs appears here. Match off-schedule pay without adding money again.
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() => {
-            setAddDate(todayISO());
-            setAddOpen(true);
-          }}
-        >
-          <Plus size={16} /> Add entry
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="soft" onClick={() => setSalaryDate(todayISO())}>
+            Assign salary
+          </Button>
+          <Button
+            variant="primary"
+            onClick={() => {
+              setAddDate(todayISO());
+              setAddOpen(true);
+            }}
+          >
+            <Plus size={16} /> Add entry
+          </Button>
+        </div>
       </header>
 
       <div className="grid min-w-0 grid-cols-1 gap-3 min-[480px]:grid-cols-2 md:grid-cols-3">
@@ -163,14 +169,7 @@ export function IncomeTimesheet() {
             return (
               <button
                 key={d.iso}
-                onClick={() => {
-                  if (list.length === 0 && dayReceived.length === 0) {
-                    setAddDate(d.iso);
-                    setAddOpen(true);
-                  } else {
-                    setSelectedDate(d.iso);
-                  }
-                }}
+                onClick={() => setSelectedDate(d.iso)}
                 className={`min-w-0 min-h-[52px] rounded-xl border p-1 text-left transition hover:-translate-y-0.5 sm:min-h-[78px] sm:rounded-2xl sm:p-2 ${cls}`}
               >
                 <div className="font-extrabold text-sm">{d.date.getDate()}</div>
@@ -219,6 +218,10 @@ export function IncomeTimesheet() {
         entries={dayEntries}
         deposits={dayDeposits}
         onClose={() => setSelectedDate(null)}
+        onAssignSalary={(date) => {
+          setSelectedDate(null);
+          setSalaryDate(date);
+        }}
         onAdd={(date) => {
           setSelectedDate(null);
           setAddDate(date);
@@ -231,6 +234,12 @@ export function IncomeTimesheet() {
           setEditEntry(entry);
           setAddOpen(true);
         }}
+      />
+
+      <SalaryMatchSheet
+        key={salaryDate ?? "closed"}
+        initialDate={salaryDate}
+        onClose={() => setSalaryDate(null)}
       />
 
       <AddEntrySheet
@@ -277,6 +286,7 @@ function DayDetailSheet({
   onClose,
   onAdd,
   onEdit,
+  onAssignSalary,
 }: {
   open: boolean;
   date: string | null;
@@ -285,6 +295,7 @@ function DayDetailSheet({
   onClose: () => void;
   onAdd: (d: string) => void;
   onEdit: (e: TimesheetEntry) => void;
+  onAssignSalary: (d: string) => void;
 }) {
   const { state, dispatch } = useApp();
   const cur = state.profile.currency;
@@ -306,7 +317,7 @@ function DayDetailSheet({
             </div>
             <div className="rounded-2xl border border-border bg-muted/50 p-3.5">
               <div className="text-xs text-muted-foreground font-bold uppercase">
-                {deposits.length ? "Deposits received" : "Planned earnings"}
+                {deposits.length ? "Salary received" : "Planned earnings"}
               </div>
               <div className="mt-1 break-words text-2xl font-black">
                 {formatMoney(deposits.length ? receivedTotal : plannedTotal, cur)}
@@ -314,13 +325,16 @@ function DayDetailSheet({
             </div>
           </div>
 
-          <Button variant="primary" full onClick={() => onAdd(date)}>
-            <Plus size={16} /> Add another entry on this day
+          <Button variant="primary" full onClick={() => onAssignSalary(date)}>
+            Assign salary received on this date
+          </Button>
+          <Button variant="soft" full onClick={() => onAdd(date)}>
+            <Plus size={16} /> Add shift or time off
           </Button>
 
           {deposits.length > 0 && (
             <div className="grid gap-2" aria-label="Received income from Activity">
-              <div className="text-sm font-extrabold">Received income · Activity</div>
+              <div className="text-sm font-extrabold">Salary received · Activity</div>
               {deposits.map((tx) => {
                 const jobName = state.jobs.find((job) => job.id === tx.incomeJobId)?.name;
                 return (
@@ -338,8 +352,7 @@ function DayDetailSheet({
                 );
               })}
               <p className="text-xs text-muted-foreground">
-                To match an off-cycle deposit, go to Dashboard → Activity → Edit income → Assign to income.
-                This receipt is already in your bank balance; no money is added again.
+                You can change its job in Assign salary without editing your bank balance.
               </p>
             </div>
           )}
@@ -445,6 +458,98 @@ function DayDetailSheet({
 
       <MarkPaidSheet entry={payOpen} onClose={() => setPayOpen(null)} />
     </>
+  );
+}
+
+/* ----- Match an existing receipt to a job on its real deposit date ----- */
+function SalaryMatchSheet({
+  initialDate,
+  onClose,
+}: {
+  initialDate: string | null;
+  onClose: () => void;
+}) {
+  const { state, dispatch } = useApp();
+  const [date, setDate] = useState(initialDate ?? todayISO());
+  const [depositId, setDepositId] = useState("");
+  const [jobId, setJobId] = useState("");
+  if (!initialDate) return null;
+
+  const deposits = state.transactions
+    .filter((tx) => tx.type === "income" && Number.isFinite(tx.amount) &&
+      tx.amount > 0 && tx.date === date)
+    .sort((a, b) => a.description.localeCompare(b.description));
+  const chosen = deposits.find((tx) => tx.id === depositId);
+  const selectedJob = state.jobs.find((job) => job.id === jobId);
+  function save() {
+    if (!chosen) return toast("Choose the existing deposit first.");
+    if (!selectedJob) return toast("Choose the job that paid you.");
+    dispatch({ type: "SET_INCOME_JOB", id: chosen.id, jobId: selectedJob.id });
+    toast("Salary linked to this job on its recorded deposit date. Bank balance unchanged.");
+    onClose();
+  }
+  return (
+    <Sheet open onClose={onClose} title="Assign salary to a date"
+      footer={
+        <>
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" disabled={!chosen || !selectedJob} onClick={save}>
+            Assign salary
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        <p className="text-sm text-muted-foreground">
+          Choose a received deposit and the full-time or part-time job that paid it.
+          Only assigned salary appears on the calendar. Other deposits stay in Activity.
+        </p>
+        <Field label="Actual deposit date">
+          <Input type="date" value={date}
+            onChange={(event) => { setDate(event.target.value); setDepositId(""); }} />
+        </Field>
+        <Field label="Deposit from Activity">
+          <Select value={depositId} onChange={(event) => {
+            const id = event.target.value;
+            setDepositId(id);
+            setJobId(deposits.find((tx) => tx.id === id)?.incomeJobId ?? "");
+          }}>
+            <option value="">Choose deposit</option>
+            {deposits.map((tx) => (
+              <option key={tx.id} value={tx.id}>
+                {tx.description} · {formatMoney(tx.amount, state.profile.currency)}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        {deposits.length === 0 && (
+          <p className="rounded-xl border border-border p-3 text-sm text-muted-foreground">
+            No recorded income on this date. Choose another deposit date or check Activity.
+            Assigning salary does not create a new deposit.
+          </p>
+        )}
+        <Field label="Which job paid you?">
+          <Select value={jobId} onChange={(event) => setJobId(event.target.value)}>
+            <option value="">Choose a job</option>
+            {state.jobs.map((job) => (
+              <option key={job.id} value={job.id}>{job.name}</option>
+            ))}
+          </Select>
+        </Field>
+        {state.jobs.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            Add your full-time or part-time job under Profile first.
+          </p>
+        )}
+        {chosen && (
+          <p className="text-xs text-muted-foreground">
+            Salary will appear on {formatDisplayDate(chosen.date)}.
+            The bank transaction date and account balance are not changed.
+            To correct a wrong bank date, edit the transaction in Activity.
+          </p>
+        )}
+      </div>
+    </Sheet>
   );
 }
 
