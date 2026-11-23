@@ -46,9 +46,40 @@ jobs:
       - name: Compile changed UI modules
         run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
       - name: Full Vitest suite
+        id: full
+        continue-on-error: true
         run: npm test
       - name: Production build
+        id: build
+        if: always()
+        continue-on-error: true
         run: npm run build
       - name: ESLint audit
+        id: lint
+        if: always()
+        continue-on-error: true
         run: npm run lint
+      - name: Final required check gate
+        if: always()
+        env:
+          FULL_RESULT: ${{ steps.full.outcome }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          LINT_RESULT: ${{ steps.lint.outcome }}
+        run: |
+          echo "Full tests: $FULL_RESULT; build: $BUILD_RESULT; lint: $LINT_RESULT"
+          test "$FULL_RESULT" = success && test "$BUILD_RESULT" = success && test "$LINT_RESULT" = success
+  baseline-full-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm install --no-save --package-lock=false --legacy-peer-deps
+      - name: Full test suite on unchanged main (baseline diagnostic)
+        run: npm test
+
 
