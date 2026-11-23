@@ -70,7 +70,7 @@ export const Route = createFileRoute("/api/public/plaid/webhook")({
 
         if (payload.webhook_type === "LIABILITIES" && code === "DEFAULT_UPDATE") {
           const { refreshLiabilitiesForItem } = await import("@/lib/plaid/sync.server");
-          try { await refreshLiabilitiesForItem(supabaseAdmin, item, { force: true }); }
+          try { await refreshLiabilitiesForItem(supabaseAdmin, item); }
           catch (err) { console.error("[plaid webhook] billing sync failed", err); }
           return new Response("ok");
         }

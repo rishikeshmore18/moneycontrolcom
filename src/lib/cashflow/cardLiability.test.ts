@@ -8,7 +8,7 @@ const card = (patch: Partial<Card> = {}): Card => ({
 });
 const snapshot = { accountId:"p", statementBalance:900, statementIssueDate:"2026-11-18",
   minimumDue:35, issuerDueDate:"2026-12-13", lastPaymentAmount:null,
-  lastPaymentDate:null, issuerOverdue:false, syncedAt:"2026-11-23T09:00:00Z" };
+  lastPaymentDate:null, issuerOverdue:false, syncedAt:"2026-11-22T23:00:00Z" };
 describe("issuer billing boundaries",()=>{
   it("keeps the actual statement apart from current debt and manual fallback",()=>{
     const value=effectiveCardBilling(card({plaidLiability:snapshot}),new Date("2026-11-23T12:00:00Z"));

@@ -111,7 +111,7 @@ describe("bank-confirmed statements never turn all outstanding debt into one ove
       accountId: "plaid_chase", statementBalance: 900,
       statementIssueDate: "2026-11-21", issuerDueDate: "2026-12-18",
       minimumDue: 35, issuerOverdue: false, lastPaymentAmount: null,
-      lastPaymentDate: null, syncedAt: "2026-11-23T09:00:00.000Z",
+      lastPaymentDate: null, syncedAt: "2026-11-22T23:00:00.000Z",
     };
     const rows = cardRows(s);
     const confirmed = rows.find(item => item.id === "Chase:generated-statement:2026-11-21");
@@ -128,7 +128,7 @@ describe("bank-confirmed statements never turn all outstanding debt into one ove
       accountId: "plaid_chase", statementBalance: 0,
       statementIssueDate: "2026-11-21", issuerDueDate: "2026-12-18",
       minimumDue: 0, issuerOverdue: false, lastPaymentAmount: null,
-      lastPaymentDate: null, syncedAt: "2026-11-23T09:00:00.000Z",
+      lastPaymentDate: null, syncedAt: "2026-11-22T23:00:00.000Z",
     };
     expect(cardRows(s).some(item => item.id.startsWith("statement-estimate:"))).toBe(false);
   });
