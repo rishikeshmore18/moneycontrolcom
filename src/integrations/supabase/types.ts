@@ -85,8 +85,61 @@ export type Database = {
           },
         ]
       }
+      plaid_card_liabilities: {
+        Row: {
+          id: string
+          user_id: string
+          item_id: string
+          plaid_account_id: string
+          statement_balance: number | null
+          statement_issue_date: string | null
+          minimum_due: number | null
+          issuer_due_date: string | null
+          last_payment_amount: number | null
+          last_payment_date: string | null
+          issuer_overdue: boolean | null
+          synced_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          item_id: string
+          plaid_account_id: string
+          statement_balance?: number | null
+          statement_issue_date?: string | null
+          minimum_due?: number | null
+          issuer_due_date?: string | null
+          last_payment_amount?: number | null
+          last_payment_date?: string | null
+          issuer_overdue?: boolean | null
+          synced_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          item_id?: string
+          plaid_account_id?: string
+          statement_balance?: number | null
+          statement_issue_date?: string | null
+          minimum_due?: number | null
+          issuer_due_date?: string | null
+          last_payment_amount?: number | null
+          last_payment_date?: string | null
+          issuer_overdue?: boolean | null
+          synced_at?: string
+        }
+        Relationships: [{
+          foreignKeyName: "plaid_card_liabilities_item_id_fkey"
+          columns: ["item_id"]
+          isOneToOne: false
+          referencedRelation: "plaid_items"
+          referencedColumns: ["id"]
+        }]
+      }
       plaid_items: {
         Row: {
+          liabilities_enabled: boolean
+          liabilities_last_synced_at: string | null
           access_token_enc: string
           created_at: string
           cursor: string | null
@@ -102,6 +155,8 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          liabilities_enabled?: boolean
+          liabilities_last_synced_at?: string | null
           access_token_enc: string
           created_at?: string
           cursor?: string | null
@@ -117,6 +172,8 @@ export type Database = {
           user_id: string
         }
         Update: {
+          liabilities_enabled?: boolean
+          liabilities_last_synced_at?: string | null
           access_token_enc?: string
           created_at?: string
           cursor?: string | null
