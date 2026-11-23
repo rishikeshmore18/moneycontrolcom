@@ -46,7 +46,8 @@ jobs:
       - name: Compile changed UI modules
         run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
       - name: Changed-code lint (exclude pre-existing repository-wide Prettier debt)
-        run: npx eslint src/lib/plaid/liabilities.ts src/lib/plaid/sync.server.ts src/lib/plaid/plaid.server.ts src/lib/plaid/bankBalances.ts src/lib/plaid/plaid.functions.ts src/lib/cashflow/cardLiability.ts src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx src/routes/api/public/plaid/webhook.ts --rule "prettier/prettier: off"
+        run: |
+          npx eslint src/lib/plaid/liabilities.ts src/lib/plaid/sync.server.ts src/lib/plaid/plaid.server.ts src/lib/plaid/bankBalances.ts src/lib/plaid/plaid.functions.ts src/lib/cashflow/cardLiability.ts src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx src/routes/api/public/plaid/webhook.ts --rule "prettier/prettier: off"
       - name: Full Vitest suite
         id: full
         continue-on-error: true
