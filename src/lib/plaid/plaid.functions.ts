@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { validateClearRange } from "./reviewClear";
+import type { CardLiability } from "@/lib/cashflow/types";
 export type { ClearInboxRange } from "./reviewClear";
 
 export interface ConnectionAccount {
@@ -17,6 +18,7 @@ export interface ConnectionAccount {
   linkedLocalId: string | null;
   linkedLocalKind: string | null;
   isActive: boolean;
+  liability?: CardLiability;
 }
 
 export interface Connection {
@@ -25,6 +27,8 @@ export interface Connection {
   status: string;
   errorMessage: string | null;
   lastSyncedAt: string | null;
+  liabilitiesEnabled: boolean;
+  liabilitiesLastSyncedAt: string | null;
   accounts: ConnectionAccount[];
 }
 
@@ -57,7 +61,7 @@ function webhookUrl(): string | undefined {
 /** Create a Link token. Pass itemRowId to re-authenticate an existing connection. */
 export const plaidCreateLinkToken = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { itemRowId?: string } | undefined) => input ?? {})
+  .inputValidator((input: { itemRowId?: string; requestLiabilities?: boolean } | undefined) => input ?? {})
   .handler(async ({ data, context }) => {
     const { plaid } = await import("./plaid.server");
     const { decryptToken } = await import("./crypto.server");
@@ -87,6 +91,10 @@ export const plaidCreateLinkToken = createServerFn({ method: "POST" })
 
     if (accessToken) {
       body["access_token"] = accessToken;
+      if (data.requestLiabilities) {
+        if (process.env["PLAID_LIABILITIES_ENABLED"] !== "true") throw new Error("Plaid Liabilities must be enabled by the administrator before requesting billing-data consent.");
+        body["additional_consented_products"] = ["liabilities"];
+      }
     } else {
       body["products"] = ["transactions"];
       body["optional_products"] = ["investments"];
@@ -96,7 +104,7 @@ export const plaidCreateLinkToken = createServerFn({ method: "POST" })
       "/link/token/create",
       body,
     );
-    return { linkToken: res.link_token };
+    return { linkToken: res.link_token, isUpdate: !!accessToken, itemRowId: data.itemRowId ?? null };
   });
 
 /** Exchange the public token from Link for a stored, encrypted access token. */
@@ -172,7 +180,7 @@ export const plaidListConnections = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Connection[]> => {
     const { data: items } = await context.supabase
       .from("plaid_items")
-      .select("id, institution_name, status, error_message, last_synced_at")
+      .select("id, institution_name, status, error_message, last_synced_at, liabilities_enabled, liabilities_last_synced_at")
       .order("created_at", { ascending: true });
     const { data: accounts } = await context.supabase
       .from("plaid_accounts")
@@ -180,12 +188,18 @@ export const plaidListConnections = createServerFn({ method: "GET" })
         "id, item_id, account_id, name, mask, type, subtype, current_balance, available_balance, limit_amount, linked_local_id, linked_local_kind, is_active",
       );
 
+    const { data: liabilities } = await context.supabase
+      .from("plaid_card_liabilities")
+      .select("item_id, plaid_account_id, statement_balance, statement_issue_date, minimum_due, issuer_due_date, last_payment_amount, last_payment_date, issuer_overdue, synced_at");
+
     return (items ?? []).map((it) => ({
       id: it.id,
       institutionName: it.institution_name,
       status: it.status,
       errorMessage: it.error_message,
       lastSyncedAt: it.last_synced_at,
+      liabilitiesEnabled: it.liabilities_enabled,
+      liabilitiesLastSyncedAt: it.liabilities_last_synced_at,
       accounts: (accounts ?? [])
         .filter((a) => a.item_id === it.id)
         .map((a) => ({
@@ -201,6 +215,20 @@ export const plaidListConnections = createServerFn({ method: "GET" })
           linkedLocalId: a.linked_local_id,
           linkedLocalKind: a.linked_local_kind,
           isActive: a.is_active,
+          liability: (() => {
+            const bill = (liabilities ?? []).find((row) => row.item_id === it.id && row.plaid_account_id === a.account_id);
+            return bill ? {
+              accountId: a.account_id,
+              statementBalance: bill.statement_balance == null ? null : Number(bill.statement_balance),
+              statementIssueDate: bill.statement_issue_date,
+              minimumDue: bill.minimum_due == null ? null : Number(bill.minimum_due),
+              issuerDueDate: bill.issuer_due_date,
+              lastPaymentAmount: bill.last_payment_amount == null ? null : Number(bill.last_payment_amount),
+              lastPaymentDate: bill.last_payment_date,
+              issuerOverdue: bill.issuer_overdue,
+              syncedAt: bill.synced_at,
+            } : undefined;
+          })(),
         })),
     }));
   });
@@ -213,7 +241,7 @@ export const plaidSyncAll = createServerFn({ method: "POST" })
     const { syncItem } = await import("./sync.server");
     const { data: items } = await supabaseAdmin
       .from("plaid_items")
-      .select("id, user_id, item_id, access_token_enc, cursor")
+      .select("id, user_id, item_id, access_token_enc, cursor, liabilities_enabled, liabilities_last_synced_at")
       .eq("user_id", context.userId);
 
     let added = 0;
@@ -239,12 +267,46 @@ export const plaidLinkAccount = createServerFn({ method: "POST" })
     },
   )
   .handler(async ({ data, context }) => {
+    if (data.localId && data.localKind) {
+      const { data: duplicate, error: duplicateError } = await context.supabase
+        .from("plaid_accounts")
+        .select("id")
+        .eq("linked_local_id", data.localId)
+        .eq("linked_local_kind", data.localKind)
+        .neq("id", data.plaidRowId)
+        .limit(1);
+      if (duplicateError) throw new Error(duplicateError.message);
+      if (duplicate?.length) throw new Error("This app account is already mapped to another Plaid account. Clear that mapping first.");
+    }
     const { error } = await context.supabase
       .from("plaid_accounts")
       .update({ linked_local_id: data.localId, linked_local_kind: data.localKind })
       .eq("id", data.plaidRowId)
       .eq("user_id", context.userId);
     if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+
+/** Called only after the user's successful Liabilities-specific Link update flow. */
+export const plaidCompleteLiabilitiesConsent = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { itemRowId: string }) => {
+    if (!input?.itemRowId) throw new Error("Connection required");
+    return input;
+  })
+  .handler(async ({ data, context }) => {
+    if (process.env["PLAID_LIABILITIES_ENABLED"] !== "true") {
+      throw new Error("Billing synchronization is not enabled for production. Ask the administrator to authorize Plaid Liabilities.");
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { refreshLiabilitiesForItem } = await import("./sync.server");
+    const { data: item } = await supabaseAdmin.from("plaid_items")
+      .select("id, user_id, item_id, access_token_enc, cursor, liabilities_enabled, liabilities_last_synced_at")
+      .eq("id", data.itemRowId).eq("user_id", context.userId).single();
+    if (!item) throw new Error("Connection not found");
+    // Billable only after this explicit user action and server-side production enablement.
+    await refreshLiabilitiesForItem(supabaseAdmin, item, { force: true, explicitConsent: true });
     return { ok: true };
   });
 

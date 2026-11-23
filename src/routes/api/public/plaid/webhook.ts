@@ -29,7 +29,7 @@ export const Route = createFileRoute("/api/public/plaid/webhook")({
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
         const { data: item } = await supabaseAdmin
           .from("plaid_items")
-          .select("id, user_id, item_id, access_token_enc, cursor")
+          .select("id, user_id, item_id, access_token_enc, cursor, liabilities_enabled, liabilities_last_synced_at")
           .eq("item_id", plaidItemId)
           .maybeSingle();
         // Unknown item: acknowledge so Plaid stops retrying, but do nothing.
@@ -68,6 +68,12 @@ export const Route = createFileRoute("/api/public/plaid/webhook")({
           return new Response("ok");
         }
 
+        if (payload.webhook_type === "LIABILITIES" && code === "DEFAULT_UPDATE") {
+          const { refreshLiabilitiesForItem } = await import("@/lib/plaid/sync.server");
+          try { await refreshLiabilitiesForItem(supabaseAdmin, item, { force: true }); }
+          catch (err) { console.error("[plaid webhook] billing sync failed", err); }
+          return new Response("ok");
+        }
         if (
           code === "SYNC_UPDATES_AVAILABLE" ||
           code === "DEFAULT_UPDATE" ||
