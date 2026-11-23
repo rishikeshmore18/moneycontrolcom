@@ -61,21 +61,25 @@ describe("post-entry income reconciliation", () => {
 
   it("links a posted deposit to an unpaid salary without adding cash, and restores the payday on delete", () => {
     const before = fixture();
-    before.transactions = [income("bank", true)];
+    // Auto-generated paydays in the past are excluded by design. Use a future Thursday.
+    const future = new Date(new Date().getFullYear() + 2, 9, 1, 12);
+    while (future.getDay() !== 4) future.setDate(future.getDate() + 1);
+    const futureDay = future.getFullYear() + "-" + String(future.getMonth() + 1).padStart(2, "0") + "-" + String(future.getDate()).padStart(2, "0");
+    before.transactions = [{ ...income("bank", true), date: futureDay }];
     before.jobs = [{ id: "job", name: "Full-time", type: "full_time", netHourlyRate: 0,
       netPaycheckAmount: 1165.78, payFrequency: "weekly", paydayWeekday: 4,
       defaultDepositAccountId: "checking" }];
-    const item = pendingIncomeBreakdown(before, reference).flatMap((section) => section.items)[0];
+    const item = pendingIncomeBreakdown(before, future).flatMap((section) => section.items)[0];
     expect(item.label).toBe("Full-time");
     const linked = reducer(before, { type: "LINK_INCOME_TRANSACTION", id: "bank", itemId: item.id });
     expect(linked.accounts[0].balance).toBe(5000);
     expect(linked.timesheet).toMatchObject([{ paid: true, actualAmount: 1165.78, linkedTransactionId: "bank" }]);
-    expect(pendingIncome(linked, reference)).toBeLessThan(pendingIncome(before, reference));
+    expect(pendingIncome(linked, future)).toBeLessThan(pendingIncome(before, future));
     const removed = reducer(linked, { type: "DELETE_INCOME_TRANSACTION", id: "bank",
       bankBalanceAuthoritative: true });
     expect(removed.accounts[0].balance).toBe(5000);
     expect(removed.timesheet).toMatchObject([{ paid: false, linkedTransactionId: undefined }]);
-    expect(pendingIncome(removed, reference)).toBe(pendingIncome(before, reference));
+    expect(pendingIncome(removed, future)).toBe(pendingIncome(before, future));
   });
 
   it("marks one-time expected income received and restores it if the linked record is deleted", () => {
