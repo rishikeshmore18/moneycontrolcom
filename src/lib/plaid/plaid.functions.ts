@@ -314,8 +314,17 @@ export const plaidCompleteLiabilitiesConsent = createServerFn({ method: "POST" }
       .select("id, user_id, item_id, access_token_enc, cursor, liabilities_enabled, liabilities_last_synced_at")
       .eq("id", data.itemRowId).eq("user_id", context.userId).single();
     if (!item) throw new Error("Connection not found");
-    // Billable only after this explicit user action and server-side production enablement.
-    await refreshLiabilitiesForItem(supabaseAdmin, item, { force: true, explicitConsent: true });
+    // A browser callback is not proof of consent. Verify Plaid's server-side Item permissions.
+    const { plaid } = await import("./plaid.server");
+    const { decryptToken } = await import("./crypto.server");
+    const itemStatus = await plaid<{ item: { consented_products?: string[]; billed_products?: string[] } }>(
+      "/item/get", { access_token: await decryptToken(item.access_token_enc) },
+    );
+    const authorized = [...(itemStatus.item.consented_products ?? []), ...(itemStatus.item.billed_products ?? [])]
+      .includes("liabilities");
+    if (!authorized) throw new Error("Plaid has not confirmed consent for Liabilities. Complete the bank authorization flow.");
+    // Do not force repeated paid refreshes when Link calls back more than once.
+    await refreshLiabilitiesForItem(supabaseAdmin, item, { explicitConsent: true });
     return { ok: true };
   });
 
