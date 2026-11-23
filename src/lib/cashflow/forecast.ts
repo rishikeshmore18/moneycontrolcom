@@ -76,6 +76,8 @@ export interface CashFlowBreakdownItem {
   balanceReminder?: boolean;
   /** Unconfirmed statement amount reserved as planned cash outflow. */
   estimatedCardPayment?: boolean;
+  /** Planned at statement close; past date does not imply issuer delinquency. */
+  plannedStatementPayment?: boolean;
   /** Past planned item that has already been assigned to another activity. */
   historicalMatch?: boolean;
   /** Month of the bill occurrence, even if its due date was moved. */
@@ -564,11 +566,13 @@ function cardCashFlowItemsForRange(
           amount: generatedStatementAmount,
           sourceType: "card_due",
           sourceId: card.id,
-          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : today,
+          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
           accountId: paymentAccountId,
           cycleStart: generatedCycle.cycleStart,
           cycleEnd: generatedCycle.cycleEnd,
-          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : today,
+          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
+          plannedStatementPayment: card.paymentTiming !== "due",
+          isOverdue: card.paymentTiming !== "due" && generatedCycle.cycleEnd < today,
         });
       }
       // A 0 statementBalance is often missing data rather than a paid card.
@@ -596,6 +600,7 @@ function cardCashFlowItemsForRange(
               cycleEnd: closedCycle.cycleEnd,
               accountId: paymentAccountId,
               estimatedCardPayment: true,
+              plannedStatementPayment: true,
               isOverdue: closedCycle.cycleEnd < today,
             });
           }
