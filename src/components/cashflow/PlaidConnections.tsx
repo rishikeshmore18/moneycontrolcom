@@ -10,6 +10,7 @@ import { useApp } from "@/lib/cashflow/AppContext";
 import { formatMoney } from "@/lib/cashflow/money";
 import {
   plaidCreateLinkToken,
+  plaidCompleteLiabilitiesConsent,
   plaidExchangeToken,
   plaidLinkAccount,
   plaidListConnections,
@@ -44,6 +45,7 @@ export function PlaidConnectionsCard() {
   const listInbox = useServerFn(plaidListInbox);
   const createLinkToken = useServerFn(plaidCreateLinkToken);
   const exchangeToken = useServerFn(plaidExchangeToken);
+  const completeLiabilitiesConsent = useServerFn(plaidCompleteLiabilitiesConsent);
   const syncAll = useServerFn(plaidSyncAll);
   const linkAccount = useServerFn(plaidLinkAccount);
   const unlinkItem = useServerFn(plaidUnlinkItem);
@@ -52,6 +54,7 @@ export function PlaidConnectionsCard() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [linkContext, setLinkContext] = useState<{ itemRowId?: string; requestLiabilities?: boolean } | null>(null);
 
   const stateRef = useRef({ state, dispatch });
   stateRef.current = { state, dispatch };
@@ -76,10 +79,12 @@ export function PlaidConnectionsCard() {
     void refresh();
   }, [refresh]);
 
-  const startLink = async (itemRowId?: string) => {
+  const startLink = async (itemRowId?: string, requestLiabilities = false) => {
     setBusy("link");
     try {
-      const res = await createLinkToken({ data: itemRowId ? { itemRowId } : {} });
+      const context = itemRowId ? { itemRowId, requestLiabilities } : {};
+      const res = await createLinkToken({ data: context });
+      setLinkContext(context);
       setLinkToken(res.linkToken);
     } catch (err) {
       toast(`Couldn't start the bank connection: ${errText(err)}`);
@@ -88,16 +93,28 @@ export function PlaidConnectionsCard() {
     }
   };
 
-  const finishLink = async (publicToken: string, institutionId?: string, institutionName?: string) => {
+  const finishLink = async (publicToken: string | null, institutionId?: string, institutionName?: string) => {
     setLinkToken(null);
     setBusy("exchange");
     try {
-      await exchangeToken({ data: { publicToken, institutionId, institutionName } });
-      toast("Bank connected. Pulling your accounts...");
+      if (linkContext?.itemRowId) {
+        // Update mode retains the existing token: never exchange its empty public token.
+        if (linkContext.requestLiabilities) {
+          await completeLiabilitiesConsent({ data: { itemRowId: linkContext.itemRowId } });
+          toast("Statement sync enabled for this bank.");
+        } else {
+          toast("Bank authorization updated.");
+        }
+      } else {
+        if (!publicToken) throw new Error("Bank did not return a connection token");
+        await exchangeToken({ data: { publicToken, institutionId, institutionName } });
+        toast("Bank connected. Pulling your accounts...");
+      }
       await refresh();
     } catch (err) {
       toast(`Connection failed: ${errText(err)}`);
     } finally {
+      setLinkContext(null);
       setBusy(null);
     }
   };
@@ -179,7 +196,7 @@ export function PlaidConnectionsCard() {
               linkToken={linkToken}
               label="Open secure bank login"
               onExchange={finishLink}
-              onExit={() => setLinkToken(null)}
+              onExit={() => { setLinkToken(null); setLinkContext(null); }}
             />
           </div>
         </Suspense>
@@ -205,6 +222,11 @@ export function PlaidConnectionsCard() {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  {!c.liabilitiesEnabled && c.status === "good" && (
+                    <Button variant="ghost" onClick={() => startLink(c.id, true)} disabled={busy === "link"}>
+                      Enable statement sync
+                    </Button>
+                  )}
                   {c.status !== "good" && (
                     <Button variant="primary" onClick={() => startLink(c.id)}>
                       Reconnect
@@ -216,6 +238,9 @@ export function PlaidConnectionsCard() {
                 </div>
               </div>
 
+              {c.liabilitiesEnabled && (
+                <div className="mt-2 text-xs text-muted-foreground">Statement sync active{c.liabilitiesLastSyncedAt ? ` · Updated ${new Date(c.liabilitiesLastSyncedAt).toLocaleDateString()}` : ""}</div>
+              )}
               {c.status !== "good" && (
                 <div className="mt-2 flex items-center gap-2 text-xs text-[color:var(--warn)]">
                   <AlertTriangle size={14} />
@@ -266,8 +291,7 @@ export function PlaidConnectionsCard() {
       )}
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Bank balances are read-only. Nothing from your bank changes your numbers until you accept it
-        in the review list.
+        Bank balances mirror the institution; transactions still require review. Statement synchronization is optional and may require a paid Plaid product. No statements are fetched without explicit opt-in.
       </p>
     </Card>
   );

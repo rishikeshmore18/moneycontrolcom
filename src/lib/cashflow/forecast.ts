@@ -24,6 +24,7 @@ import {
   startOfMonth,
 } from "./dates";
 import { formatMoney } from "./money";
+import { effectiveCardBilling } from "./cardLiability";
 import { timesheetEntryAmount, visibleIncomeEntriesForMonth } from "./timesheetLogic";
 import { monthlyBudgetSummary } from "./budget";
 import { pendingCashForAccount, pendingCardPayments, pendingTransferCashForAccount } from "./cardPaymentLedger";
@@ -553,34 +554,39 @@ function cardCashFlowItemsForRange(
     const paymentAccountId = card.defaultPaymentAccountId;
 
     if (!isZeroAprCard(card)) {
+      const billing = effectiveCardBilling(card, ref);
       const generatedStatementAmount = Math.min(
         card.currentBalance,
-        Math.max(0, card.statementBalance),
+        Math.max(0, billing.statementBalance),
       );
       if (generatedStatementAmount > 0) {
         const generatedCycle = cycleForDate(card, ref);
+        const issuerDue = billing.issuerDueDate ?? generatedCycle.dueDate;
+        const issuerStatement = billing.statementIssueDate ?? generatedCycle.cycleEnd;
+        const preferredDate = card.paymentTiming === "due" ? issuerDue : issuerStatement;
+        const actionableDate = preferredDate < today && issuerDue >= today ? today : preferredDate;
         pushCardItem({
-          id: `${card.id}:generated-statement:${generatedCycle.cycleEnd}`,
+          id: `${card.id}:generated-statement:${issuerStatement}`,
           label: `${card.name} statement`,
-          detail: `Generated statement - due ${formatDisplayDate(generatedCycle.dueDate)}`,
+          detail: `${billing.statementSource === "plaid" ? "Bank-confirmed" : "Manually entered"} statement - issuer due ${formatDisplayDate(issuerDue)}`,
           amount: generatedStatementAmount,
           sourceType: "card_due",
           sourceId: card.id,
-          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
+          dueDate: actionableDate,
           accountId: paymentAccountId,
           cycleStart: generatedCycle.cycleStart,
           cycleEnd: generatedCycle.cycleEnd,
-          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
+          periodDate: actionableDate,
           plannedStatementPayment: card.paymentTiming !== "due",
-          isOverdue: card.paymentTiming !== "due" && generatedCycle.cycleEnd < today,
+          isOverdue: billing.issuerOverdue === true,
         });
       }
-      // A 0 statementBalance is often missing data rather than a paid card.
+      // A manual zero may mean unknown data. An issuer-confirmed zero is not an issued bill.
       // If this user plans to pay at statement closing, the just-closed cycle
       // is their planned payment date. Protect an estimated current-balance
       // payment, rather than showing it as an excluded informational reminder.
       // Do not plan the same balance again for the following open cycle.
-      if (generatedStatementAmount <= 0 && card.paymentTiming !== "due") {
+      if (generatedStatementAmount <= 0 && billing.statementSource !== "plaid" && card.paymentTiming !== "due") {
         const closedCycle = cycleForDate(card, ref);
         if (closedCycle.cycleEnd >= toISO(startOfMonth(ref))) {
           const estimated = Math.max(0, Math.round(
@@ -601,7 +607,7 @@ function cardCashFlowItemsForRange(
               accountId: paymentAccountId,
               estimatedCardPayment: true,
               plannedStatementPayment: true,
-              isOverdue: closedCycle.cycleEnd < today,
+              isOverdue: false, // An estimated planned payment is not issuer delinquency.
             });
           }
           return;

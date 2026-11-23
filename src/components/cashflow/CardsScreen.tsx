@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { effectiveCardBilling, issuerPaymentStatus } from "@/lib/cashflow/cardLiability";
 import { Pencil } from "lucide-react";
 import { Card } from "./Card";
 import { CardSheet } from "./Profile";
@@ -40,6 +41,8 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
         {state.cards.map((c) => {
           const u = utilization(c) * 100;
           const over = u > c.targetUtilizationPercent;
+          const billing = effectiveCardBilling(c);
+          const paymentStatus = issuerPaymentStatus(c, new Date().toISOString().slice(0, 10));
           return (
             <Card key={c.id} className="relative">
               <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -69,8 +72,8 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
               <div className="mb-3 grid min-w-0 grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                 <Stat label="Current" value={formatMoney(c.currentBalance, cur)} />
                 <Stat label="Available" value={formatMoney(availableCredit(c), cur)} />
-                <Stat label="Statement" value={formatMoney(c.statementBalance, cur)} />
-                <Stat label="Minimum" value={formatMoney(c.minimumDue, cur)} />
+                <Stat label={billing.statementSource === "plaid" ? "Statement · Bank" : "Statement · Manual"} value={formatMoney(billing.statementBalance, cur)} />
+                <Stat label={billing.minimumSource === "plaid" ? "Minimum · Bank" : "Minimum · Manual"} value={formatMoney(billing.minimumDue, cur)} />
               </div>
 
               <div className="mb-1.5 flex justify-between text-xs font-bold">
@@ -89,7 +92,11 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
                 />
               </div>
               <div className="mt-3 text-xs text-muted-foreground">
-                Bills on day {c.billingDate} · Due day {c.dueDate} · {c.apr}% APR
+                Bills on day {c.billingDate} · {billing.issuerDueDate ? `Issuer due ${billing.issuerDueDate}` : `Manual due day ${c.dueDate}`} · {c.apr}% APR
+              </div>
+              <div className="mt-2 text-xs text-muted-foreground">
+                {paymentStatus === "issuer_overdue" ? "Bank reports overdue" : paymentStatus === "due_soon" ? "Due soon" : paymentStatus === "paid" ? "Paid" : paymentStatus === "upcoming" ? "Upcoming" : "Payment status unverified"}
+                {billing.lastSyncedAt ? ` · Last statement sync ${new Date(billing.lastSyncedAt).toLocaleDateString()}` : ""}
               </div>
               {(c.type === "zero_apr" || c.type === "zero_apr_car") && (
                 <ZeroAprBanner card={c} currency={cur} />
