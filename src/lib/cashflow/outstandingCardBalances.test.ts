@@ -22,18 +22,17 @@ function card(id: string, balance: number, statementBalance = 0): Card {
 }
 
 describe("Outstanding card balance reminders", () => {
-  it("shows unpaid balances outside this month's due items without counting them as expenses", () => {
+  it("counts estimated statement-date payments but keeps paid-off cards out", () => {
     const state: AppState = {
       ...emptyState,
       cards: [card("Amex", 47.45), card("Discover", 65), card("Paid off", 0)],
     };
     const sections = expensesComingBreakdown(state, REF, "this_month");
-    const reminders = sections.find((section) => section.title === "Other unpaid card balances");
-
-    expect(reminders?.items.map((item) => item.label).sort()).toEqual(["Amex", "Discover"]);
-    expect(reminders?.items.every((item) => item.balanceReminder && item.sourceType === "card_due"))
+    const cardItems = sections.find((section) => section.title === "Upcoming card bills")?.items ?? [];
+    expect(cardItems.map((item) => item.label).sort()).toEqual(["Amex", "Discover"]);
+    expect(cardItems.every((item) => item.estimatedCardPayment && !item.balanceReminder))
       .toBe(true);
-    expect(expensesComingTotal(state, REF, "this_month")).toBe(0);
+    expect(expensesComingTotal(state, REF, "this_month")).toBe(112.45);
   });
 
   it("does not duplicate a card with a payment already scheduled in this period", () => {
@@ -49,22 +48,24 @@ describe("Outstanding card balance reminders", () => {
     const reminders = sections.find((section) => section.title === "Other unpaid card balances");
 
     expect(scheduledItems.some((item) => item.sourceId === scheduled.id)).toBe(true);
-    expect(reminders?.items.map((item) => item.sourceId)).toEqual([notYetDue.id]);
+    expect(reminders).toBeUndefined();
+    expect(scheduledItems.some((item) => item.sourceId === notYetDue.id && item.estimatedCardPayment))
+      .toBe(true);
     expect(expensesComingTotal(state, REF, "this_month")).toBe(
       scheduledItems.reduce((sum, item) => sum + item.amount, 0),
     );
   });
 
-  it("removes the reminder once the bank-linked card balance reaches zero", () => {
+  it("removes the estimated obligation once the synced card balance reaches zero", () => {
     const state: AppState = { ...emptyState, cards: [card("Discover", 65)] };
     expect(expensesComingBreakdown(state, REF, "this_month")
-      .some((section) => section.title === "Other unpaid card balances")).toBe(true);
+      .flatMap((section) => section.items).some((item) => item.sourceId === "Discover")).toBe(true);
 
     const synced: AppState = {
       ...state,
       cards: [{ ...state.cards[0], currentBalance: 0, bankLinked: true }],
     };
     expect(expensesComingBreakdown(synced, REF, "this_month")
-      .some((section) => section.title === "Other unpaid card balances")).toBe(false);
+      .flatMap((section) => section.items).some((item) => item.sourceId === "Discover")).toBe(false);
   });
 });
