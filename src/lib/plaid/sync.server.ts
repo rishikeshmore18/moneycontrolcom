@@ -1,6 +1,7 @@
 // Shared Plaid sync routines used by both server functions and the webhook.
 import { decryptToken } from "./crypto.server";
 import { plaid, PlaidError, type PlaidApiAccount, type PlaidApiTransaction } from "./plaid.server";
+import { normalizeCreditLiability, type PlaidCreditLiability } from "./liabilities";
 
 type AdminClient = Awaited<
   typeof import("@/integrations/supabase/client.server")
@@ -105,16 +106,7 @@ export async function refreshLiabilitiesForItem(
   if (!opts.force && Number.isFinite(last) && Date.now() - last < 12 * 60 * 60 * 1000) return 0;
   const accessToken = await decryptToken(item.access_token_enc);
   const response = await plaid<{
-    liabilities: { credit: Array<{
-      account_id: string | null;
-      last_statement_balance: number | null;
-      last_statement_issue_date: string | null;
-      minimum_payment_amount: number | null;
-      next_payment_due_date: string | null;
-      last_payment_amount: number | null;
-      last_payment_date: string | null;
-      is_overdue: boolean | null;
-    }> | null };
+    liabilities: { credit: PlaidCreditLiability[] | null };
   }>("/liabilities/get", { access_token: accessToken });
   const syncedAt = new Date().toISOString();
   let count = 0;
@@ -127,14 +119,7 @@ export async function refreshLiabilitiesForItem(
     if (!account) continue;
     const row = {
       user_id: item.user_id, item_id: item.id, plaid_account_id: card.account_id,
-      statement_balance: card.last_statement_balance,
-      statement_issue_date: card.last_statement_issue_date,
-      minimum_due: card.minimum_payment_amount,
-      issuer_due_date: card.next_payment_due_date,
-      last_payment_amount: card.last_payment_amount,
-      last_payment_date: card.last_payment_date,
-      issuer_overdue: card.is_overdue,
-      synced_at: syncedAt,
+      ...normalizeCreditLiability(card, syncedAt),
     };
     const { error } = await db.from("plaid_card_liabilities").upsert(row, {
       onConflict: "user_id,plaid_account_id",

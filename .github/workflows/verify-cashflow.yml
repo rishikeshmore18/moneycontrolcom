@@ -42,10 +42,13 @@ jobs:
             echo "::warning::Existing TanStack API typing errors remain outside this PR"
           fi
       - name: Cashflow reconciliation and account balance regression tests
-        run: npx vitest run --config vitest.config.ts src/lib/cashflow/incomeActivityCalendar.test.ts src/lib/cashflow/sharedAssignment.test.ts src/lib/cashflow/accountBalanceAuthority.test.ts src/lib/cashflow/profileCashDisplay.test.ts src/lib/cashflow/cardPaymentLedger.test.ts src/lib/cashflow/cardPaymentTiming.test.ts src/lib/cashflow/recentlyClosedStatement.test.ts src/lib/cashflow/outstandingCardBalances.test.ts src/lib/cashflow/estimatedCardPayments.test.ts src/lib/cashflow/cardLiability.test.ts
+        run: npx vitest run --config vitest.config.ts src/lib/cashflow/incomeActivityCalendar.test.ts src/lib/cashflow/sharedAssignment.test.ts src/lib/cashflow/accountBalanceAuthority.test.ts src/lib/cashflow/profileCashDisplay.test.ts src/lib/cashflow/cardPaymentLedger.test.ts src/lib/cashflow/cardPaymentTiming.test.ts src/lib/cashflow/recentlyClosedStatement.test.ts src/lib/cashflow/outstandingCardBalances.test.ts src/lib/cashflow/estimatedCardPayments.test.ts src/lib/cashflow/cardLiability.test.ts src/lib/plaid/liabilities.test.ts
       - name: Compile changed UI modules
         run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
-      # The full suite and hosted Lovable build were also attempted for this PR.
-      # Existing failures elsewhere in the repository prevent treating them as checks.
-      # This workflow reports only the verifiable scoped checks above.
+      - name: Full Vitest suite
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: ESLint audit
+        run: npm run lint
 
