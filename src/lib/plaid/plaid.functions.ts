@@ -27,8 +27,8 @@ export interface Connection {
   status: string;
   errorMessage: string | null;
   lastSyncedAt: string | null;
-  liabilitiesEnabled: boolean;
-  liabilitiesLastSyncedAt: string | null;
+  liabilitiesEnabled?: boolean;
+  liabilitiesLastSyncedAt?: string | null;
   accounts: ConnectionAccount[];
 }
 

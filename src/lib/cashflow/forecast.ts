@@ -71,6 +71,8 @@ export interface CashFlowBreakdownItem {
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
   isOverdue?: boolean;
+  /** Explicitly reported by the issuer; not merely the user's preferred payment date. */
+  issuerOverdue?: boolean;
   /** The cash payment is already represented by this card's payment schedule. */
   includedInCardPayment?: boolean;
   /** Unpaid balance reminder. Display only, never counted as a second cash expense. */
@@ -578,7 +580,8 @@ function cardCashFlowItemsForRange(
           cycleEnd: generatedCycle.cycleEnd,
           periodDate: actionableDate,
           plannedStatementPayment: card.paymentTiming !== "due",
-          isOverdue: billing.issuerOverdue === true,
+          isOverdue: billing.issuerOverdue === true || (card.paymentTiming !== "due" && preferredDate < today),
+          issuerOverdue: billing.issuerOverdue === true,
         });
       }
       // A manual zero may mean unknown data. An issuer-confirmed zero is not an issued bill.
@@ -607,7 +610,7 @@ function cardCashFlowItemsForRange(
               accountId: paymentAccountId,
               estimatedCardPayment: true,
               plannedStatementPayment: true,
-              isOverdue: false, // An estimated planned payment is not issuer delinquency.
+              isOverdue: closedCycle.cycleEnd < today, // Missed preferred day, not issuer delinquency.
             });
           }
           return;
