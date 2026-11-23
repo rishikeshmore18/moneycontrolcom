@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { effectiveCardBilling, issuerPaymentStatus } from "@/lib/cashflow/cardLiability";
+import { expenseAffordabilityById, expensesComingBreakdown } from "@/lib/cashflow/forecast";
 import { Pencil } from "lucide-react";
 import { Card } from "./Card";
 import { CardSheet } from "./Profile";
@@ -18,6 +19,9 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
   const { state } = useApp();
   const cur = state.profile.currency;
   const [editing, setEditing] = useState<CardT | null>(null);
+  const now = new Date();
+  const upcomingCards = expensesComingBreakdown(state, now, "this_month").flatMap(section => section.title === "Upcoming card bills" ? section.items : []);
+  const affordability = expenseAffordabilityById(state, now, "this_month");
 
   if (state.cards.length === 0) {
     return (
@@ -43,6 +47,8 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
           const over = u > c.targetUtilizationPercent;
           const billing = effectiveCardBilling(c);
           const paymentStatus = issuerPaymentStatus(c, new Date().toISOString().slice(0, 10));
+          const planned = upcomingCards.find(item => item.sourceId === c.id);
+          const canPay = planned ? affordability[planned.id]?.affordable : undefined;
           return (
             <Card key={c.id} className="relative">
               <div className="mb-3 flex min-w-0 flex-wrap items-start justify-between gap-3">
@@ -94,9 +100,13 @@ export function CardsScreen({ onPay }: { onPay: (cardId: string) => void }) {
               <div className="mt-3 text-xs text-muted-foreground">
                 Bills on day {c.billingDate} · {billing.issuerDueDate ? `Issuer due ${billing.issuerDueDate}` : `Manual due day ${c.dueDate}`} · {c.apr}% APR
               </div>
-              <div className="mt-2 text-xs text-muted-foreground">
+              <div className={`mt-2 text-xs font-bold ${paymentStatus === "issuer_overdue" || planned?.isOverdue ? "text-[color:var(--bad)]" : paymentStatus === "paid" ? "text-[color:var(--good)]" : paymentStatus === "due_soon" ? "text-[color:var(--warn)]" : "text-muted-foreground"}`}>
                 {paymentStatus === "issuer_overdue" ? "Bank reports overdue" : paymentStatus === "due_soon" ? "Due soon" : paymentStatus === "paid" ? "Paid" : paymentStatus === "upcoming" ? "Upcoming" : "Payment status unverified"}
+                {planned?.isOverdue && paymentStatus !== "issuer_overdue" ? " · Planned payment date passed" : ""}
                 {billing.lastSyncedAt ? ` · Last statement sync ${new Date(billing.lastSyncedAt).toLocaleDateString()}` : ""}
+              </div>
+              <div className={`mt-1 text-xs font-bold ${canPay === false ? "text-[color:var(--bad)]" : canPay === true ? "text-[color:var(--good)]" : "text-muted-foreground"}`}>
+                {canPay === true ? "Can cover planned payment" : canPay === false ? "Insufficient funds for planned payment" : "Payment affordability not determined"}
               </div>
               {(c.type === "zero_apr" || c.type === "zero_apr_car") && (
                 <ZeroAprBanner card={c} currency={cur} />

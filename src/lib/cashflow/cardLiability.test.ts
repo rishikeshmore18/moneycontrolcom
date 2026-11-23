@@ -32,3 +32,16 @@ describe("issuer billing boundaries",()=>{
     expect(issuerPaymentStatus(card({plaidLiability:{...snapshot,issuerOverdue:true}}),"2026-11-23")).toBe("issuer_overdue");
   });
 });
+
+import { emptyState } from "./types";
+import { expensesComingBreakdown } from "./forecast";
+it("reduces verified outstanding statement obligations without double counting bank and app payment evidence", () => {
+  const c = card({ currentBalance: 700, statementBalance: 900, plaidLiability: {
+    ...snapshot, lastPaymentDate: "2026-11-22", lastPaymentAmount: 200,
+  }, paymentTiming:"statement" });
+  const st = { ...emptyState, cards:[c], transactions: [] };
+  const items = expensesComingBreakdown(st, new Date(2026,10,23), "this_month")
+    .flatMap(section => section.title === "Upcoming card bills" ? section.items : []);
+  const issued = items.find(item => item.id === "c:generated-statement:2026-11-18");
+  expect(issued?.amount).toBe(700);
+});

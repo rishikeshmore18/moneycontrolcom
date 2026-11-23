@@ -1,3 +1,4 @@
+import { effectiveCardBilling } from "@/lib/cashflow/cardLiability";
 import { useState } from "react";
 import { Trash2, Plus, Pencil } from "lucide-react";
 import { Card } from "./Card";
@@ -432,6 +433,7 @@ export function AccountSheet({ onClose, initial }: { onClose: () => void; initia
 
 export function CardSheet({ onClose, initial }: { onClose: () => void; initial?: CardT }) {
   const { state, dispatch } = useApp();
+  const bankBilling = initial ? effectiveCardBilling(initial) : null;
   const [c, setC] = useState<Omit<CardT, "id">>(
     initial ?? {
       name: "",
@@ -498,28 +500,30 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
             <option value="other">Other</option>
           </Select>
         </Field>
-        <Field label="Credit limit">
+        <Field label="Credit limit" hint={initial?.bankLinked ? "Read-only: synced from the bank" : undefined}>
           <Input
             type="number"
+            disabled={!!initial?.bankLinked}
             value={c.limit}
             onChange={(e) => up("limit", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="Current balance">
+        <Field label="Current balance" hint={initial?.bankLinked ? "Read-only: bank balance is authoritative" : undefined}>
           <Input
             type="number"
+            disabled={!!initial?.bankLinked}
             value={c.currentBalance}
             onChange={(e) => up("currentBalance", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="Statement balance">
+        <Field label="Statement balance · manual fallback" hint="Used only when a fresh bank-reported statement amount is unavailable">
           <Input
             type="number"
             value={c.statementBalance}
             onChange={(e) => up("statementBalance", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="Minimum due">
+        <Field label="Minimum due · manual fallback" hint="Bank-reported minimum takes priority when available">
           <Input
             type="number"
             value={c.minimumDue}
@@ -544,7 +548,17 @@ export function CardSheet({ onClose, initial }: { onClose: () => void; initial?:
             onChange={(e) => up("billingDate", toNumber(e.target.value))}
           />
         </Field>
-        <Field label="Due day (1–31)">
+        {bankBilling?.fresh && (
+          <div className="sm:col-span-2 rounded-xl border border-border bg-muted/30 p-3 text-xs">
+            <div className="font-bold">Bank-reported statement details</div>
+            <div>Statement: {bankBilling.statementSource === "plaid" ? bankBilling.statementBalance.toFixed(2) : "Not provided"}</div>
+            <div>Minimum: {bankBilling.minimumSource === "plaid" ? bankBilling.minimumDue.toFixed(2) : "Not provided"}</div>
+            <div>Issuer due: {bankBilling.issuerDueDate ?? "Not provided"}</div>
+            <div>Statement issued: {bankBilling.statementIssueDate ?? "Not provided"}</div>
+            <div className="text-muted-foreground">Your preferred payment timing remains separate from the bank\'s actual due date.</div>
+          </div>
+        )}
+        <Field label="Due day (1–31)" hint="Fallback date only; does not change the bank\'s due date">
           <Input
             type="number"
             min={1}

@@ -557,9 +557,18 @@ function cardCashFlowItemsForRange(
 
     if (!isZeroAprCard(card)) {
       const billing = effectiveCardBilling(card, ref);
+      // A previously posted payment must reduce the statement obligation, not merely current debt.
+      // Bank-reported last payment and recorded card payments may describe the SAME event.
+      const bankPaid = billing.statementIssueDate && billing.lastPaymentDate &&
+        billing.lastPaymentDate >= billing.statementIssueDate ? Math.max(0, billing.lastPaymentAmount ?? 0) : 0;
+      const recordedPaid = billing.statementIssueDate ? state.transactions
+        .filter((tx) => tx.type === "card_payment" && tx.cardId === card.id &&
+          tx.date >= billing.statementIssueDate! && (tx.cardPayment?.cardPosted || tx.cardPayment?.bankCreditId))
+        .reduce((sum, tx) => sum + tx.amount, 0) : 0;
+      const paidTowardStatement = Math.max(bankPaid, recordedPaid);
       const generatedStatementAmount = Math.min(
         card.currentBalance,
-        Math.max(0, billing.statementBalance),
+        Math.max(0, billing.statementBalance - paidTowardStatement),
       );
       if (generatedStatementAmount > 0) {
         const generatedCycle = cycleForDate(card, ref);
