@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "src/lib/cashflow/**"
+      - "src/lib/plaid/**"
+      - "src/routes/api/public/plaid/**"
+      - "supabase/migrations/**"
       - "src/components/cashflow/**"
       - ".github/workflows/verify-cashflow.yml"
 
@@ -39,9 +42,17 @@ jobs:
             echo "::warning::Existing TanStack API typing errors remain outside this PR"
           fi
       - name: Cashflow reconciliation and account balance regression tests
-        run: npx vitest run --config vitest.config.ts src/lib/cashflow/incomeActivityCalendar.test.ts src/lib/cashflow/sharedAssignment.test.ts src/lib/cashflow/accountBalanceAuthority.test.ts src/lib/cashflow/profileCashDisplay.test.ts src/lib/cashflow/cardPaymentLedger.test.ts src/lib/cashflow/cardPaymentTiming.test.ts src/lib/cashflow/recentlyClosedStatement.test.ts src/lib/cashflow/outstandingCardBalances.test.ts src/lib/cashflow/estimatedCardPayments.test.ts
+        run: npx vitest run --config vitest.config.ts src/lib/cashflow/incomeActivityCalendar.test.ts src/lib/cashflow/sharedAssignment.test.ts src/lib/cashflow/accountBalanceAuthority.test.ts src/lib/cashflow/profileCashDisplay.test.ts src/lib/cashflow/cardPaymentLedger.test.ts src/lib/cashflow/cardPaymentTiming.test.ts src/lib/cashflow/recentlyClosedStatement.test.ts src/lib/cashflow/outstandingCardBalances.test.ts src/lib/cashflow/estimatedCardPayments.test.ts src/lib/cashflow/cardLiability.test.ts src/lib/plaid/liabilities.test.ts
       - name: Compile changed UI modules
-        run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
-      # The full suite and hosted Lovable build were also attempted for this PR.
-      # Existing failures elsewhere in the repository prevent treating them as checks.
-      # This workflow reports only the verifiable scoped checks above.
+        run: npx esbuild src/components/cashflow/IncomeTimesheet.tsx src/components/cashflow/Dashboard.tsx src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx --bundle --platform=browser --format=esm --outdir=/tmp/cashflow-ui-check --external:*
+      - name: Changed-code lint (exclude pre-existing repository-wide Prettier debt)
+        run: |
+          npx eslint src/lib/plaid/liabilities.ts src/lib/plaid/sync.server.ts src/lib/plaid/plaid.server.ts src/lib/plaid/bankBalances.ts src/lib/plaid/plaid.functions.ts src/lib/cashflow/cardLiability.ts src/components/cashflow/CardsScreen.tsx src/components/cashflow/PlaidConnections.tsx src/components/cashflow/PlaidLinkButton.tsx src/routes/api/public/plaid/webhook.ts --rule "prettier/prettier: off"
+      - name: Full Vitest suite
+        run: npm test
+      # Lovable's hosted TanStack build configuration is not reproducible with
+      # plain "vite build" in this GitHub checkout (index.html is absent).
+      # The standalone build is a diagnostic only, never a prerequisite for merge.
+      - name: Standalone Vite build diagnostic (Lovable-hosted build differs)
+        continue-on-error: true
+        run: npm run build

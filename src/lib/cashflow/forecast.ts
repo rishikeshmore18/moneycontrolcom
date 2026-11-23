@@ -24,6 +24,7 @@ import {
   startOfMonth,
 } from "./dates";
 import { formatMoney } from "./money";
+import { effectiveCardBilling } from "./cardLiability";
 import { timesheetEntryAmount, visibleIncomeEntriesForMonth } from "./timesheetLogic";
 import { monthlyBudgetSummary } from "./budget";
 import { pendingCashForAccount, pendingCardPayments, pendingTransferCashForAccount } from "./cardPaymentLedger";
@@ -70,6 +71,10 @@ export interface CashFlowBreakdownItem {
   incomeEntryIds?: string[];
   incomeEntries?: TimesheetEntry[];
   isOverdue?: boolean;
+  /** Explicitly reported by the issuer; not merely the user's preferred payment date. */
+  issuerOverdue?: boolean;
+  /** User-preferred payment date passed, irrespective of actual issuer delinquency. */
+  plannedPaymentMissed?: boolean;
   /** The cash payment is already represented by this card's payment schedule. */
   includedInCardPayment?: boolean;
   /** Unpaid balance reminder. Display only, never counted as a second cash expense. */
@@ -553,34 +558,50 @@ function cardCashFlowItemsForRange(
     const paymentAccountId = card.defaultPaymentAccountId;
 
     if (!isZeroAprCard(card)) {
+      const billing = effectiveCardBilling(card, ref);
+      // A previously posted payment must reduce the statement obligation, not merely current debt.
+      // Bank-reported last payment and recorded card payments may describe the SAME event.
+      const bankPaid = billing.statementIssueDate && billing.lastPaymentDate &&
+        billing.lastPaymentDate >= billing.statementIssueDate ? Math.max(0, billing.lastPaymentAmount ?? 0) : 0;
+      const recordedPaid = billing.statementIssueDate ? state.transactions
+        .filter((tx) => tx.type === "card_payment" && tx.cardId === card.id &&
+          tx.date >= billing.statementIssueDate! && (tx.cardPayment?.cardPosted || tx.cardPayment?.bankCreditId))
+        .reduce((sum, tx) => sum + tx.amount, 0) : 0;
+      const paidTowardStatement = Math.max(bankPaid, recordedPaid);
       const generatedStatementAmount = Math.min(
         card.currentBalance,
-        Math.max(0, card.statementBalance),
+        Math.max(0, billing.statementBalance - paidTowardStatement),
       );
       if (generatedStatementAmount > 0) {
         const generatedCycle = cycleForDate(card, ref);
+        const issuerDue = billing.issuerDueDate ?? generatedCycle.dueDate;
+        const issuerStatement = billing.statementIssueDate ?? generatedCycle.cycleEnd;
+        const preferredDate = card.paymentTiming === "due" ? issuerDue : issuerStatement;
+        const actionableDate = preferredDate < today && issuerDue >= today ? today : preferredDate;
         pushCardItem({
-          id: `${card.id}:generated-statement:${generatedCycle.cycleEnd}`,
+          id: `${card.id}:generated-statement:${issuerStatement}`,
           label: `${card.name} statement`,
-          detail: `Generated statement - due ${formatDisplayDate(generatedCycle.dueDate)}`,
+          detail: `${billing.statementSource === "plaid" ? "Bank-confirmed" : "Manually entered"} statement - issuer due ${formatDisplayDate(issuerDue)}`,
           amount: generatedStatementAmount,
           sourceType: "card_due",
           sourceId: card.id,
-          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
+          dueDate: actionableDate,
           accountId: paymentAccountId,
           cycleStart: generatedCycle.cycleStart,
           cycleEnd: generatedCycle.cycleEnd,
-          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
+          periodDate: actionableDate,
           plannedStatementPayment: card.paymentTiming !== "due",
-          isOverdue: card.paymentTiming !== "due" && generatedCycle.cycleEnd < today,
+          isOverdue: billing.issuerOverdue === true || preferredDate < today,
+          issuerOverdue: billing.issuerOverdue === true,
+          plannedPaymentMissed: preferredDate < today,
         });
       }
-      // A 0 statementBalance is often missing data rather than a paid card.
+      // A manual zero may mean unknown data. An issuer-confirmed zero is not an issued bill.
       // If this user plans to pay at statement closing, the just-closed cycle
       // is their planned payment date. Protect an estimated current-balance
       // payment, rather than showing it as an excluded informational reminder.
       // Do not plan the same balance again for the following open cycle.
-      if (generatedStatementAmount <= 0 && card.paymentTiming !== "due") {
+      if (generatedStatementAmount <= 0 && billing.statementSource !== "plaid" && card.paymentTiming !== "due") {
         const closedCycle = cycleForDate(card, ref);
         if (closedCycle.cycleEnd >= toISO(startOfMonth(ref))) {
           const estimated = Math.max(0, Math.round(
@@ -601,7 +622,8 @@ function cardCashFlowItemsForRange(
               accountId: paymentAccountId,
               estimatedCardPayment: true,
               plannedStatementPayment: true,
-              isOverdue: closedCycle.cycleEnd < today,
+              isOverdue: closedCycle.cycleEnd < today, // Missed preferred day, not issuer delinquency.
+              plannedPaymentMissed: closedCycle.cycleEnd < today,
             });
           }
           return;
@@ -1551,6 +1573,7 @@ export function expensesComingBreakdown(
   const today = toISO(ref);
   const recentlyClosed = state.cards
     .filter((card) => !isZeroAprCard(card) && card.currentBalance > 0.005)
+    .filter((card) => effectiveCardBilling(card, ref).statementSource !== "plaid")
     .filter((card) => !scheduledCardIds.has(card.id))
     .map((card) => ({ card, cycle: cycleForDate(card, ref) }))
     .filter(({ card, cycle }) => cardPaymentOverride(

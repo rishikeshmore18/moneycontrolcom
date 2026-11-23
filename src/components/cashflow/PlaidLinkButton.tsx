@@ -5,7 +5,7 @@ import { Button } from "./Button";
 interface Props {
   linkToken: string;
   label: string;
-  onExchange: (publicToken: string, institutionId?: string, institutionName?: string) => void;
+  onExchange: (publicToken: string | null, institutionId?: string, institutionName?: string) => void;
   onExit: () => void;
 }
 
@@ -18,7 +18,6 @@ export default function PlaidLinkButton({ linkToken, label, onExchange, onExit }
       publicToken: string | null,
       metadata: { institution?: { institution_id?: string; name?: string } | null },
     ) => {
-      if (!publicToken) return;
       setDone(true);
       onExchange(publicToken, metadata.institution?.institution_id, metadata.institution?.name);
     },

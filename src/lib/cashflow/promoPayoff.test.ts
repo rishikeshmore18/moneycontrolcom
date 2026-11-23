@@ -253,8 +253,9 @@ describe("0% card payoff plan", () => {
     expect(
       expensesComingBreakdown(paid, late)
         .flatMap((section) => section.items)
-        .filter((item) => item.sourceType === "card_due"),
+        .filter((item) => item.sourceType === "card_due" && !item.balanceReminder),
     ).toHaveLength(0);
+    expect(expensesComingTotal(paid, late)).toBe(0);
     expect(spendableToday(paid, late)).toBeCloseTo(spendableToday(s, late), 2);
   });
 

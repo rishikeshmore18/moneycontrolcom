@@ -42,7 +42,21 @@ export interface Account {
 
 export type CardType = "regular" | "zero_apr" | "zero_apr_car" | "other";
 
+export interface CardLiability {
+  accountId: string;
+  statementBalance: number | null;
+  statementIssueDate: string | null;
+  minimumDue: number | null;
+  issuerDueDate: string | null;
+  lastPaymentAmount: number | null;
+  lastPaymentDate: string | null;
+  issuerOverdue: boolean | null;
+  syncedAt: string;
+}
+
 export interface Card {
+  /** Read-only Plaid billing snapshot, separate from the user's saved fallback fields. */
+  plaidLiability?: CardLiability;
   id: string;
   name: string;
   type: CardType;

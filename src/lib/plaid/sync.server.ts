@@ -1,6 +1,7 @@
 // Shared Plaid sync routines used by both server functions and the webhook.
 import { decryptToken } from "./crypto.server";
 import { plaid, PlaidError, type PlaidApiAccount, type PlaidApiTransaction } from "./plaid.server";
+import { normalizeCreditLiability, type PlaidCreditLiability } from "./liabilities";
 
 type AdminClient = Awaited<
   typeof import("@/integrations/supabase/client.server")
@@ -12,6 +13,8 @@ export interface ItemRow {
   item_id: string;
   access_token_enc: string;
   cursor: string | null;
+  liabilities_enabled?: boolean;
+  liabilities_last_synced_at?: string | null;
 }
 
 function categoryOf(tx: PlaidApiTransaction): string | null {
@@ -88,6 +91,48 @@ export async function refreshBalancesForItem(db: AdminClient, item: ItemRow) {
     }
   }
   return res.accounts.length;
+}
+
+
+// Only after explicit consent. Plaid's underlying issuer data refreshes about daily.
+export async function refreshLiabilitiesForItem(
+  db: AdminClient,
+  item: ItemRow,
+  opts: { force?: boolean; explicitConsent?: boolean } = {},
+): Promise<number> {
+  if (process.env["PLAID_LIABILITIES_ENABLED"] !== "true") return 0;
+  if (!item.liabilities_enabled && !opts.explicitConsent) return 0;
+  const last = item.liabilities_last_synced_at ? Date.parse(item.liabilities_last_synced_at) : NaN;
+  if (!opts.force && Number.isFinite(last) && Date.now() - last < 12 * 60 * 60 * 1000) return 0;
+  const accessToken = await decryptToken(item.access_token_enc);
+  const response = await plaid<{
+    liabilities: { credit: PlaidCreditLiability[] | null };
+  }>("/liabilities/get", { access_token: accessToken });
+  const syncedAt = new Date().toISOString();
+  let count = 0;
+  for (const card of response.liabilities.credit ?? []) {
+    if (!card.account_id) continue;
+    // Do not accept an Item's liability for an unknown or another user's account.
+    const { data: account } = await db.from("plaid_accounts")
+      .select("id").eq("user_id", item.user_id)
+      .eq("item_id", item.id).eq("account_id", card.account_id).maybeSingle();
+    if (!account) continue;
+    const row = {
+      user_id: item.user_id, item_id: item.id, plaid_account_id: card.account_id,
+      ...normalizeCreditLiability(card, syncedAt),
+    };
+    const { error } = await db.from("plaid_card_liabilities").upsert(row, {
+      onConflict: "user_id,plaid_account_id",
+    });
+    if (error) throw new Error(error.message);
+    count++;
+  }
+  const { error: itemError } = await db.from("plaid_items").update({
+    liabilities_enabled: true, liabilities_last_synced_at: syncedAt,
+  }).eq("id", item.id).eq("user_id", item.user_id);
+  if (itemError) throw new Error(itemError.message);
+  await log(db, item.user_id, item.id, "liabilities", "sync", { count });
+  return count;
 }
 
 export async function syncTransactionsForItem(db: AdminClient, item: ItemRow) {
@@ -199,7 +244,18 @@ export async function syncTransactionsForItem(db: AdminClient, item: ItemRow) {
 export async function syncItem(db: AdminClient, item: ItemRow) {
   try {
     await refreshBalancesForItem(db, item);
-    return await syncTransactionsForItem(db, item);
+    const transactions = await syncTransactionsForItem(db, item);
+    if (item.liabilities_enabled) {
+      try {
+        await refreshLiabilitiesForItem(db, item);
+      } catch (err) {
+        // Billing failure must never block fresh bank balances or transactions.
+        await log(db, item.user_id, item.id, "liabilities", "error", {
+          code: err instanceof PlaidError ? err.code : "SYNC_ERROR",
+        });
+      }
+    }
+    return transactions;
   } catch (err) {
     await markItemError(db, item, err);
     throw err;

@@ -34,6 +34,13 @@ export const Route = createFileRoute("/api/public/plaid/webhook")({
           .maybeSingle();
         // Unknown item: acknowledge so Plaid stops retrying, but do nothing.
         if (!item) return new Response("ok");
+        const { data: flags } = await supabaseAdmin.from("plaid_items")
+          .select("liabilities_enabled, liabilities_last_synced_at")
+          .eq("id", item.id).maybeSingle();
+        const itemWithFlags = { ...item,
+          liabilities_enabled: flags?.liabilities_enabled ?? false,
+          liabilities_last_synced_at: flags?.liabilities_last_synced_at ?? null,
+        };
 
         await supabaseAdmin.from("plaid_sync_log").insert({
           user_id: item.user_id,
@@ -68,6 +75,12 @@ export const Route = createFileRoute("/api/public/plaid/webhook")({
           return new Response("ok");
         }
 
+        if (payload.webhook_type === "LIABILITIES" && code === "DEFAULT_UPDATE") {
+          const { refreshLiabilitiesForItem } = await import("@/lib/plaid/sync.server");
+          try { await refreshLiabilitiesForItem(supabaseAdmin, itemWithFlags); }
+          catch (err) { console.error("[plaid webhook] billing sync failed", err); }
+          return new Response("ok");
+        }
         if (
           code === "SYNC_UPDATES_AVAILABLE" ||
           code === "DEFAULT_UPDATE" ||
@@ -78,7 +91,7 @@ export const Route = createFileRoute("/api/public/plaid/webhook")({
         ) {
           const { syncItem } = await import("@/lib/plaid/sync.server");
           try {
-            await syncItem(supabaseAdmin, item);
+            await syncItem(supabaseAdmin, itemWithFlags);
           } catch (err) {
             console.error("[plaid webhook] sync failed", err);
           }

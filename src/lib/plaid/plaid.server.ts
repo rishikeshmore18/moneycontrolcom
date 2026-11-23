@@ -1,5 +1,8 @@
 // Thin fetch wrapper around the Plaid API (production). Server-only.
-export const PLAID_BASE = "https://production.plaid.com";
+// Production remains the default for existing deployments. Set PLAID_ENV=sandbox only for testing.
+export const PLAID_BASE = process.env["PLAID_ENV"] === "sandbox"
+  ? "https://sandbox.plaid.com"
+  : "https://production.plaid.com";
 
 export class PlaidError extends Error {
   status: number;

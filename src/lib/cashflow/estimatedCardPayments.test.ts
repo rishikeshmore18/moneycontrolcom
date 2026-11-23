@@ -102,3 +102,49 @@ describe("Statement-generation card payment estimates and status", () => {
     expect(december.every(item => item.balanceReminder)).toBe(true);
   });
 });
+
+describe("bank-confirmed statements never turn all outstanding debt into one overdue bill", () => {
+  it("uses issuer statement and actual due date while preserving extra card debt for a later cycle", () => {
+    const s = state();
+    s.cards = [card("Chase", 1590.93, 21, 18, 0, "statement")];
+    s.cards[0]!.plaidLiability = {
+      accountId: "plaid_chase", statementBalance: 900,
+      statementIssueDate: "2026-11-21", issuerDueDate: "2026-12-18",
+      minimumDue: 35, issuerOverdue: false, lastPaymentAmount: null,
+      lastPaymentDate: null, syncedAt: "2026-11-22T23:00:00.000Z",
+    };
+    const rows = cardRows(s);
+    const confirmed = rows.find(item => item.id === "Chase:generated-statement:2026-11-21");
+    expect(confirmed?.amount).toBe(900);
+    expect(confirmed?.detail).toContain("issuer due Dec");
+    expect(confirmed?.issuerOverdue).toBe(false);
+    expect(confirmed?.plannedStatementPayment).toBe(true);
+    expect(confirmed?.isOverdue).toBe(true); // Preferred early day missed, not issuer overdue
+  });
+  it("respects a confirmed zero statement while maintaining unbilled debt", () => {
+    const s = state();
+    s.cards = [card("Chase", 500, 21, 18, 0, "statement")];
+    s.cards[0]!.plaidLiability = {
+      accountId: "plaid_chase", statementBalance: 0,
+      statementIssueDate: "2026-11-21", issuerDueDate: "2026-12-18",
+      minimumDue: 0, issuerOverdue: false, lastPaymentAmount: null,
+      lastPaymentDate: null, syncedAt: "2026-11-22T23:00:00.000Z",
+    };
+    expect(cardRows(s).some(item => item.id.startsWith("statement-estimate:"))).toBe(false);
+  });
+});
+
+it("keeps an older confirmed issuer obligation visible and protects cash this month without declaring bank delinquency",()=>{
+  const s=state();
+  s.cards=[card("Chase", 1100, 21, 18, 0, "due")];
+  s.cards[0]!.plaidLiability={
+    accountId:"plaid_chase",statementBalance:900,statementIssueDate:"2026-10-21",
+    issuerDueDate:"2026-11-18",minimumDue:35,issuerOverdue:false,
+    lastPaymentAmount:null,lastPaymentDate:null,syncedAt:"2026-11-22T23:00:00Z",
+  };
+  const item=cardRows(s).find(x=>x.id==="Chase:generated-statement:2026-10-21");
+  expect(item?.amount).toBe(900);
+  expect(item?.isOverdue).toBe(true);
+  expect(item?.issuerOverdue).toBe(false);
+  expect(item?.plannedPaymentMissed).toBe(true);
+});

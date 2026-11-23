@@ -1023,7 +1023,7 @@ function BreakdownSheet({
                             </div>
                             {isOverdue && (
                               <span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-[color:var(--bad)]/12 text-[color:var(--bad)]">
-                                {item.plannedStatementPayment ? "Planned date passed" : "Overdue"}
+                                {item.issuerOverdue ? "Bank reports overdue" : item.plannedPaymentMissed || item.plannedStatementPayment ? "Planned date passed" : "Overdue"}
                               </span>
                             )}
                             {item.estimatedCardPayment && (

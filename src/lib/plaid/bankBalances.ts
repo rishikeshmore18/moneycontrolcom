@@ -22,6 +22,12 @@ export function applyBankBalances(
 ): void {
   for (const conn of connections) {
     for (const pa of conn.accounts) {
+      if (pa.linkedLocalKind === "card" && pa.linkedLocalId && pa.liability) {
+        const card = cards.find((candidate) => candidate.id === pa.linkedLocalId);
+        if (card && card.plaidLiability?.syncedAt !== pa.liability.syncedAt) {
+          dispatch({ type: "SYNC_CARD_LIABILITY", id: card.id, liability: pa.liability });
+        }
+      }
       if (!pa.linkedLocalId || pa.currentBalance == null) continue;
       const live = Number(pa.currentBalance);
       if (!Number.isFinite(live)) continue;

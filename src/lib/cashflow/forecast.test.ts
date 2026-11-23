@@ -195,7 +195,7 @@ describe("Spendable today safety invariants", () => {
       (section) => section.title === "Forecast assumptions",
     );
     expect(assumptions?.items.find((item) => item.label === "Income included")?.detail).toContain(
-      "excluded until the work is entered",
+      "Only scheduled salary and entered work are counted as protected income",
     );
   });
 

@@ -47,6 +47,7 @@ export type Action =
   | { type: "UPDATE_CARD"; payload: Card }
   | { type: "SYNC_ACCOUNT_BALANCE"; id: string; balance: number }
   | { type: "SYNC_CARD_BALANCE"; id: string; balance: number; limit: number }
+  | { type: "SYNC_CARD_LIABILITY"; id: string; liability: Card["plaidLiability"] }
   | { type: "UPDATE_CARD_PAYMENT"; id: string; payload: CardPaymentInput }
   | { type: "RECONCILE_CARD_PAYMENT"; id: string; leg: "cash" | "card"; bankId: string }
   | { type: "RECONCILE_ACCOUNT_TRANSFER"; id: string; leg: "debit" | "credit"; bankId: string }
@@ -560,6 +561,13 @@ export function reducer(state: AppState, action: Action): AppState {
         ),
       };
 
+    case "SYNC_CARD_LIABILITY":
+      return {
+        ...state,
+        cards: state.cards.map((card) => card.id === action.id &&
+          (!card.plaidLiability || !action.liability || card.plaidLiability.syncedAt <= action.liability.syncedAt)
+            ? { ...card, plaidLiability: action.liability } : card),
+      };
     case "ADD_ACCOUNT": {
       const acc: Account = {
         availableForSpending: true,

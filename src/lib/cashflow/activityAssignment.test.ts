@@ -175,14 +175,19 @@ describe("assigning activity to an upcoming item", () => {
     expect(undone.accounts).toEqual(before.accounts);
   });
 
-  it("never suggests a bill already paid or a card/debt payment for expense assignment", () => {
+  it("only offers a settled bill as an explicit historical match without duplicating cash", () => {
     const before = fixture();
     before.transactions = [mobile()];
     const paid = reducer(before, { type: "LINK_EXPENSE_TRANSACTION", id: "mobile-charge", itemId: "mobile:2026-09" });
     const second = { ...mobile(), id: "second" };
-    expect(assignablePlannedExpenses(paid, second).some((item) => item.id === "mobile:2026-09")).toBe(false);
+    const options = assignablePlannedExpenses(paid, second);
+    expect(options.some((item) => item.id === "mobile:2026-09" && !item.historicalMatch)).toBe(false);
+    expect(options.find((item) => item.id === "mobile:2026-09")?.historicalMatch).toBe(true);
     const withSecond = { ...paid, transactions: [second, ...paid.transactions] };
-    expect(reducer(withSecond, { type: "LINK_EXPENSE_TRANSACTION", id: "second", itemId: "mobile:2026-09" })).toBe(withSecond);
+    const explicitlyLinked = reducer(withSecond, { type: "LINK_EXPENSE_TRANSACTION", id: "second", itemId: "mobile:2026-09" });
+    expect(explicitlyLinked.accounts).toEqual(withSecond.accounts);
+    expect(explicitlyLinked.transactions.find((tx) => tx.id === "second")?.linkedPlannedExpense?.shared).toBe(true);
+    expect(expensesComingTotal(explicitlyLinked, sep)).toBe(expensesComingTotal(withSecond, sep));
     expect(assignablePlannedExpenses(before, { ...mobile(), type: "card_payment" })).toEqual([]);
   });
 });

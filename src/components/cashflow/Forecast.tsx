@@ -1253,7 +1253,7 @@ function UpcomingBillButton({
       <div className="mt-3 truncate text-sm font-bold group-hover:text-primary">{item.label}</div>
       <div className="mt-1 text-base font-black">{formatMoney(item.amount, currency)}</div>
       <div className="mt-1 text-[10px] text-muted-foreground">
-        {dueDate && dueDate < isoDate(new Date()) ? "Past due - still protected" : "Upcoming"}
+        {item.issuerOverdue ? "Bank reports overdue" : item.isOverdue && (item.plannedPaymentMissed || item.plannedStatementPayment) ? "Planned payment date missed" : item.isOverdue ? "Past due - still protected" : "Upcoming"}
       </div>
     </button>
   );
