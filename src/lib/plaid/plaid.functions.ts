@@ -180,8 +180,11 @@ export const plaidListConnections = createServerFn({ method: "GET" })
   .handler(async ({ context }): Promise<Connection[]> => {
     const { data: items } = await context.supabase
       .from("plaid_items")
-      .select("id, institution_name, status, error_message, last_synced_at, liabilities_enabled, liabilities_last_synced_at")
+      .select("id, institution_name, status, error_message, last_synced_at")
       .order("created_at", { ascending: true });
+    // Independent optional query: existing connections keep working before the additive migration is deployed.
+    const { data: billingFlags } = await context.supabase
+      .from("plaid_items").select("id, liabilities_enabled, liabilities_last_synced_at");
     const { data: accounts } = await context.supabase
       .from("plaid_accounts")
       .select(
@@ -198,8 +201,8 @@ export const plaidListConnections = createServerFn({ method: "GET" })
       status: it.status,
       errorMessage: it.error_message,
       lastSyncedAt: it.last_synced_at,
-      liabilitiesEnabled: it.liabilities_enabled,
-      liabilitiesLastSyncedAt: it.liabilities_last_synced_at,
+      liabilitiesEnabled: billingFlags?.find((flag) => flag.id === it.id)?.liabilities_enabled ?? false,
+      liabilitiesLastSyncedAt: billingFlags?.find((flag) => flag.id === it.id)?.liabilities_last_synced_at ?? null,
       accounts: (accounts ?? [])
         .filter((a) => a.item_id === it.id)
         .map((a) => ({
@@ -241,14 +244,20 @@ export const plaidSyncAll = createServerFn({ method: "POST" })
     const { syncItem } = await import("./sync.server");
     const { data: items } = await supabaseAdmin
       .from("plaid_items")
-      .select("id, user_id, item_id, access_token_enc, cursor, liabilities_enabled, liabilities_last_synced_at")
+      .select("id, user_id, item_id, access_token_enc, cursor")
       .eq("user_id", context.userId);
 
     let added = 0;
     const failed: string[] = [];
     for (const item of items ?? []) {
       try {
-        const res = await syncItem(supabaseAdmin, item);
+        const { data: flags } = await supabaseAdmin.from("plaid_items")
+          .select("liabilities_enabled, liabilities_last_synced_at")
+          .eq("id", item.id).maybeSingle();
+        const res = await syncItem(supabaseAdmin, { ...item,
+          liabilities_enabled: flags?.liabilities_enabled ?? false,
+          liabilities_last_synced_at: flags?.liabilities_last_synced_at ?? null,
+        });
         added += res.added;
       } catch (err) {
         failed.push(err instanceof Error ? err.message : String(err));
