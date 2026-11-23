@@ -1367,7 +1367,17 @@ function safetyExpenseSectionsForRange(
     }))
     .filter((section) => section.items.length > 0);
 
-  const cardItems = cardCashFlowItemsForRange(state, ref, range);
+  const cardItems = cardCashFlowItemsForRange(state, ref, range).map((item) => {
+    // A missed planned payment must reduce cash available from today forward,
+    // never create a fictional forecast transaction in the past.
+    if (!item.isOverdue || !item.dueDate || item.dueDate >= today) return item;
+    return {
+      ...item,
+      dueDate: today,
+      periodDate: today,
+      detail: `${item.detail ?? "Card payment"} - still unpaid, protected today`,
+    };
+  });
   const cardFundedItems = allSections
     .filter((section) => section.title !== "Upcoming card bills")
     .flatMap((section) => section.items)
