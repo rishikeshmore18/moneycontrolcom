@@ -172,7 +172,7 @@ export function Dashboard() {
       },
       expenses_coming: {
         title: "Expenses coming",
-        helper: "Bills, scheduled payments, and all unpaid card balances (balance-only reminders excluded from total)",
+        helper: "Planned payments count in the selected period. Unconfirmed card amounts are estimates; out-of-period balance reminders are excluded.",
         total: expensesComing,
         tone: "orange" as const,
         sections: expensesComingBreakdown(state, new Date(), cashFlowPeriod, customRange),
@@ -1023,7 +1023,12 @@ function BreakdownSheet({
                             </div>
                             {isOverdue && (
                               <span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-extrabold bg-[color:var(--bad)]/12 text-[color:var(--bad)]">
-                                Overdue
+                                {item.plannedStatementPayment ? "Planned date passed" : "Overdue"}
+                              </span>
+                            )}
+                            {item.estimatedCardPayment && (
+                              <span className="inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[10px] font-bold bg-[color:var(--warn)]/15 text-[color:var(--warn)]">
+                                Estimated
                               </span>
                             )}
                             {affordability && (
@@ -1092,12 +1097,14 @@ function AffordabilityMarker({
       aria-label={
         blocked ? "Not enough projected cash on this date" : "Enough projected cash on this date"
       }
-      className={`h-3 w-3 shrink-0 rounded-full border transition hover:scale-110 focus:outline-none focus:ring-2 focus:ring-ring ${
+      className={`inline-flex min-h-7 shrink-0 items-center rounded-full border px-2 py-1 text-[10px] font-extrabold transition hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
         blocked
-          ? "border-[color:var(--bad)] bg-[color:var(--bad)] shadow-[0_0_0_3px_rgba(255,51,71,0.16)]"
-          : "border-[color:var(--good)] bg-[color:var(--good)]/75"
+          ? "border-[color:var(--bad)]/40 bg-[color:var(--bad)]/10 text-[color:var(--bad)]"
+          : "border-[color:var(--good)]/40 bg-[color:var(--good)]/10 text-[color:var(--good)]"
       }`}
-    />
+    >
+      {blocked ? "Cash short" : "Cash covered"}
+    </button>
   );
 }
 

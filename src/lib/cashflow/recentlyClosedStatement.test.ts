@@ -16,9 +16,9 @@ describe("Recently closed card cycle", () => {
     const state: AppState = { ...emptyState, cards: [card(47.45)] };
     const sections = expensesComingBreakdown(state, ref, "this_month");
     const item = sections.find(s => s.title === "Upcoming card bills")?.items.find(i => i.sourceId === "amex");
-    expect(item).toMatchObject({ amount: 47.45, balanceReminder: true, cycleEnd: "2026-10-18" });
+    expect(item).toMatchObject({ amount: 47.45, estimatedCardPayment: true, cycleEnd: "2026-10-18", isOverdue: true });
     expect(sections.find(s => s.title === "Other unpaid card balances")?.items).toBeUndefined();
-    expect(expensesComingTotal(state, ref, "this_month")).toBe(0);
+    expect(expensesComingTotal(state, ref, "this_month")).toBe(47.45);
   });
   it("does not fabricate any due amount on an empty card", () => {
     const state: AppState = { ...emptyState, cards: [card(0)] };

@@ -74,6 +74,10 @@ export interface CashFlowBreakdownItem {
   includedInCardPayment?: boolean;
   /** Unpaid balance reminder. Display only, never counted as a second cash expense. */
   balanceReminder?: boolean;
+  /** Unconfirmed statement amount reserved as planned cash outflow. */
+  estimatedCardPayment?: boolean;
+  /** Planned at statement close; past date does not imply issuer delinquency. */
+  plannedStatementPayment?: boolean;
   /** Past planned item that has already been assigned to another activity. */
   historicalMatch?: boolean;
   /** Month of the bill occurrence, even if its due date was moved. */
@@ -562,12 +566,46 @@ function cardCashFlowItemsForRange(
           amount: generatedStatementAmount,
           sourceType: "card_due",
           sourceId: card.id,
-          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : today,
+          dueDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
           accountId: paymentAccountId,
           cycleStart: generatedCycle.cycleStart,
           cycleEnd: generatedCycle.cycleEnd,
-          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : today,
+          periodDate: card.paymentTiming === "due" ? generatedCycle.dueDate : generatedCycle.cycleEnd,
+          plannedStatementPayment: card.paymentTiming !== "due",
+          isOverdue: card.paymentTiming !== "due" && generatedCycle.cycleEnd < today,
         });
+      }
+      // A 0 statementBalance is often missing data rather than a paid card.
+      // If this user plans to pay at statement closing, the just-closed cycle
+      // is their planned payment date. Protect an estimated current-balance
+      // payment, rather than showing it as an excluded informational reminder.
+      // Do not plan the same balance again for the following open cycle.
+      if (generatedStatementAmount <= 0 && card.paymentTiming !== "due") {
+        const closedCycle = cycleForDate(card, ref);
+        if (closedCycle.cycleEnd >= toISO(startOfMonth(ref))) {
+          const estimated = Math.max(0, Math.round(
+            (card.currentBalance - pendingCardPayments(state, card.id)) * 100,
+          ) / 100);
+          if (estimated > 0) {
+            pushCardItem({
+              id: `statement-estimate:${card.id}:${closedCycle.cycleEnd}`,
+              label: card.name,
+              detail: `Estimated payment planned for statement closing ${formatDisplayDate(closedCycle.cycleEnd)} - issuer due ${formatDisplayDate(closedCycle.dueDate)}. Current balance used because the statement amount is not confirmed; verify it in Edit card.`,
+              amount: estimated,
+              sourceType: "card_due",
+              sourceId: card.id,
+              dueDate: closedCycle.cycleEnd,
+              periodDate: closedCycle.cycleEnd,
+              cycleStart: closedCycle.cycleStart,
+              cycleEnd: closedCycle.cycleEnd,
+              accountId: paymentAccountId,
+              estimatedCardPayment: true,
+              plannedStatementPayment: true,
+              isOverdue: closedCycle.cycleEnd < today,
+            });
+          }
+          return;
+        }
       }
       const cycle = currentOpenCycle(card, ref);
       const rawDueDate = card.paymentTiming === "due"
@@ -1334,7 +1372,17 @@ function safetyExpenseSectionsForRange(
     }))
     .filter((section) => section.items.length > 0);
 
-  const cardItems = cardCashFlowItemsForRange(state, ref, range);
+  const cardItems = cardCashFlowItemsForRange(state, ref, range).map((item) => {
+    // A missed planned payment must reduce cash available from today forward,
+    // never create a fictional forecast transaction in the past.
+    if (!item.isOverdue || !item.dueDate || item.dueDate >= today) return item;
+    return {
+      ...item,
+      dueDate: today,
+      periodDate: today,
+      detail: `${item.detail ?? "Card payment"} - still unpaid, protected today`,
+    };
+  });
   const cardFundedItems = allSections
     .filter((section) => section.title !== "Upcoming card bills")
     .flatMap((section) => section.items)
@@ -1505,6 +1553,9 @@ export function expensesComingBreakdown(
     .filter((card) => !isZeroAprCard(card) && card.currentBalance > 0.005)
     .filter((card) => !scheduledCardIds.has(card.id))
     .map((card) => ({ card, cycle: cycleForDate(card, ref) }))
+    .filter(({ card, cycle }) => cardPaymentOverride(
+      state, `statement-estimate:${card.id}:${cycle.cycleEnd}`,
+    )?.action !== "skip")
     .filter(({ card, cycle }) => {
       const paymentDate = card.paymentTiming === "due" ? cycle.dueDate : cycle.cycleEnd;
       return paymentDate >= periodRange.start &&
