@@ -73,6 +73,8 @@ export interface CashFlowBreakdownItem {
   isOverdue?: boolean;
   /** Explicitly reported by the issuer; not merely the user's preferred payment date. */
   issuerOverdue?: boolean;
+  /** User-preferred payment date passed, irrespective of actual issuer delinquency. */
+  plannedPaymentMissed?: boolean;
   /** The cash payment is already represented by this card's payment schedule. */
   includedInCardPayment?: boolean;
   /** Unpaid balance reminder. Display only, never counted as a second cash expense. */
@@ -589,8 +591,9 @@ function cardCashFlowItemsForRange(
           cycleEnd: generatedCycle.cycleEnd,
           periodDate: actionableDate,
           plannedStatementPayment: card.paymentTiming !== "due",
-          isOverdue: billing.issuerOverdue === true || (card.paymentTiming !== "due" && preferredDate < today),
+          isOverdue: billing.issuerOverdue === true || preferredDate < today,
           issuerOverdue: billing.issuerOverdue === true,
+          plannedPaymentMissed: preferredDate < today,
         });
       }
       // A manual zero may mean unknown data. An issuer-confirmed zero is not an issued bill.
@@ -620,6 +623,7 @@ function cardCashFlowItemsForRange(
               estimatedCardPayment: true,
               plannedStatementPayment: true,
               isOverdue: closedCycle.cycleEnd < today, // Missed preferred day, not issuer delinquency.
+              plannedPaymentMissed: closedCycle.cycleEnd < today,
             });
           }
           return;
@@ -1569,6 +1573,7 @@ export function expensesComingBreakdown(
   const today = toISO(ref);
   const recentlyClosed = state.cards
     .filter((card) => !isZeroAprCard(card) && card.currentBalance > 0.005)
+    .filter((card) => effectiveCardBilling(card, ref).statementSource !== "plaid")
     .filter((card) => !scheduledCardIds.has(card.id))
     .map((card) => ({ card, cycle: cycleForDate(card, ref) }))
     .filter(({ card, cycle }) => cardPaymentOverride(

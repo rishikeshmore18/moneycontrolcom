@@ -133,3 +133,18 @@ describe("bank-confirmed statements never turn all outstanding debt into one ove
     expect(cardRows(s).some(item => item.id.startsWith("statement-estimate:"))).toBe(false);
   });
 });
+
+it("keeps an older confirmed issuer obligation visible and protects cash this month without declaring bank delinquency",()=>{
+  const s=state();
+  s.cards=[card("Chase", 1100, 21, 18, 0, "due")];
+  s.cards[0]!.plaidLiability={
+    accountId:"plaid_chase",statementBalance:900,statementIssueDate:"2026-10-21",
+    issuerDueDate:"2026-11-18",minimumDue:35,issuerOverdue:false,
+    lastPaymentAmount:null,lastPaymentDate:null,syncedAt:"2026-11-22T23:00:00Z",
+  };
+  const item=cardRows(s).find(x=>x.id==="Chase:generated-statement:2026-10-21");
+  expect(item?.amount).toBe(900);
+  expect(item?.isOverdue).toBe(true);
+  expect(item?.issuerOverdue).toBe(false);
+  expect(item?.plannedPaymentMissed).toBe(true);
+});
